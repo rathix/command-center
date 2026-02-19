@@ -118,3 +118,40 @@ func TestNoFallbackForMissingJSFile(t *testing.T) {
 		t.Errorf("expected status 404 for missing .js file, got %d", rec.Code)
 	}
 }
+
+func TestNoFallbackForURLEncodedExtension(t *testing.T) {
+	handler := newTestHandler()
+	// %2E is URL-encoded "." — /missing%2Ecss should be treated as having .css extension
+	req := httptest.NewRequest(http.MethodGet, "/missing%2Ecss", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404 for URL-encoded extension, got %d", rec.Code)
+	}
+}
+
+func TestNewSPAHandlerReturnsErrorForInvalidPrefix(t *testing.T) {
+	fsys := fstest.MapFS{
+		"index.html": {Data: []byte("<html></html>")},
+	}
+	// fs.Sub only errors on invalid paths (e.g., ".." is not a valid fs path)
+	_, err := NewSPAHandler(fsys, "..")
+	if err == nil {
+		t.Error("expected error for invalid prefix, got nil")
+	}
+}
+
+func TestNewSPAHandlerSucceedsForValidPrefix(t *testing.T) {
+	fsys := fstest.MapFS{
+		"web/build/index.html": {Data: []byte("<html></html>")},
+	}
+	handler, err := NewSPAHandler(fsys, "web/build")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if handler == nil {
+		t.Error("expected non-nil handler")
+	}
+}

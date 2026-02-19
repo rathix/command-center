@@ -25,7 +25,10 @@ func main() {
 		mux.Handle("/", proxy)
 		fmt.Printf("Dev mode: proxying to Vite at %s\n", viteURL)
 	} else {
-		handler := server.NewSPAHandler(commandcenter.WebFS, "web/build")
+		handler, err := server.NewSPAHandler(commandcenter.WebFS, "web/build")
+		if err != nil {
+			log.Fatalf("failed to create SPA handler: %v", err)
+		}
 		mux.Handle("/", handler)
 	}
 

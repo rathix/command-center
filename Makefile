@@ -1,7 +1,7 @@
 .PHONY: build test dev clean
 
 build:
-	cd web && npm run build
+	cd web && npm ci && npm run build
 	go build -o bin/command-center ./cmd/command-center
 
 test:

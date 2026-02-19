@@ -7,4 +7,10 @@ describe('+page.svelte', () => {
 		render(Page);
 		expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome to SvelteKit');
 	});
+
+	it('renders documentation link', () => {
+		render(Page);
+		const link = screen.getByRole('link');
+		expect(link).toHaveAttribute('href', 'https://svelte.dev/docs/kit');
+	});
 });

@@ -5,7 +5,9 @@ _bmad/_memory/
 # Go build output
 bin/
 
+# Node
+node_modules/
+
 # SvelteKit build artifacts
 web/build/
-web/node_modules/
 web/.svelte-kit/

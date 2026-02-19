@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
 	"path"
@@ -17,15 +18,15 @@ type SPAHandler struct {
 // NewSPAHandler creates a handler that serves files from the given embed.FS,
 // stripping the specified prefix from paths. When a requested file is not found,
 // it serves index.html for client-side routing (extensionless paths only).
-func NewSPAHandler(embedded fs.FS, prefix string) *SPAHandler {
+func NewSPAHandler(embedded fs.FS, prefix string) (*SPAHandler, error) {
 	sub, err := fs.Sub(embedded, prefix)
 	if err != nil {
-		panic("failed to create sub filesystem: " + err.Error())
+		return nil, fmt.Errorf("failed to create sub filesystem: %w", err)
 	}
 	return &SPAHandler{
 		fileServer: http.FileServer(http.FS(sub)),
 		filesystem: sub,
-	}
+	}, nil
 }
 
 func (h *SPAHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +46,8 @@ func (h *SPAHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// File not found — only serve SPA fallback for extensionless paths.
 	// Paths with extensions (e.g., .css, .js, .png) are real file requests
 	// and should return 404 to avoid MIME-type mismatches.
+	// Note: r.URL.Path is already URL-decoded by Go's HTTP server, so
+	// URL-encoded extensions (e.g., %2Ecss) are correctly detected.
 	if path.Ext(urlPath) != "" {
 		http.NotFound(w, r)
 		return
