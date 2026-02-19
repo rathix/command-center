@@ -10,6 +10,8 @@ import (
 	"github.com/kenny/command-center/internal/server"
 )
 
+const defaultAddr = ":8080"
+
 func main() {
 	dev := flag.Bool("dev", false, "proxy frontend requests to Vite dev server")
 	flag.Parse()
@@ -32,7 +34,6 @@ func main() {
 		mux.Handle("/", handler)
 	}
 
-	addr := ":8080"
-	fmt.Printf("Listening on %s\n", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	fmt.Printf("Listening on %s\n", defaultAddr)
+	log.Fatal(http.ListenAndServe(defaultAddr, mux))
 }

@@ -9,8 +9,8 @@ test:
 	cd web && npx vitest run
 
 dev:
-	@cd web && npm run dev & VITE_PID=$$!; \
-	trap "kill $$VITE_PID 2>/dev/null" EXIT INT TERM; \
+	@set -m; cd web && npm run dev & VITE_PID=$$!; \
+	trap "kill -- -$$VITE_PID 2>/dev/null; wait" EXIT INT TERM; \
 	go run ./cmd/command-center -dev
 
 clean:

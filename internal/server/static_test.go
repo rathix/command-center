@@ -143,6 +143,22 @@ func TestNewSPAHandlerReturnsErrorForInvalidPrefix(t *testing.T) {
 	}
 }
 
+func TestDirectoryPathFallsBackToSPA(t *testing.T) {
+	handler := newTestHandler()
+	// Directory paths (e.g., /_app/) are extensionless — should get SPA fallback
+	req := httptest.NewRequest(http.MethodGet, "/_app/", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "SPA") {
+		t.Errorf("expected SPA fallback for directory path, got %q", rec.Body.String())
+	}
+}
+
 func TestNewSPAHandlerSucceedsForValidPrefix(t *testing.T) {
 	fsys := fstest.MapFS{
 		"web/build/index.html": {Data: []byte("<html></html>")},
