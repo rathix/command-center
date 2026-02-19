@@ -1,3 +1,11 @@
 # BMAD outputs and runtime data
 _bmad-output/
 _bmad/_memory/
+
+# Go build output
+bin/
+
+# SvelteKit build artifacts
+web/build/
+web/node_modules/
+web/.svelte-kit/
