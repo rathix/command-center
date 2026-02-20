@@ -381,6 +381,35 @@ describe('ServiceRow', () => {
 			expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 		});
 
+		it('horizontally positions tooltip based on mouse clientX', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService(),
+					odd: false
+				}
+			});
+			const listItem = screen.getByRole('listitem');
+
+			// Mock getBoundingClientRect for the row
+			vi.spyOn(listItem, 'getBoundingClientRect').mockReturnValue({
+				left: 100,
+				top: 100,
+				bottom: 146,
+				right: 700,
+				width: 600,
+				height: 46
+			} as DOMRect);
+
+			// Mouse enters at clientX = 250
+			// Expected left = 250 - 100 = 150
+			await fireEvent.mouseEnter(listItem, { clientX: 250 });
+			vi.advanceTimersByTime(200);
+			await tick();
+
+			const tooltip = screen.getByRole('tooltip');
+			expect(tooltip.style.left).toBe('150px');
+		});
+
 		it('tooltip renders service diagnostic data', async () => {
 			render(ServiceRow, {
 				props: {
@@ -399,7 +428,7 @@ describe('ServiceRow', () => {
 			await tick();
 
 			expect(screen.getByText(/checked 12s ago/)).toBeInTheDocument();
-			expect(screen.getByText(/healthy since 2h ago/)).toBeInTheDocument();
+			expect(screen.getByText(/healthy for 2h/)).toBeInTheDocument();
 		});
 	});
 });

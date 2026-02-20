@@ -58,4 +58,40 @@ describe('formatRelativeTime', () => {
 	it('handles large hour values', () => {
 		expect(formatRelativeTime('2026-02-19T12:00:00Z')).toBe('24h ago');
 	});
+
+	describe('includeSuffix: false', () => {
+		it('omits suffix for seconds', () => {
+			expect(formatRelativeTime('2026-02-20T11:59:30Z', false)).toBe('30s');
+		});
+
+		it('omits suffix for minutes', () => {
+			expect(formatRelativeTime('2026-02-20T11:55:00Z', false)).toBe('5m');
+		});
+
+		it('omits suffix for hours', () => {
+			expect(formatRelativeTime('2026-02-20T10:00:00Z', false)).toBe('2h');
+		});
+	});
+
+	describe('precise: true', () => {
+		it('returns seconds precision', () => {
+			expect(formatRelativeTime('2026-02-20T11:59:45Z', false, true)).toBe('15s');
+		});
+
+		it('returns minutes and seconds precision', () => {
+			expect(formatRelativeTime('2026-02-20T11:55:30Z', false, true)).toBe('4m 30s');
+		});
+
+		it('returns hours and minutes precision', () => {
+			expect(formatRelativeTime('2026-02-20T09:30:00Z', false, true)).toBe('2h 30m');
+		});
+
+		it('omits seconds when 0 in minutes precision', () => {
+			expect(formatRelativeTime('2026-02-20T11:55:00Z', false, true)).toBe('5m');
+		});
+
+		it('omits minutes when 0 in hours precision', () => {
+			expect(formatRelativeTime('2026-02-20T10:00:00Z', false, true)).toBe('2h');
+		});
+	});
 });

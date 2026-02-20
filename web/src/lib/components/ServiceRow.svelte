@@ -55,6 +55,7 @@
 	let hoverTimer: ReturnType<typeof setTimeout> | null = null;
 	let hovered = $state(false);
 	let showTooltip = $state(false);
+	let mouseX = $state(0);
 	let tooltipPosition: 'below' | 'above' = $state('below');
 
 	function clearHoverTimer() {
@@ -73,9 +74,14 @@
 		return spaceBelow < TOOLTIP_FLIP_THRESHOLD ? 'above' : 'below';
 	}
 
-	function handleMouseEnter() {
+	function handleMouseEnter(e: MouseEvent) {
 		hovered = true;
 		clearHoverTimer();
+
+		if (rowElement) {
+			const rect = rowElement.getBoundingClientRect();
+			mouseX = e.clientX - rect.left;
+		}
 
 		hoverTimer = setTimeout(() => {
 			if (!hovered) return;
@@ -83,6 +89,13 @@
 			showTooltip = true;
 			hoverTimer = null;
 		}, 200);
+	}
+
+	function handleMouseMove(e: MouseEvent) {
+		if (hovered && !showTooltip && rowElement) {
+			const rect = rowElement.getBoundingClientRect();
+			mouseX = e.clientX - rect.left;
+		}
 	}
 
 	function handleMouseLeave() {
@@ -101,6 +114,7 @@
 	class="relative h-[46px] transition-colors duration-300 hover:bg-surface-1 {odd ? 'bg-surface-0' : ''}"
 	style:background-color={tintColor}
 	onmouseenter={handleMouseEnter}
+	onmousemove={handleMouseMove}
 	onmouseleave={handleMouseLeave}
 >
 	{#if safeHref}
@@ -130,5 +144,5 @@
 			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
 		</div>
 	{/if}
-	<HoverTooltip {service} visible={showTooltip} position={tooltipPosition} id={tooltipId} />
+	<HoverTooltip {service} visible={showTooltip} position={tooltipPosition} left={mouseX} id={tooltipId} />
 </li>

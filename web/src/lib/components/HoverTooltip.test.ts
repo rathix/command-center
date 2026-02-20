@@ -35,6 +35,7 @@ describe('HoverTooltip', () => {
 				service: makeService({ lastChecked: '2026-02-20T10:00:00Z' }),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
@@ -47,6 +48,7 @@ describe('HoverTooltip', () => {
 				service: makeService({ lastChecked: null }),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
@@ -62,11 +64,13 @@ describe('HoverTooltip', () => {
 				}),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
-		const durationEl = screen.getByText(/healthy since 2h ago/);
+		const durationEl = screen.getByText(/healthy for 2h/);
 		expect(durationEl).toBeInTheDocument();
+		expect(durationEl).not.toHaveTextContent(/ago/);
 		expect(durationEl).toHaveClass('text-health-ok');
 	});
 
@@ -79,6 +83,7 @@ describe('HoverTooltip', () => {
 				}),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
@@ -96,6 +101,7 @@ describe('HoverTooltip', () => {
 				}),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
@@ -111,6 +117,7 @@ describe('HoverTooltip', () => {
 				}),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
@@ -123,6 +130,7 @@ describe('HoverTooltip', () => {
 				service: makeService(),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
@@ -135,6 +143,7 @@ describe('HoverTooltip', () => {
 				service: makeService(),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-monitoring-grafana'
 			}
 		});
@@ -147,6 +156,7 @@ describe('HoverTooltip', () => {
 				service: makeService(),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
@@ -162,13 +172,15 @@ describe('HoverTooltip', () => {
 	it('renders with graceful defaults when lastChecked and lastStateChange are null', () => {
 		render(HoverTooltip, {
 			props: {
-				service: makeService({ lastChecked: null, lastStateChange: null }),
+				service: makeService({ status: 'unknown', lastChecked: null, lastStateChange: null }),
 				visible: true,
 				position: 'below',
+				left: 0,
 				id: 'tooltip-test'
 			}
 		});
 		expect(screen.getByText(/not yet checked/)).toBeInTheDocument();
+		expect(screen.getByText(/unknown for unknown/)).toBeInTheDocument();
 		expect(screen.getByRole('tooltip')).toBeInTheDocument();
 	});
 });
