@@ -21,8 +21,8 @@ import (
 
 const defaultAddr = ":8443"
 
-// Config holds all server configuration
-type Config struct {
+// config holds all server configuration.
+type config struct {
 	Dev            bool
 	ListenAddr     string
 	Kubeconfig     string
@@ -35,7 +35,7 @@ type Config struct {
 }
 
 func main() {
-	cfg, err := LoadConfig(os.Args[1:])
+	cfg, err := loadConfig(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -44,17 +44,17 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := Run(ctx, cfg); err != nil {
+	if err := run(ctx, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// LoadConfig parses flags and environment variables with precedence: Flag > Env > Default
-func LoadConfig(args []string) (Config, error) {
+// loadConfig parses flags and environment variables with precedence: Flag > Env > Default.
+func loadConfig(args []string) (config, error) {
 	fs := flag.NewFlagSet("command-center", flag.ContinueOnError)
 
-	cfg := Config{}
+	cfg := config{}
 	fs.BoolVar(&cfg.Dev, "dev", getEnvBool("DEV", false), "proxy frontend requests to Vite dev server")
 	fs.StringVar(&cfg.ListenAddr, "listen-addr", getEnv("LISTEN_ADDR", defaultAddr), "listen address")
 	fs.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", defaultKubeconfig()), "path to kubeconfig file")
@@ -69,22 +69,20 @@ func LoadConfig(args []string) (Config, error) {
 	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
 
 	if err := fs.Parse(args); err != nil {
-		return Config{}, err
+		return config{}, err
 	}
 
 	interval, err := time.ParseDuration(healthIntervalStr)
 	if err != nil {
-		slog.Warn("invalid health interval, using default 30s", "value", healthIntervalStr)
-		cfg.HealthInterval = 30 * time.Second
-	} else {
-		if interval <= 0 {
-			return Config{}, fmt.Errorf("health interval must be greater than zero, got %q", healthIntervalStr)
-		}
-		cfg.HealthInterval = interval
+		return config{}, fmt.Errorf("invalid health interval %q: %w", healthIntervalStr, err)
 	}
+	if interval <= 0 {
+		return config{}, fmt.Errorf("health interval must be greater than zero, got %q", healthIntervalStr)
+	}
+	cfg.HealthInterval = interval
 
 	if cfg.LogFormat != "json" && cfg.LogFormat != "text" {
-		return Config{}, fmt.Errorf("unsupported log format %q: must be \"json\" or \"text\"", cfg.LogFormat)
+		return config{}, fmt.Errorf("unsupported log format %q: must be \"json\" or \"text\"", cfg.LogFormat)
 	}
 
 	return cfg, nil
@@ -130,8 +128,8 @@ func setupLoggerWithWriter(format string, writer io.Writer) *slog.Logger {
 	return slog.New(handler)
 }
 
-// Run starts the server and handles graceful shutdown
-func Run(ctx context.Context, cfg Config) error {
+// run starts the server and handles graceful shutdown.
+func run(ctx context.Context, cfg config) error {
 	logger := setupLogger(cfg.LogFormat)
 	slog.SetDefault(logger)
 

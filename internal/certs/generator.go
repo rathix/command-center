@@ -490,7 +490,7 @@ func randomSerial() (*big.Int, error) {
 }
 
 func writePEMFile(path, blockType string, data []byte) error {
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}

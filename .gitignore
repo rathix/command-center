@@ -21,4 +21,4 @@ web/.svelte-kit/
 
 # Generated TLS certificates
 *.pem
-certs/
+/certs/

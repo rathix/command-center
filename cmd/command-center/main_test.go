@@ -18,9 +18,9 @@ import (
 
 func TestConfigDefaults(t *testing.T) {
 	// AC #1: Default values when no flags or env vars are provided
-	cfg, err := LoadConfig([]string{})
+	cfg, err := loadConfig([]string{})
 	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+		t.Fatalf("loadConfig() error = %v", err)
 	}
 
 	home, err := os.UserHomeDir()
@@ -55,9 +55,9 @@ func TestConfigDefaults(t *testing.T) {
 
 func TestConfigCLIFlag(t *testing.T) {
 	// AC #2: CLI flag --listen-addr :9443 makes server listen on port 9443
-	cfg, err := LoadConfig([]string{"--listen-addr", ":9443"})
+	cfg, err := loadConfig([]string{"--listen-addr", ":9443"})
 	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+		t.Fatalf("loadConfig() error = %v", err)
 	}
 	if cfg.ListenAddr != ":9443" {
 		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":9443")
@@ -67,9 +67,9 @@ func TestConfigCLIFlag(t *testing.T) {
 func TestConfigEnvVarFallback(t *testing.T) {
 	// AC #3: Env var LISTEN_ADDR=:9443 is used when no CLI flag overrides it
 	t.Setenv("LISTEN_ADDR", ":9443")
-	cfg, err := LoadConfig([]string{})
+	cfg, err := loadConfig([]string{})
 	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+		t.Fatalf("loadConfig() error = %v", err)
 	}
 	if cfg.ListenAddr != ":9443" {
 		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":9443")
@@ -79,9 +79,9 @@ func TestConfigEnvVarFallback(t *testing.T) {
 func TestConfigFlagPrecedenceOverEnv(t *testing.T) {
 	// AC #4: CLI flag takes precedence over env var
 	t.Setenv("LISTEN_ADDR", ":9443")
-	cfg, err := LoadConfig([]string{"--listen-addr", ":7777"})
+	cfg, err := loadConfig([]string{"--listen-addr", ":7777"})
 	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+		t.Fatalf("loadConfig() error = %v", err)
 	}
 	if cfg.ListenAddr != ":7777" {
 		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":7777")
@@ -99,9 +99,9 @@ func TestConfigEnvVarAllParameters(t *testing.T) {
 	t.Setenv("TLS_CERT", "/server.crt")
 	t.Setenv("TLS_KEY", "/server.key")
 
-	cfg, err := LoadConfig([]string{})
+	cfg, err := loadConfig([]string{})
 	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+		t.Fatalf("loadConfig() error = %v", err)
 	}
 
 	checks := []struct {
@@ -129,21 +129,21 @@ func TestConfigEnvVarAllParameters(t *testing.T) {
 }
 
 func TestConfigInvalidHealthInterval(t *testing.T) {
-	// Invalid health interval should fall back to 30s default
+	// Invalid health interval should return an error
 	t.Setenv("HEALTH_INTERVAL", "not-a-duration")
-	cfg, err := LoadConfig([]string{})
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+	_, err := loadConfig([]string{})
+	if err == nil {
+		t.Fatal("loadConfig() with invalid health interval should return error")
 	}
-	if cfg.HealthInterval != 30*time.Second {
-		t.Errorf("HealthInterval = %v, want %v (default after invalid input)", cfg.HealthInterval, 30*time.Second)
+	if !strings.Contains(err.Error(), "invalid health interval") {
+		t.Errorf("error should mention invalid health interval, got: %v", err)
 	}
 }
 
 func TestConfigNonPositiveHealthIntervalReturnsError(t *testing.T) {
-	_, err := LoadConfig([]string{"--health-interval", "0s"})
+	_, err := loadConfig([]string{"--health-interval", "0s"})
 	if err == nil {
-		t.Fatal("LoadConfig() with non-positive health interval should return error")
+		t.Fatal("loadConfig() with non-positive health interval should return error")
 	}
 	if !strings.Contains(err.Error(), "greater than zero") {
 		t.Fatalf("error should mention greater than zero, got: %v", err)
@@ -152,9 +152,9 @@ func TestConfigNonPositiveHealthIntervalReturnsError(t *testing.T) {
 
 func TestConfigInvalidFlagReturnsError(t *testing.T) {
 	// Unknown flags should return an error
-	_, err := LoadConfig([]string{"--unknown-flag", "value"})
+	_, err := loadConfig([]string{"--unknown-flag", "value"})
 	if err == nil {
-		t.Error("LoadConfig() with unknown flag should return error, got nil")
+		t.Error("loadConfig() with unknown flag should return error, got nil")
 	}
 }
 
@@ -211,15 +211,15 @@ func TestGracefulShutdownViaContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	addr := getFreeAddr(t)
-	cfg, err := LoadConfig([]string{"--listen-addr", addr})
+	cfg, err := loadConfig([]string{"--listen-addr", addr})
 	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+		t.Fatalf("loadConfig() error = %v", err)
 	}
 	cfg.Dev = true // dev mode uses plain HTTP, no TLS setup needed
 
 	runErr := make(chan error, 1)
 	go func() {
-		runErr <- Run(ctx, cfg)
+		runErr <- run(ctx, cfg)
 	}()
 
 	// Give the server time to start
@@ -231,10 +231,10 @@ func TestGracefulShutdownViaContext(t *testing.T) {
 	select {
 	case err := <-runErr:
 		if err != nil {
-			t.Errorf("Run() after shutdown returned error: %v", err)
+			t.Errorf("run() after shutdown returned error: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Run() did not shut down within 5 seconds")
+		t.Fatal("run() did not shut down within 5 seconds")
 	}
 }
 
@@ -246,14 +246,14 @@ func TestDevModeUsesPlainHTTP(t *testing.T) {
 	defer cancel()
 
 	addr := getFreeAddr(t)
-	cfg, err := LoadConfig([]string{"--listen-addr", addr})
+	cfg, err := loadConfig([]string{"--listen-addr", addr})
 	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+		t.Fatalf("loadConfig() error = %v", err)
 	}
 	cfg.Dev = true
 
 	go func() {
-		_ = Run(ctx, cfg)
+		_ = run(ctx, cfg)
 	}()
 
 	// Give the server time to start
@@ -291,9 +291,9 @@ func TestSetupLoggerReturnsCorrectHandlerType(t *testing.T) {
 }
 
 func TestConfigInvalidLogFormatReturnsError(t *testing.T) {
-	_, err := LoadConfig([]string{"--log-format", "invalid"})
+	_, err := loadConfig([]string{"--log-format", "invalid"})
 	if err == nil {
-		t.Error("LoadConfig() with invalid log format should return error")
+		t.Error("loadConfig() with invalid log format should return error")
 	}
 	if !strings.Contains(err.Error(), "unsupported log format") {
 		t.Errorf("error should mention unsupported log format, got: %v", err)
@@ -301,17 +301,17 @@ func TestConfigInvalidLogFormatReturnsError(t *testing.T) {
 }
 
 func TestConfigEmptyLogFormatReturnsError(t *testing.T) {
-	_, err := LoadConfig([]string{"--log-format", ""})
+	_, err := loadConfig([]string{"--log-format", ""})
 	if err == nil {
-		t.Error("LoadConfig() with empty log format should return error")
+		t.Error("loadConfig() with empty log format should return error")
 	}
 }
 
 func TestConfigKubeconfigExpandsHomePath(t *testing.T) {
 	// Default kubeconfig should be an absolute path, not ~
-	cfg, err := LoadConfig([]string{})
+	cfg, err := loadConfig([]string{})
 	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+		t.Fatalf("loadConfig() error = %v", err)
 	}
 	if strings.HasPrefix(cfg.Kubeconfig, "~") {
 		t.Errorf("Kubeconfig default should be expanded, got %q", cfg.Kubeconfig)

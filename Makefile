@@ -18,7 +18,7 @@ test:
 dev:
 	@set -m; cd web && npm run dev & VITE_PID=$$!; \
 	trap "kill -- -$$VITE_PID 2>/dev/null; wait" EXIT INT TERM; \
-	go run ./cmd/command-center -dev
+	go run ./cmd/command-center --dev
 
 clean:
 	rm -rf bin/ web/build/ web/.svelte-kit/
