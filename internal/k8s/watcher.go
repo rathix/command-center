@@ -19,6 +19,7 @@ import (
 // StateUpdater is the interface the watcher uses to update service state.
 // Defined here at the consumer, not in the state package.
 type StateUpdater interface {
+	Get(namespace, name string) (state.Service, bool)
 	AddOrUpdate(svc state.Service)
 	Remove(namespace, name string)
 }
@@ -33,7 +34,7 @@ type IngressLister interface {
 // Watcher watches Kubernetes Ingress resources and updates the state store.
 type Watcher struct {
 	factory informers.SharedInformerFactory
-	lister  networkingv1listers.IngressLister
+	lister  IngressLister
 	updater StateUpdater
 	logger  *slog.Logger
 }
@@ -127,14 +128,20 @@ func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
+	// Preserve health status if service already exists
+	status := state.StatusUnknown
+	if existing, ok := w.updater.Get(ingress.Namespace, ingress.Name); ok {
+		status = existing.Status
+	}
+
 	svc := state.Service{
 		Name:      ingress.Name,
 		Namespace: ingress.Namespace,
 		URL:       url,
-		Status:    state.StatusUnknown,
+		Status:    status,
 	}
 	w.updater.AddOrUpdate(svc)
-	w.logger.Debug("service updated",
+	w.logger.Info("service updated",
 		"namespace", ingress.Namespace,
 		"name", ingress.Name,
 		"url", url)

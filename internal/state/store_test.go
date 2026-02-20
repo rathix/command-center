@@ -175,8 +175,9 @@ func TestStoreRemoveNonexistent(t *testing.T) {
 func TestStoreAll(t *testing.T) {
 	store := NewStore()
 
+	code := 200
 	services := []Service{
-		{Name: "svc-a", Namespace: "ns1", URL: "https://a.example.com", Status: StatusUnknown},
+		{Name: "svc-a", Namespace: "ns1", URL: "https://a.example.com", Status: StatusUnknown, HTTPCode: &code},
 		{Name: "svc-b", Namespace: "ns1", URL: "https://b.example.com", Status: StatusHealthy},
 		{Name: "svc-c", Namespace: "ns2", URL: "https://c.example.com", Status: StatusUnhealthy},
 	}
@@ -190,14 +191,106 @@ func TestStoreAll(t *testing.T) {
 		t.Fatalf("expected 3 services, got %d", len(all))
 	}
 
-	// Verify All returns a snapshot (modifying returned slice shouldn't affect store)
-	all[0].Name = "mutated"
-	got, ok := store.Get("ns1", "svc-a")
-	if !ok {
-		t.Fatal("expected to find service 'ns1/svc-a'")
+	// Verify All returns a snapshot with deep copies (modifying returned pointers shouldn't affect store)
+	if all[0].HTTPCode == nil {
+		t.Fatal("expected HTTPCode pointer to be populated")
 	}
-	if got.Name == "mutated" {
-		t.Error("All() should return a snapshot, not a reference to internal data")
+	*all[0].HTTPCode = 500
+	
+	got, _ := store.Get("ns1", "svc-a")
+	if *got.HTTPCode != 200 {
+		t.Errorf("All() returned a shallow copy, modifying nested pointer affected store: got %d, want 200", *got.HTTPCode)
+	}
+}
+
+func TestStoreDeepCopy(t *testing.T) {
+	code := 200
+	now := time.Now()
+	err := "failed"
+	
+	s := Service{
+		Name:         "test",
+		HTTPCode:     &code,
+		LastChecked:  &now,
+		ErrorSnippet: &err,
+	}
+	
+	cp := s.DeepCopy()
+	
+	// Modify original pointers
+	code = 404
+	now = now.Add(time.Hour)
+	err = "changed"
+	
+	if *cp.HTTPCode != 200 {
+		t.Errorf("DeepCopy failed for HTTPCode: got %d, want 200", *cp.HTTPCode)
+	}
+	if !cp.LastChecked.Before(now) {
+		t.Error("DeepCopy failed for LastChecked")
+	}
+	if *cp.ErrorSnippet != "failed" {
+		t.Errorf("DeepCopy failed for ErrorSnippet: got %q, want \"failed\"", *cp.ErrorSnippet)
+	}
+}
+
+func TestStoreGetDeepCopy(t *testing.T) {
+	store := NewStore()
+	code := 200
+	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", HTTPCode: &code})
+	
+	got, _ := store.Get("ns", "svc")
+	*got.HTTPCode = 500
+	
+	got2, _ := store.Get("ns", "svc")
+	if *got2.HTTPCode != 200 {
+		t.Error("Get() returned a reference/shallow copy, modifying it affected store")
+	}
+}
+
+func TestStoreMultipleSubscribers(t *testing.T) {
+	store := NewStore()
+	
+	sub1 := store.Subscribe()
+	sub2 := store.Subscribe()
+	
+	svc := Service{Name: "web", Namespace: "default"}
+	store.AddOrUpdate(svc)
+	
+	// Both should receive the event
+	for i, sub := range []<-chan Event{sub1, sub2} {
+		select {
+		case evt := <-sub:
+			if evt.Service.Name != "web" {
+				t.Errorf("sub%d: expected 'web', got %q", i+1, evt.Service.Name)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("sub%d: timed out waiting for event", i+1)
+		}
+	}
+	
+	// Unsubscribe sub1
+	store.Unsubscribe(sub1)
+	
+	store.Remove("default", "web")
+	
+	// sub1 should be closed or not receive anything
+	select {
+	case _, ok := <-sub1:
+		if ok {
+			t.Error("sub1 should have been closed after unsubscribe")
+		}
+	case <-time.After(100 * time.Millisecond):
+		// Unsubscribe closes the channel in my implementation
+	}
+	
+	// sub2 should still receive the event
+	select {
+	case evt := <-sub2:
+		if evt.Type != EventRemoved {
+			t.Errorf("sub2: expected EventRemoved, got %v", evt.Type)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("sub2: timed out waiting for event after sub1 unsubscribed")
 	}
 }
 

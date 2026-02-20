@@ -50,20 +50,40 @@ type Event struct {
 type Store struct {
 	mu       sync.RWMutex
 	services map[string]Service
-	sub      chan Event
+	subs     map[chan Event]struct{}
 }
 
-// NewStore creates a new empty Store with a buffered event channel.
+// NewStore creates a new empty Store.
 func NewStore() *Store {
 	return &Store{
 		services: make(map[string]Service),
-		sub:      make(chan Event, 64),
+		subs:     make(map[chan Event]struct{}),
 	}
 }
 
 // Subscribe returns a read-only channel that receives events for every state mutation.
+// The caller is responsible for ensuring the channel is consumed to prevent blocking.
+// In a production environment, this should include a way to Unsubscribe.
 func (s *Store) Subscribe() <-chan Event {
-	return s.sub
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ch := make(chan Event, 128) // Increased buffer for better tolerance
+	s.subs[ch] = struct{}{}
+	return ch
+}
+
+// Unsubscribe removes a subscription channel.
+func (s *Store) Unsubscribe(ch <-chan Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Cast back to writable channel for deletion
+	for existing := range s.subs {
+		if (<-chan Event)(existing) == ch {
+			delete(s.subs, existing)
+			close(existing)
+			return
+		}
+	}
 }
 
 func serviceKey(namespace, name string) string {
@@ -76,15 +96,24 @@ func (s *Store) AddOrUpdate(svc Service) {
 	s.mu.Lock()
 	key := serviceKey(svc.Namespace, svc.Name)
 	_, exists := s.services[key]
-	s.services[key] = svc
+	
+	// Store a deep copy to prevent external mutation of shared pointers
+	s.services[key] = svc.DeepCopy()
+	
 	eventType := EventDiscovered
 	if exists {
 		eventType = EventUpdated
 	}
-	// Non-blocking send to prevent slow consumers from blocking state mutations.
-	select {
-	case s.sub <- Event{Type: eventType, Service: svc}:
-	default:
+	
+	// Fan-out to all subscribers
+	event := Event{Type: eventType, Service: svc.DeepCopy()}
+	for ch := range s.subs {
+		select {
+		case ch <- event:
+		default:
+			// Buffer full, subscriber is too slow. 
+			// In a more robust system, we might flag the client for reconnection.
+		}
 	}
 	s.mu.Unlock()
 }
@@ -98,10 +127,14 @@ func (s *Store) Remove(namespace, name string) {
 		return
 	}
 	delete(s.services, key)
-	// Non-blocking send to prevent slow consumers from blocking state mutations.
-	select {
-	case s.sub <- Event{Type: EventRemoved, Namespace: namespace, Name: name}:
-	default:
+	
+	// Fan-out to all subscribers
+	event := Event{Type: EventRemoved, Namespace: namespace, Name: name}
+	for ch := range s.subs {
+		select {
+		case ch <- event:
+		default:
+		}
 	}
 	s.mu.Unlock()
 }
@@ -111,7 +144,10 @@ func (s *Store) Get(namespace, name string) (Service, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	svc, ok := s.services[serviceKey(namespace, name)]
-	return svc, ok
+	if !ok {
+		return Service{}, false
+	}
+	return svc.DeepCopy(), true
 }
 
 // All returns a snapshot of all services in the store.
@@ -120,7 +156,34 @@ func (s *Store) All() []Service {
 	defer s.mu.RUnlock()
 	result := make([]Service, 0, len(s.services))
 	for _, svc := range s.services {
-		result = append(result, svc)
+		result = append(result, svc.DeepCopy())
 	}
 	return result
 }
+
+// DeepCopy creates a complete copy of the Service, including pointer fields.
+func (s Service) DeepCopy() Service {
+	cp := s
+	if s.HTTPCode != nil {
+		val := *s.HTTPCode
+		cp.HTTPCode = &val
+	}
+	if s.ResponseTimeMs != nil {
+		val := *s.ResponseTimeMs
+		cp.ResponseTimeMs = &val
+	}
+	if s.LastChecked != nil {
+		val := *s.LastChecked
+		cp.LastChecked = &val
+	}
+	if s.LastStateChange != nil {
+		val := *s.LastStateChange
+		cp.LastStateChange = &val
+	}
+	if s.ErrorSnippet != nil {
+		val := *s.ErrorSnippet
+		cp.ErrorSnippet = &val
+	}
+	return cp
+}
+

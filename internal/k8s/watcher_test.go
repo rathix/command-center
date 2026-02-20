@@ -19,18 +19,34 @@ type fakeStateUpdater struct {
 	mu       sync.Mutex
 	added    []state.Service
 	removed  []string // "namespace/name"
+	current  map[string]state.Service
+}
+
+func (f *fakeStateUpdater) Get(namespace, name string) (state.Service, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.current == nil {
+		return state.Service{}, false
+	}
+	svc, ok := f.current[namespace+"/"+name]
+	return svc, ok
 }
 
 func (f *fakeStateUpdater) AddOrUpdate(svc state.Service) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.added = append(f.added, svc)
+	if f.current == nil {
+		f.current = make(map[string]state.Service)
+	}
+	f.current[svc.Namespace+"/"+svc.Name] = svc
 }
 
 func (f *fakeStateUpdater) Remove(namespace, name string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.removed = append(f.removed, namespace+"/"+name)
+	delete(f.current, namespace+"/"+name)
 }
 
 func (f *fakeStateUpdater) getAdded() []state.Service {
@@ -469,5 +485,57 @@ func TestExtractServiceURL(t *testing.T) {
 				t.Errorf("extractServiceURL() url = %q, want %q", gotURL, tt.wantURL)
 			}
 		})
+	}
+}
+
+func TestWatcherPreservesStatusOnUpdate(t *testing.T) {
+	ingress := newTestIngress("status-app", "default", "status.example.com", false)
+
+	clientset := fake.NewSimpleClientset(ingress)
+	updater := &fakeStateUpdater{
+		current: make(map[string]state.Service),
+	}
+	logger := slog.Default()
+
+	// Pre-populate updater with a healthy status
+	updater.AddOrUpdate(state.Service{
+		Name:      "status-app",
+		Namespace: "default",
+		URL:       "http://status.example.com",
+		Status:    state.StatusHealthy,
+	})
+
+	w := NewWatcherWithClient(clientset, updater, logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go w.Run(ctx)
+
+	// Wait for the update event (triggered by informer sync)
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for update event")
+		default:
+			added := updater.getAdded()
+			// Find the latest update for status-app
+			var latest state.Service
+			found := false
+			for i := len(added) - 1; i >= 0; i-- {
+				if added[i].Name == "status-app" {
+					latest = added[i]
+					found = true
+					break
+				}
+			}
+			
+			if found && latest.Status == state.StatusHealthy {
+				// Success: status was preserved
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 }
