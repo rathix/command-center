@@ -34,6 +34,19 @@ This project is on a **public Git repository**. Every agent must enforce:
 | TypeScript | strict | Frontend only, in `web/` |
 | Vitest | 4.x | Frontend tests with `@testing-library/svelte` |
 
+## Versioning
+
+Semantic versioning with git tags tied to the story/epic lifecycle:
+
+- **Story complete** — patch bump (v0.2.1, v0.2.2, ...)
+- **Epic complete** — minor bump (v0.3.0, v0.4.0, ...)
+- **Feature-complete** — major bump to v1.0.0 when all epics are done
+
+After pushing a story or epic commit, create an annotated tag and push it:
+`git tag -a vX.Y.Z -m "description" && git push origin vX.Y.Z`
+
+Current: v0.2.0 (Epic 2 complete). Next story tag: v0.2.1.
+
 ## Critical Implementation Rules
 
 ### Go Patterns
