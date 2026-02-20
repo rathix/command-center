@@ -75,7 +75,11 @@ export function connect(): void {
 
 	source.onerror = () => {
 		if (eventSource === source) {
-			setConnectionStatus('disconnected');
+			if (source.readyState === EventSource.CONNECTING) {
+				setConnectionStatus('reconnecting');
+			} else {
+				setConnectionStatus('disconnected');
+			}
 		}
 	};
 

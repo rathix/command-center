@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { HEALTH_STATUSES } from './types';
-import type { HealthStatus, Service } from './types';
+import { HEALTH_STATUSES, CONNECTION_STATUSES } from './types';
+import type { HealthStatus, ConnectionStatus, Service } from './types';
 
 describe('types', () => {
 	it('HEALTH_STATUSES contains all valid status values', () => {
@@ -10,6 +10,25 @@ describe('types', () => {
 	it('HealthStatus type aligns with HEALTH_STATUSES', () => {
 		const statuses: HealthStatus[] = ['healthy', 'unhealthy', 'authBlocked', 'unknown'];
 		expect(statuses).toEqual(HEALTH_STATUSES);
+	});
+
+	it('CONNECTION_STATUSES contains all valid connection status values', () => {
+		expect(CONNECTION_STATUSES).toEqual([
+			'connected',
+			'connecting',
+			'reconnecting',
+			'disconnected'
+		]);
+	});
+
+	it('ConnectionStatus type aligns with CONNECTION_STATUSES', () => {
+		const statuses: ConnectionStatus[] = [
+			'connected',
+			'connecting',
+			'reconnecting',
+			'disconnected'
+		];
+		expect(statuses).toEqual(CONNECTION_STATUSES);
 	});
 
 	it('Service interface matches the SSE data model shape', () => {

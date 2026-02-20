@@ -45,11 +45,22 @@ describe('StatusBar', () => {
 		expect(screen.getByText('3 services — all healthy')).toBeInTheDocument();
 	});
 
-	it('shows "Reconnecting..." AND service count when disconnected', () => {
+	it('shows "Reconnecting..." AND preserves health summary when reconnecting', () => {
+		replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+		setConnectionStatus('reconnecting');
+		render(StatusBar);
+		expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
+		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
+	});
+
+	it('shows "Connection lost" in error color when disconnected', () => {
 		replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
 		setConnectionStatus('disconnected');
 		render(StatusBar);
-		expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
+		const connectionLost = screen.getByText('Connection lost');
+		expect(connectionLost).toBeInTheDocument();
+		expect(connectionLost).toHaveClass('text-health-error');
+		// Health summary is still visible
 		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
 	});
 
@@ -74,6 +85,20 @@ describe('StatusBar', () => {
 		replaceAll([], 'v0.2.0');
 		render(StatusBar);
 		expect(screen.getByText('Command Center v0.2.0')).toBeInTheDocument();
+	});
+
+	it('returns to normal health summary when connection status transitions back to connected', () => {
+		replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+		setConnectionStatus('reconnecting');
+		const { unmount } = render(StatusBar);
+		expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
+		unmount();
+		// Transition back to connected
+		setConnectionStatus('connected');
+		render(StatusBar);
+		expect(screen.queryByText('Reconnecting...')).not.toBeInTheDocument();
+		expect(screen.queryByText('Connection lost')).not.toBeInTheDocument();
+		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
 	});
 
 	describe('health breakdown', () => {
@@ -131,7 +156,7 @@ describe('StatusBar', () => {
 
 		it('preserves "Reconnecting..." state unchanged', () => {
 			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
-			setConnectionStatus('disconnected');
+			setConnectionStatus('reconnecting');
 			render(StatusBar);
 			expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
 		});

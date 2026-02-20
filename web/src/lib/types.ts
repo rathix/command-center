@@ -1,6 +1,13 @@
 export type HealthStatus = 'healthy' | 'unhealthy' | 'authBlocked' | 'unknown';
 
-export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
+export type ConnectionStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
+
+export const CONNECTION_STATUSES: ConnectionStatus[] = [
+	'connected',
+	'connecting',
+	'reconnecting',
+	'disconnected'
+];
 
 export const HEALTH_STATUSES: HealthStatus[] = [
 	'healthy',

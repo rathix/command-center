@@ -16,6 +16,9 @@ import { replaceAll, addOrUpdate, remove, setConnectionStatus } from './serviceS
 type EventHandler = (e: MessageEvent) => void;
 
 class MockEventSource {
+	static readonly CONNECTING = 0;
+	static readonly OPEN = 1;
+	static readonly CLOSED = 2;
 	static instances: MockEventSource[] = [];
 
 	url: string;
@@ -100,12 +103,68 @@ describe('sseClient', () => {
 			expect(setConnectionStatus).toHaveBeenCalledWith('connected');
 		});
 
-		it('sets connection status to disconnected on error', async () => {
+		it('sets connection status to reconnecting when onerror fires with readyState CONNECTING', async () => {
 			const { connect } = await import('./sseClient');
 			connect();
 			const es = MockEventSource.instances[0];
+			es.readyState = MockEventSource.CONNECTING;
+			es.onerror!();
+			expect(setConnectionStatus).toHaveBeenCalledWith('reconnecting');
+		});
+
+		it('sets connection status to disconnected when onerror fires with readyState CLOSED', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			es.readyState = MockEventSource.CLOSED;
 			es.onerror!();
 			expect(setConnectionStatus).toHaveBeenCalledWith('disconnected');
+		});
+
+		it('transitions from reconnecting to connected when onopen fires after reconnect', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			// Simulate connection drop with auto-reconnect in progress
+			es.readyState = MockEventSource.CONNECTING;
+			es.onerror!();
+			expect(setConnectionStatus).toHaveBeenCalledWith('reconnecting');
+			// Simulate successful reconnect
+			es.readyState = MockEventSource.OPEN;
+			es.onopen!();
+			expect(setConnectionStatus).toHaveBeenCalledWith('connected');
+		});
+
+		it('preserves service data during reconnecting state (services map not cleared)', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			// Simulate having received some service data
+			const services = [makeService({ name: 'svc-a' })];
+			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0' }));
+			expect(replaceAll).toHaveBeenCalledWith(services, 'v1.0.0');
+			// Simulate connection drop — should NOT call replaceAll again
+			vi.clearAllMocks();
+			es.readyState = MockEventSource.CONNECTING;
+			es.onerror!();
+			expect(setConnectionStatus).toHaveBeenCalledWith('reconnecting');
+			expect(replaceAll).not.toHaveBeenCalled();
+		});
+
+		it('calls replaceAll when state event is received after reconnect', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			// Simulate reconnect cycle
+			es.readyState = MockEventSource.CONNECTING;
+			es.onerror!();
+			es.readyState = MockEventSource.OPEN;
+			es.onopen!();
+			vi.clearAllMocks();
+			// Simulate state event after reconnect
+			const services = [makeService({ name: 'svc-refreshed' })];
+			es.emit('state', JSON.stringify({ services, appVersion: 'v2.0.0' }));
+			expect(replaceAll).toHaveBeenCalledWith(services, 'v2.0.0');
 		});
 
 		it('closes the previous EventSource when called more than once', async () => {

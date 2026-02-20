@@ -202,14 +202,36 @@ describe('serviceStore', () => {
 			expect(getConnectionStatus()).toBe('disconnected');
 		});
 
-		it('transitions through states correctly', () => {
+		it('can be set to reconnecting', () => {
+			setConnectionStatus('reconnecting');
+			expect(getConnectionStatus()).toBe('reconnecting');
+		});
+
+		it('preserves service data when connection status changes to reconnecting', () => {
+			replaceAll([
+				makeService({ name: 'svc-a', status: 'healthy' }),
+				makeService({ name: 'svc-b', status: 'unhealthy' })
+			], 'v1.0.0');
+			expect(getSortedServices()).toHaveLength(2);
+
+			setConnectionStatus('reconnecting');
+
+			// Service data should be preserved — map not cleared
+			expect(getSortedServices()).toHaveLength(2);
+			expect(getCounts().total).toBe(2);
+			expect(getLastUpdated()).toBeInstanceOf(Date);
+		});
+
+		it('transitions through states correctly including reconnecting', () => {
 			expect(getConnectionStatus()).toBe('connecting');
+			setConnectionStatus('connected');
+			expect(getConnectionStatus()).toBe('connected');
+			setConnectionStatus('reconnecting');
+			expect(getConnectionStatus()).toBe('reconnecting');
 			setConnectionStatus('connected');
 			expect(getConnectionStatus()).toBe('connected');
 			setConnectionStatus('disconnected');
 			expect(getConnectionStatus()).toBe('disconnected');
-			setConnectionStatus('connected');
-			expect(getConnectionStatus()).toBe('connected');
 		});
 	});
 

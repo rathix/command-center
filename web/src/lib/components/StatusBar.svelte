@@ -41,8 +41,10 @@
 			{/if}
 		</div>
 
-		{#if getConnectionStatus() === 'disconnected'}
+		{#if getConnectionStatus() === 'reconnecting'}
 			<span class="text-sm font-semibold text-subtext-0 italic">Reconnecting...</span>
+		{:else if getConnectionStatus() === 'disconnected'}
+			<span class="text-sm font-semibold text-health-error">Connection lost</span>
 		{/if}
 
 		{#if getAppVersion()}
