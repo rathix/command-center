@@ -7,11 +7,19 @@ vi.mock('./serviceStore.svelte', () => ({
 	addOrUpdate: vi.fn(),
 	remove: vi.fn(),
 	setConnectionStatus: vi.fn(),
-	setK8sStatus: vi.fn()
+	setK8sStatus: vi.fn(),
+	getK8sConnected: vi.fn(() => true)
 }));
 
 // Import mocked functions for assertions
-import { replaceAll, addOrUpdate, remove, setConnectionStatus, setK8sStatus } from './serviceStore.svelte';
+import {
+	replaceAll,
+	addOrUpdate,
+	remove,
+	setConnectionStatus,
+	setK8sStatus,
+	getK8sConnected
+} from './serviceStore.svelte';
 
 // MockEventSource to simulate browser EventSource
 type EventHandler = (e: MessageEvent) => void;
@@ -213,10 +221,10 @@ describe('sseClient', () => {
 			expect(replaceAll).not.toHaveBeenCalled();
 		});
 
-		it('ignores state payload when optional k8sConnected has invalid type', async () => {
-			const { connect } = await import('./sseClient');
-			connect();
-			const es = MockEventSource.instances[0];
+			it('ignores state payload when optional k8sConnected has invalid type', async () => {
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
 			const services = [makeService({ name: 'svc-a' })];
 
 			es.emit(
@@ -224,10 +232,24 @@ describe('sseClient', () => {
 				JSON.stringify({ services, appVersion: 'v1.0.0', k8sConnected: 'true' })
 			);
 
-			expect(replaceAll).not.toHaveBeenCalled();
-			expect(setK8sStatus).not.toHaveBeenCalled();
+				expect(replaceAll).not.toHaveBeenCalled();
+				expect(setK8sStatus).not.toHaveBeenCalled();
+			});
+
+			it('ignores state payload when healthCheckIntervalMs has invalid type', async () => {
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
+				const services = [makeService({ name: 'svc-a' })];
+
+				es.emit(
+					'state',
+					JSON.stringify({ services, appVersion: 'v1.0.0', healthCheckIntervalMs: '30000' })
+				);
+
+				expect(replaceAll).not.toHaveBeenCalled();
+			});
 		});
-	});
 
 	describe('discovered event', () => {
 		it('calls addOrUpdate with parsed service', async () => {
@@ -317,7 +339,7 @@ describe('sseClient', () => {
 		});
 	});
 
-	describe('state event with K8s metadata', () => {
+		describe('state event with K8s metadata', () => {
 		it('extracts k8sConnected from enriched state event', async () => {
 			const { connect } = await import('./sseClient');
 			connect();
@@ -336,16 +358,35 @@ describe('sseClient', () => {
 			expect(setK8sStatus).toHaveBeenCalledWith(true, '2026-02-20T14:30:00Z');
 		});
 
-		it('does not call setK8sStatus when k8sConnected is absent from state event', async () => {
-			const { connect } = await import('./sseClient');
-			connect();
-			const es = MockEventSource.instances[0];
-			const services = [makeService({ name: 'svc-a' })];
-			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0' }));
-			expect(replaceAll).toHaveBeenCalled();
-			expect(setK8sStatus).not.toHaveBeenCalled();
+			it('does not call setK8sStatus when k8sConnected is absent from state event', async () => {
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
+				const services = [makeService({ name: 'svc-a' })];
+				es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0' }));
+				expect(replaceAll).toHaveBeenCalled();
+				expect(setK8sStatus).not.toHaveBeenCalled();
+			});
+
+			it('preserves current k8sConnected when only k8sLastEvent is present', async () => {
+				vi.mocked(getK8sConnected).mockReturnValueOnce(false);
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
+				const services = [makeService({ name: 'svc-a' })];
+
+				es.emit(
+					'state',
+					JSON.stringify({
+						services,
+						appVersion: 'v1.0.0',
+						k8sLastEvent: '2026-02-20T14:30:00Z'
+					})
+				);
+
+				expect(setK8sStatus).toHaveBeenCalledWith(false, '2026-02-20T14:30:00Z');
+			});
 		});
-	});
 
 	describe('disconnect', () => {
 		it('closes the EventSource', async () => {

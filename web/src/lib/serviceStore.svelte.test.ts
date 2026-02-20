@@ -220,8 +220,9 @@ describe('serviceStore', () => {
 		});
 
 		it('preserves service data when connection status changes to reconnecting', () => {
+			const checkedAt = new Date().toISOString();
 			replaceAll([
-				makeService({ name: 'svc-a', status: 'healthy' }),
+				makeService({ name: 'svc-a', status: 'healthy', lastChecked: checkedAt }),
 				makeService({ name: 'svc-b', status: 'unhealthy' })
 			], 'v1.0.0');
 			expect(getSortedServices()).toHaveLength(2);
@@ -416,20 +417,37 @@ describe('serviceStore', () => {
 			expect(getLastUpdated()).toBeNull();
 		});
 
-		it('updates on replaceAll', () => {
-			replaceAll([makeService({ name: 'svc' })], 'v1.0.0');
-			expect(getLastUpdated()).toBeInstanceOf(Date);
+		it('uses newest service lastChecked on replaceAll', () => {
+			const older = '2026-02-20T12:00:00.000Z';
+			const newer = '2026-02-20T12:01:00.000Z';
+			replaceAll([
+				makeService({ name: 'svc-a', lastChecked: older }),
+				makeService({ name: 'svc-b', lastChecked: newer })
+			], 'v1.0.0');
+			expect(getLastUpdated()?.toISOString()).toBe(newer);
 		});
 
-		it('updates on addOrUpdate', () => {
+		it('keeps lastUpdated null on replaceAll when no service has lastChecked', () => {
+			replaceAll([makeService({ name: 'svc' })], 'v1.0.0');
+			expect(getLastUpdated()).toBeNull();
+		});
+
+		it('updates on addOrUpdate when service includes lastChecked', () => {
+			const checkedAt = '2026-02-20T12:02:00.000Z';
+			addOrUpdate(makeService({ name: 'svc', lastChecked: checkedAt }));
+			expect(getLastUpdated()?.toISOString()).toBe(checkedAt);
+		});
+
+		it('does not update on addOrUpdate when service has no lastChecked', () => {
 			addOrUpdate(makeService({ name: 'svc' }));
-			expect(getLastUpdated()).toBeInstanceOf(Date);
+			expect(getLastUpdated()).toBeNull();
 		});
 
-		it('updates on remove', () => {
-			replaceAll([makeService({ name: 'svc' })], 'v1.0.0');
+		it('does not change on remove', () => {
+			const checkedAt = '2026-02-20T12:03:00.000Z';
+			replaceAll([makeService({ name: 'svc', lastChecked: checkedAt })], 'v1.0.0');
 			remove('default', 'svc');
-			expect(getLastUpdated()).toBeInstanceOf(Date);
+			expect(getLastUpdated()?.toISOString()).toBe(checkedAt);
 		});
 	});
 });

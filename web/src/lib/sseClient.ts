@@ -1,4 +1,11 @@
-import { replaceAll, addOrUpdate, remove, setConnectionStatus, setK8sStatus } from './serviceStore.svelte';
+import {
+	replaceAll,
+	addOrUpdate,
+	remove,
+	setConnectionStatus,
+	setK8sStatus,
+	getK8sConnected
+} from './serviceStore.svelte';
 import type { HealthStatus, Service, K8sStatusPayload } from './types';
 
 let eventSource: EventSource | null = null;
@@ -66,6 +73,13 @@ function isStatePayload(value: unknown): value is StatePayload {
 		typeof value.k8sLastEvent !== 'string'
 	)
 		return false;
+	if (
+		value.healthCheckIntervalMs !== undefined &&
+		(typeof value.healthCheckIntervalMs !== 'number' ||
+			!Number.isFinite(value.healthCheckIntervalMs) ||
+			value.healthCheckIntervalMs <= 0)
+	)
+		return false;
 	return value.services.every((service) => isService(service));
 }
 
@@ -109,8 +123,10 @@ export function connect(): void {
 		const payload = parseJson(e.data);
 		if (!isStatePayload(payload)) return;
 		replaceAll(payload.services, payload.appVersion ?? '', payload.healthCheckIntervalMs);
-		if (payload.k8sConnected !== undefined || payload.k8sLastEvent !== undefined) {
-			setK8sStatus(payload.k8sConnected ?? false, payload.k8sLastEvent ?? null);
+		if (payload.k8sConnected !== undefined) {
+			setK8sStatus(payload.k8sConnected, payload.k8sLastEvent ?? null);
+		} else if (payload.k8sLastEvent !== undefined) {
+			setK8sStatus(getK8sConnected(), payload.k8sLastEvent ?? null);
 		}
 	});
 

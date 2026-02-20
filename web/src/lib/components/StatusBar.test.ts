@@ -4,11 +4,13 @@ import StatusBar from './StatusBar.svelte';
 import {
 	replaceAll,
 	setConnectionStatus,
+	setK8sStatus,
 	_resetForTesting
 } from '$lib/serviceStore.svelte';
 import type { Service } from '$lib/types';
 
 function makeService(overrides: Partial<Service> & { name: string }): Service {
+	const nowIso = new Date().toISOString();
 	return {
 		displayName: overrides.displayName ?? overrides.name,
 		namespace: 'default',
@@ -16,8 +18,8 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 		status: 'unknown',
 		httpCode: null,
 		responseTimeMs: null,
-		lastChecked: null,
-		lastStateChange: null,
+		lastChecked: nowIso,
+		lastStateChange: nowIso,
 		errorSnippet: null,
 		...overrides
 	};
@@ -95,7 +97,7 @@ describe('StatusBar', () => {
 		replaceAll([], 'v0.2.0');
 		render(StatusBar);
 		expect(screen.getByText('Command Center v0.2.0')).toBeInTheDocument();
-		expect(screen.getByText('Last updated 0s ago')).toBeInTheDocument();
+		expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
 	});
 
 	it('returns to normal health summary when connection status transitions back to connected', () => {
@@ -240,11 +242,13 @@ describe('StatusBar', () => {
 
 		it('reflects lastUpdated (health check time) during K8s outage, not k8sLastEvent', () => {
 			setConnectionStatus('connected');
+			setK8sStatus(false, '2026-02-20T11:55:00Z');
 			// Simulate: K8s outage (last K8s event was 5 minutes ago), but health checks still running
 			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0', 30_000);
 			render(StatusBar);
 			// The timestamp should show "0s ago" (from lastUpdated) not something stale from k8sLastEvent
 			expect(screen.getByText(/Last updated 0s ago/)).toBeInTheDocument();
+			expect(screen.queryByText(/Last updated 5m ago/)).not.toBeInTheDocument();
 			const timeEl = screen.getByText(/Last updated/).closest('time');
 			expect(timeEl).toHaveStyle({ color: 'var(--color-subtext-0)' });
 		});

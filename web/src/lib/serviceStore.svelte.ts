@@ -23,6 +23,25 @@ let k8sConnected = $state<boolean>(false);
 let k8sLastEvent = $state<Date | null>(null);
 let healthCheckIntervalMs = $state<number>(30_000);
 
+function parseLastChecked(value: string | null): Date | null {
+	if (!value) return null;
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) return null;
+	return parsed;
+}
+
+function newestLastChecked(services: Iterable<Service>): Date | null {
+	let latest: Date | null = null;
+	for (const svc of services) {
+		const checkedAt = parseLastChecked(svc.lastChecked);
+		if (!checkedAt) continue;
+		if (!latest || checkedAt.getTime() > latest.getTime()) {
+			latest = checkedAt;
+		}
+	}
+	return latest;
+}
+
 function computeSortOrder(svcMap: Map<string, Service>): string[] {
 	return [...svcMap.values()]
 		.sort((a, b) => {
@@ -126,7 +145,7 @@ export function replaceAll(newServices: Service[], newAppVersion: string, newHea
 	healthCheckIntervalMs = newHealthCheckIntervalMs ?? 30_000;
 	sortOrder = computeSortOrder(services);
 	initialNeedsAttentionKeys = computeNeedsAttentionKeys(services);
-	lastUpdated = new Date();
+	lastUpdated = newestLastChecked(services.values());
 }
 
 export function addOrUpdate(service: Service): void {
@@ -142,7 +161,10 @@ export function addOrUpdate(service: Service): void {
 			initialNeedsAttentionKeys = new Set(initialNeedsAttentionKeys);
 		}
 	}
-	lastUpdated = new Date();
+	const checkedAt = parseLastChecked(service.lastChecked);
+	if (checkedAt && (!lastUpdated || checkedAt.getTime() > lastUpdated.getTime())) {
+		lastUpdated = checkedAt;
+	}
 }
 
 export function remove(namespace: string, name: string): void {
@@ -152,7 +174,6 @@ export function remove(namespace: string, name: string): void {
 	services = updated;
 	sortOrder = sortOrder.filter((k) => k !== key);
 	initialNeedsAttentionKeys.delete(key);
-	lastUpdated = new Date();
 }
 
 export function setConnectionStatus(status: ConnectionStatus): void {
