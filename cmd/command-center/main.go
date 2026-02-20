@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 
 	commandcenter "github.com/rathix/command-center"
 	"github.com/rathix/command-center/internal/certs"
+	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/k8s"
 	"github.com/rathix/command-center/internal/server"
 	"github.com/rathix/command-center/internal/sse"
@@ -153,6 +155,18 @@ func run(ctx context.Context, cfg config) error {
 	// Create and start SSE broker for real-time event streaming
 	broker := sse.NewBroker(store, logger)
 	go broker.Run(ctx)
+
+	// Create and start HTTP health checker
+	probeClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+	checker := health.NewChecker(store, store, probeClient, cfg.HealthInterval, logger)
+	go checker.Run(ctx)
 
 	mux := http.NewServeMux()
 
