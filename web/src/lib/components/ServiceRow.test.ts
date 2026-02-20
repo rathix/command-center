@@ -35,14 +35,14 @@ describe('ServiceRow', () => {
 		render(ServiceRow, {
 			props: { service: makeService({ url: 'https://grafana.example.com' }), odd: false }
 		});
-		const link = screen.getByRole('listitem');
+		const link = screen.getByRole('link');
 		expect(link.tagName).toBe('A');
-		expect(link).toHaveAttribute('href', 'https://grafana.example.com');
+		expect(link).toHaveAttribute('href', 'https://grafana.example.com/');
 	});
 
 	it('has target="_blank" and rel="noopener noreferrer"', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: false } });
-		const link = screen.getByRole('listitem');
+		const link = screen.getByRole('link');
 		expect(link).toHaveAttribute('target', '_blank');
 		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 	});
@@ -57,14 +57,14 @@ describe('ServiceRow', () => {
 
 	it('has bg-surface-0 class when odd=true', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: true } });
-		const link = screen.getByRole('listitem');
-		expect(link).toHaveClass('bg-surface-0');
+		const listItem = screen.getByRole('listitem');
+		expect(listItem).toHaveClass('bg-surface-0');
 	});
 
 	it('does not have bg-surface-0 class when odd=false', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: false } });
-		const link = screen.getByRole('listitem');
-		expect(link).not.toHaveClass('bg-surface-0');
+		const listItem = screen.getByRole('listitem');
+		expect(listItem).not.toHaveClass('bg-surface-0');
 	});
 
 	it('has role="listitem"', () => {
@@ -74,20 +74,29 @@ describe('ServiceRow', () => {
 
 	it('has hover transition classes', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: false } });
-		const link = screen.getByRole('listitem');
-		expect(link).toHaveClass('transition-colors');
-		expect(link).toHaveClass('duration-150');
+		const listItem = screen.getByRole('listitem');
+		expect(listItem).toHaveClass('transition-colors');
+		expect(listItem).toHaveClass('duration-150');
 	});
 
 	it('has cursor-pointer class', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: false } });
-		const link = screen.getByRole('listitem');
+		const link = screen.getByRole('link');
 		expect(link).toHaveClass('cursor-pointer');
 	});
 
 	it('has fixed 46px height', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: false } });
-		const link = screen.getByRole('listitem');
-		expect(link).toHaveClass('h-[46px]');
+		const listItem = screen.getByRole('listitem');
+		expect(listItem).toHaveClass('h-[46px]');
+	});
+
+	it('sanitizes unsafe urls to a safe fallback link', () => {
+		render(ServiceRow, {
+			props: { service: makeService({ url: 'javascript:alert(1)' }), odd: false }
+		});
+		const link = screen.getByRole('link');
+		expect(link).toHaveAttribute('href', '#');
+		expect(link).toHaveAttribute('aria-disabled', 'true');
 	});
 });

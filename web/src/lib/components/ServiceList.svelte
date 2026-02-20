@@ -4,9 +4,9 @@
 </script>
 
 {#if getSortedServices().length > 0}
-	<div role="list">
+	<ul class="m-0 list-none p-0">
 		{#each getSortedServices() as service, index (`${service.namespace}/${service.name}`)}
 			<ServiceRow {service} odd={index % 2 !== 0} />
 		{/each}
-	</div>
+	</ul>
 {/if}

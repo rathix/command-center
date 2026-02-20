@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Service } from './types';
 
 // Mock the serviceStore module before importing sseClient
@@ -58,6 +58,10 @@ beforeEach(() => {
 	globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
 });
 
+afterEach(() => {
+	globalThis.EventSource = originalEventSource;
+});
+
 function makeService(overrides: Partial<Service> & { name: string }): Service {
 	return {
 		namespace: 'default',
@@ -102,6 +106,19 @@ describe('sseClient', () => {
 			es.onerror!();
 			expect(setConnectionStatus).toHaveBeenCalledWith('disconnected');
 		});
+
+		it('closes the previous EventSource when called more than once', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const first = MockEventSource.instances[0];
+
+			connect();
+			const second = MockEventSource.instances[1];
+
+			expect(MockEventSource.instances).toHaveLength(2);
+			expect(first.closed).toBe(true);
+			expect(second.closed).toBe(false);
+		});
 	});
 
 	describe('state event', () => {
@@ -112,6 +129,26 @@ describe('sseClient', () => {
 			const services = [makeService({ name: 'svc-a' }), makeService({ name: 'svc-b' })];
 			es.emit('state', JSON.stringify({ services }));
 			expect(replaceAll).toHaveBeenCalledWith(services);
+		});
+
+		it('ignores malformed JSON', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+
+			es.emit('state', '{bad json');
+
+			expect(replaceAll).not.toHaveBeenCalled();
+		});
+
+		it('ignores invalid payload shape', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+
+			es.emit('state', JSON.stringify({ services: [{ name: 'partial' }] }));
+
+			expect(replaceAll).not.toHaveBeenCalled();
 		});
 	});
 
@@ -124,6 +161,16 @@ describe('sseClient', () => {
 			es.emit('discovered', JSON.stringify(service));
 			expect(addOrUpdate).toHaveBeenCalledWith(service);
 		});
+
+		it('ignores malformed service payloads', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+
+			es.emit('discovered', JSON.stringify({ name: 'partial' }));
+
+			expect(addOrUpdate).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('update event', () => {
@@ -135,6 +182,16 @@ describe('sseClient', () => {
 			es.emit('update', JSON.stringify(service));
 			expect(addOrUpdate).toHaveBeenCalledWith(service);
 		});
+
+		it('ignores malformed JSON', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+
+			es.emit('update', '{bad json');
+
+			expect(addOrUpdate).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('removed event', () => {
@@ -144,6 +201,16 @@ describe('sseClient', () => {
 			const es = MockEventSource.instances[0];
 			es.emit('removed', JSON.stringify({ name: 'old-svc', namespace: 'default' }));
 			expect(remove).toHaveBeenCalledWith('default', 'old-svc');
+		});
+
+		it('ignores invalid removed payloads', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+
+			es.emit('removed', JSON.stringify({ name: 'old-svc' }));
+
+			expect(remove).not.toHaveBeenCalled();
 		});
 	});
 

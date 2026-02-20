@@ -69,6 +69,7 @@ describe('ServiceList', () => {
 
 	it('renders empty when store has no services', () => {
 		render(ServiceList);
+		expect(screen.queryByRole('list')).not.toBeInTheDocument();
 		expect(screen.queryAllByRole('listitem')).toHaveLength(0);
 	});
 });

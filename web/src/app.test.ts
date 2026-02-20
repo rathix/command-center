@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import css from './app.css?inline';
+
 
 describe('app.css design system', () => {
-	const css = readFileSync(resolve(__dirname, 'app.css'), 'utf-8');
-
 	it('defines prefers-reduced-motion media query', () => {
 		expect(css).toContain('@media (prefers-reduced-motion: reduce)');
 		expect(css).toContain('transition-duration: 0.01ms');
