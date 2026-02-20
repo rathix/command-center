@@ -37,20 +37,20 @@ describe('StatusBar', () => {
 	it('shows service count when connected with services', () => {
 		setConnectionStatus('connected');
 		replaceAll([
-			makeService({ name: 'svc-1' }),
-			makeService({ name: 'svc-2' }),
-			makeService({ name: 'svc-3' })
+			makeService({ name: 'svc-1', status: 'healthy' }),
+			makeService({ name: 'svc-2', status: 'healthy' }),
+			makeService({ name: 'svc-3', status: 'healthy' })
 		]);
 		render(StatusBar);
-		expect(screen.getByText('3 services')).toBeInTheDocument();
+		expect(screen.getByText('3 services — all healthy')).toBeInTheDocument();
 	});
 
 	it('shows "Reconnecting..." AND service count when disconnected', () => {
-		replaceAll([makeService({ name: 'svc-1' })]);
+		replaceAll([makeService({ name: 'svc-1', status: 'healthy' })]);
 		setConnectionStatus('disconnected');
 		render(StatusBar);
 		expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
-		expect(screen.getByText('1 services')).toBeInTheDocument();
+		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
 	});
 
 	it('shows "No services discovered" when connected but empty', () => {
@@ -67,5 +67,78 @@ describe('StatusBar', () => {
 	it('has aria-live="polite"', () => {
 		render(StatusBar);
 		expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+	});
+
+	describe('health breakdown', () => {
+		it('shows "all healthy" in green when no problems exist', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'healthy' }),
+				makeService({ name: 'svc-2', status: 'healthy' }),
+				makeService({ name: 'svc-3', status: 'healthy' })
+			]);
+			render(StatusBar);
+			const allHealthy = screen.getByText('3 services — all healthy');
+			expect(allHealthy).toBeInTheDocument();
+			expect(allHealthy).toHaveClass('text-health-ok');
+		});
+
+		it('shows breakdown with colored segments when problems exist (including unknown)', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'unhealthy' }),
+				makeService({ name: 'svc-2', status: 'unhealthy' }),
+				makeService({ name: 'svc-3', status: 'authBlocked' }),
+				makeService({ name: 'svc-4', status: 'unknown' }),
+				makeService({ name: 'svc-5', status: 'healthy' }),
+				makeService({ name: 'svc-6', status: 'healthy' })
+			]);
+			render(StatusBar);
+			const unhealthySegment = screen.getByText('2 unhealthy');
+			expect(unhealthySegment).toHaveClass('text-health-error');
+			const authBlockedSegment = screen.getByText('1 auth-blocked');
+			expect(authBlockedSegment).toHaveClass('text-health-auth-blocked');
+			const unknownSegment = screen.getByText('1 unknown');
+			expect(unknownSegment).toHaveClass('text-health-unknown');
+			const healthySegment = screen.getByText('2 healthy');
+			expect(healthySegment).toHaveClass('text-health-ok');
+		});
+
+		it('omits segments with count 0 in breakdown', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'unhealthy' }),
+				makeService({ name: 'svc-2', status: 'healthy' }),
+				makeService({ name: 'svc-3', status: 'healthy' })
+			]);
+			render(StatusBar);
+			expect(screen.getByText('1 unhealthy')).toBeInTheDocument();
+			expect(screen.getByText('2 healthy')).toBeInTheDocument();
+			expect(screen.queryByText(/auth-blocked/)).not.toBeInTheDocument();
+		});
+
+		it('preserves "Discovering services..." state unchanged', () => {
+			render(StatusBar);
+			expect(screen.getByText('Discovering services...')).toBeInTheDocument();
+		});
+
+		it('preserves "Reconnecting..." state unchanged', () => {
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })]);
+			setConnectionStatus('disconnected');
+			render(StatusBar);
+			expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
+		});
+
+		it('shows unknown in breakdown and does NOT show "all healthy" when only healthy and unknown exist', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'healthy' }),
+				makeService({ name: 'svc-2', status: 'unknown' })
+			]);
+			render(StatusBar);
+			expect(screen.queryByText(/all healthy/)).not.toBeInTheDocument();
+			expect(screen.getByText('1 unknown')).toBeInTheDocument();
+			expect(screen.getByText('1 healthy')).toBeInTheDocument();
+		});
 	});
 });

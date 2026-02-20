@@ -34,7 +34,7 @@ const counts = $derived.by(() => {
 
 const hasProblems = $derived.by(() => {
 	return [...services.values()].some(
-		(s) => s.status === 'unhealthy' || s.status === 'authBlocked'
+		(s) => s.status === 'unhealthy' || s.status === 'authBlocked' || s.status === 'unknown'
 	);
 });
 

@@ -169,12 +169,12 @@ describe('serviceStore', () => {
 			expect(getHasProblems()).toBe(true);
 		});
 
-		it('is false when only healthy and unknown services exist', () => {
+		it('is true when only healthy and unknown services exist', () => {
 			replaceAll([
 				makeService({ name: 'good', status: 'healthy' }),
 				makeService({ name: 'new', status: 'unknown' })
 			]);
-			expect(getHasProblems()).toBe(false);
+			expect(getHasProblems()).toBe(true);
 		});
 
 		it('is false for empty store', () => {

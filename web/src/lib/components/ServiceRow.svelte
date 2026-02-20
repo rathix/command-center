@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Service } from '$lib/types';
+	import type { Service, HealthStatus } from '$lib/types';
 	import TuiDot from './tui/TuiDot.svelte';
 
 	let { service, odd }: { service: Service; odd: boolean } = $props();
@@ -24,9 +24,40 @@
 			event.preventDefault();
 		}
 	}
+
+	const responseTextColorMap: Record<HealthStatus, string> = {
+		healthy: 'text-subtext-0',
+		unhealthy: 'text-health-error',
+		authBlocked: 'text-health-auth-blocked',
+		unknown: 'text-health-unknown'
+	};
+
+	const tintColorMap: Record<HealthStatus, string | undefined> = {
+		healthy: undefined,
+		unhealthy: 'rgba(243, 139, 168, 0.05)',
+		authBlocked: 'rgba(249, 226, 175, 0.03)',
+		unknown: undefined
+	};
+
+	const responseDisplay = $derived.by(() => {
+		if (
+			service.status === 'unknown' ||
+			service.httpCode === null ||
+			service.responseTimeMs === null
+		) {
+			return '—';
+		}
+		return `${service.httpCode} \u00B7 ${service.responseTimeMs}ms`;
+	});
+
+	const responseTextColor = $derived.by(() => responseTextColorMap[service.status]);
+	const tintColor = $derived.by(() => tintColorMap[service.status]);
 </script>
 
-<li class="h-[46px] transition-colors duration-150 hover:bg-surface-1 {odd ? 'bg-surface-0' : ''}">
+<li
+	class="h-[46px] transition-colors duration-300 hover:bg-surface-1 {odd ? 'bg-surface-0' : ''}"
+	style:background-color={tintColor}
+>
 	<a
 		href={safeHref ?? '#'}
 		target="_blank"
@@ -39,5 +70,6 @@
 		<TuiDot status={service.status} />
 		<span class="text-sm font-medium text-text">{service.displayName}</span>
 		<span class="text-xs text-subtext-1">{service.url}</span>
+		<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
 	</a>
 </li>
