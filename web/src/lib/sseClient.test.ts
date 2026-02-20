@@ -307,7 +307,15 @@ describe('sseClient', () => {
 			const es = MockEventSource.instances[0];
 
 			es.emit('discovered', JSON.stringify({ name: 'partial' }));
+			expect(addOrUpdate).not.toHaveBeenCalled();
 
+			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-code', httpCode: '200' as any })));
+			expect(addOrUpdate).not.toHaveBeenCalled();
+
+			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-status', status: 'invalid' as any })));
+			expect(addOrUpdate).not.toHaveBeenCalled();
+
+			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-time', responseTimeMs: {} as any })));
 			expect(addOrUpdate).not.toHaveBeenCalled();
 		});
 	});

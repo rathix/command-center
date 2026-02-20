@@ -4,7 +4,9 @@ import * as store from './serviceStore.svelte';
 describe('serviceStore structural integrity', () => {
 	it('_resetForTesting resets all state reachable via getters', () => {
 		// 1. Capture initial values (defaults)
-		const getters = Object.keys(store).filter(key => key.startsWith('get'));
+		const getters = Object.keys(store).filter(key => 
+			key.startsWith('get') && typeof (store as any)[key] === 'function'
+		);
 		const defaults = new Map<string, any>();
 		
 		getters.forEach(key => {
@@ -12,27 +14,41 @@ describe('serviceStore structural integrity', () => {
 			defaults.set(key, getter());
 		});
 
-		// 2. Mutate state
-		// We use replaceAll and other setters to change everything
+		// 2. Mutate state via multiple entry points
 		store.replaceAll([{
-			name: 'test',
+			name: 'svc-1',
 			namespace: 'default',
-			displayName: 'Test',
-			url: 'http://test',
-			status: 'unhealthy',
-			httpCode: 500,
-			responseTimeMs: 100,
-			lastChecked: new Date().toISOString(),
-			lastStateChange: null,
-			errorSnippet: 'error'
+			displayName: 'Service 1',
+			url: 'http://svc-1',
+			status: 'healthy',
+			httpCode: 200,
+			responseTimeMs: 50,
+			lastChecked: '2026-02-20T10:00:00Z',
+			lastStateChange: '2026-02-20T09:00:00Z',
+			errorSnippet: null
 		}], 'v9.9.9', 60000);
 		
+		store.addOrUpdate({
+			name: 'svc-2',
+			namespace: 'other',
+			displayName: 'Service 2',
+			url: 'http://svc-2',
+			status: 'unhealthy',
+			httpCode: 500,
+			responseTimeMs: 500,
+			lastChecked: '2026-02-20T11:00:00Z',
+			lastStateChange: '2026-02-20T10:30:00Z',
+			errorSnippet: 'CRITICAL FAILURE'
+		});
+
 		store.setConnectionStatus('disconnected');
-		store.setK8sStatus(true, new Date().toISOString());
+		store.setK8sStatus(true, '2026-02-20T12:00:00Z');
 
 		// Verify state is actually changed
 		expect(store.getAppVersion()).toBe('v9.9.9');
 		expect(store.getConnectionStatus()).toBe('disconnected');
+		expect(store.getCounts().total).toBe(2);
+		expect(store.getLastUpdated()?.toISOString()).toBe('2026-02-20T11:00:00.000Z');
 
 		// 3. Reset
 		store._resetForTesting();

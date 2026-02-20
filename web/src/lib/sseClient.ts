@@ -76,7 +76,7 @@ function isStatePayload(value: unknown): value is StatePayload {
 	if (
 		value.healthCheckIntervalMs !== undefined &&
 		(typeof value.healthCheckIntervalMs !== 'number' ||
-			!Number.isFinite(value.healthCheckIntervalMs) ||
+			!Number.isInteger(value.healthCheckIntervalMs) ||
 			value.healthCheckIntervalMs <= 0)
 	)
 		return false;
@@ -90,10 +90,10 @@ function isRemovedPayload(value: unknown): value is { namespace: string; name: s
 
 function isK8sStatusPayload(value: unknown): value is K8sStatusPayload {
 	if (!isRecord(value)) return false;
-	return (
-		typeof value.k8sConnected === 'boolean' &&
-		(value.k8sLastEvent === null || typeof value.k8sLastEvent === 'string')
-	);
+	const hasValidEvent = value.k8sLastEvent === null || 
+		(typeof value.k8sLastEvent === 'string' && !Number.isNaN(new Date(value.k8sLastEvent).getTime()));
+	
+	return typeof value.k8sConnected === 'boolean' && hasValidEvent;
 }
 
 export function connect(): void {
