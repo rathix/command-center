@@ -28,7 +28,7 @@
 				>
 			{:else}
 				<span class="text-sm font-semibold">
-					{#each segments as segment, i}
+					{#each segments as segment, i (segment.label)}
 						{#if i > 0}<span class="text-subtext-0"> · </span>{/if}
 						<span class={segment.color}>{segment.count} {segment.label}</span>
 					{/each}
