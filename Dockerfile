@@ -17,6 +17,10 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /command-center ./cmd/command-cen
 
 # Stage 3: Final distroless image
 FROM gcr.io/distroless/static-debian12
+ARG IMAGE_SOURCE="https://github.com/rathix/command-center"
+LABEL org.opencontainers.image.source=$IMAGE_SOURCE
+LABEL org.opencontainers.image.description="Kubernetes service dashboard"
+LABEL org.opencontainers.image.licenses="MIT"
 COPY --from=backend /command-center /command-center
 EXPOSE 8443
 USER 65532:65532
