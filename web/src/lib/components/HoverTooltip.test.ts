@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import HoverTooltip from './HoverTooltip.svelte';
 import type { Service } from '$lib/types';
-import { replaceAll, _resetForTesting } from '$lib/serviceStore.svelte';
 
 function makeService(overrides: Partial<Service> = {}): Service {
 	return {
@@ -28,32 +28,6 @@ describe('HoverTooltip', () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
-	});
-
-	it('renders "checked {time} ago" from lastChecked', () => {
-		render(HoverTooltip, {
-			props: {
-				service: makeService({ lastChecked: '2026-02-20T10:00:00Z' }),
-				visible: true,
-				position: 'below',
-				left: 0,
-				id: 'tooltip-test'
-			}
-		});
-		expect(screen.getByText(/checked 12s ago/)).toBeInTheDocument();
-	});
-
-	it('renders "not yet checked" when lastChecked is null', () => {
-		render(HoverTooltip, {
-			props: {
-				service: makeService({ lastChecked: null }),
-				visible: true,
-				position: 'below',
-				left: 0,
-				id: 'tooltip-test'
-			}
-		});
-		expect(screen.getByText(/not yet checked/)).toBeInTheDocument();
 	});
 
 	it('renders state duration with health-colored text for healthy service', () => {
@@ -170,7 +144,27 @@ describe('HoverTooltip', () => {
 		expect(tooltip).toHaveClass('max-w-[400px]');
 	});
 
-	it('renders with graceful defaults when lastChecked and lastStateChange are null', () => {
+	it('state duration ticks while tooltip is visible', async () => {
+		vi.setSystemTime(new Date('2026-02-20T10:00:00Z'));
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'unhealthy',
+					lastStateChange: '2026-02-20T09:55:28Z'
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText(/unhealthy for 4m 32s/)).toBeInTheDocument();
+		vi.advanceTimersByTime(5000);
+		await tick();
+		expect(screen.getByText(/unhealthy for 4m 37s/)).toBeInTheDocument();
+	});
+
+	it('renders with graceful defaults when lastStateChange is null', () => {
 		render(HoverTooltip, {
 			props: {
 				service: makeService({ status: 'unknown', lastChecked: null, lastStateChange: null }),
@@ -180,58 +174,7 @@ describe('HoverTooltip', () => {
 				id: 'tooltip-test'
 			}
 		});
-		expect(screen.getByText(/not yet checked/)).toBeInTheDocument();
 		expect(screen.getByText(/unknown for unknown/)).toBeInTheDocument();
 		expect(screen.getByRole('tooltip')).toBeInTheDocument();
-	});
-
-	describe('staleness', () => {
-		beforeEach(() => {
-			_resetForTesting();
-			// Set 30s interval
-			replaceAll([], 'v1', 30_000);
-		});
-
-		it('shows subtext-0 color for fresh check', () => {
-			render(HoverTooltip, {
-				props: {
-					service: makeService({ lastChecked: '2026-02-20T10:00:10Z' }), // 2s ago
-					visible: true,
-					position: 'below',
-					left: 0,
-					id: 'tooltip-test'
-				}
-			});
-			const checkedEl = screen.getByText(/checked 2s ago/);
-			expect(checkedEl).toHaveClass('text-subtext-0');
-		});
-
-		it('shows aging color (yellow) for aging check', () => {
-			render(HoverTooltip, {
-				props: {
-					service: makeService({ lastChecked: '2026-02-20T09:59:10Z' }), // 62s ago (> 2x 30s)
-					visible: true,
-					position: 'below',
-					left: 0,
-					id: 'tooltip-test'
-				}
-			});
-			const checkedEl = screen.getByText(/checked 1m ago/);
-			expect(checkedEl).toHaveClass('text-health-auth-blocked');
-		});
-
-		it('shows stale color (red) for stale check', () => {
-			render(HoverTooltip, {
-				props: {
-					service: makeService({ lastChecked: '2026-02-20T09:57:30Z' }), // 162s ago (> 5x 30s)
-					visible: true,
-					position: 'below',
-					left: 0,
-					id: 'tooltip-test'
-				}
-			});
-			const checkedEl = screen.getByText(/checked 2m ago/);
-			expect(checkedEl).toHaveClass('text-health-error');
-		});
 	});
 });

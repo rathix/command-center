@@ -18,8 +18,6 @@ let services = $state(new Map<string, Service>());
 let connectionStatus = $state<ConnectionStatus>('connecting');
 let lastUpdated = $state<Date | null>(null);
 let appVersion = $state<string>('');
-let sortOrder = $state<string[]>([]);
-let initialNeedsAttentionKeys = $state(new Set<string>());
 let k8sConnected = $state<boolean>(false);
 let k8sLastEvent = $state<Date | null>(null);
 let healthCheckIntervalMs = $state<number>(DEFAULT_HEALTH_CHECK_INTERVAL_MS);
@@ -43,26 +41,6 @@ function newestLastChecked(services: Iterable<Service>): Date | null {
 	return latest;
 }
 
-function computeSortOrder(svcMap: Map<string, Service>): string[] {
-	return [...svcMap.values()]
-		.sort((a, b) => {
-			const pri = statusPriority[a.status] - statusPriority[b.status];
-			if (pri !== 0) return pri;
-			return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
-		})
-		.map((s) => `${s.namespace}/${s.name}`);
-}
-
-function computeNeedsAttentionKeys(svcMap: Map<string, Service>): Set<string> {
-	return new Set(
-		[...svcMap.values()]
-			.filter(
-				(s) => s.status === 'unhealthy' || s.status === 'authBlocked' || s.status === 'unknown'
-			)
-			.map((s) => `${s.namespace}/${s.name}`)
-	);
-}
-
 // Internal derived computations
 const sortedServices = $derived.by(() => {
 	return [...services.values()].sort((a, b) => {
@@ -76,11 +54,8 @@ const groupedServices = $derived.by<GroupedServices>(() => {
 	const needsAttention: Service[] = [];
 	const healthy: Service[] = [];
 
-	for (const key of sortOrder) {
-		const s = services.get(key);
-		if (!s) continue;
-
-		if (initialNeedsAttentionKeys.has(key)) {
+	for (const s of sortedServices) {
+		if (s.status === 'unhealthy' || s.status === 'authBlocked' || s.status === 'unknown') {
 			needsAttention.push(s);
 		} else {
 			healthy.push(s);
@@ -144,24 +119,13 @@ export function replaceAll(newServices: Service[], newAppVersion: string, newHea
 	services = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
 	appVersion = newAppVersion;
 	healthCheckIntervalMs = newHealthCheckIntervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS;
-	sortOrder = computeSortOrder(services);
-	initialNeedsAttentionKeys = computeNeedsAttentionKeys(services);
 	lastUpdated = newestLastChecked(services.values());
 }
 
 export function addOrUpdate(service: Service): void {
-	const key = `${service.namespace}/${service.name}`;
-	const isNew = !services.has(key);
 	const updated = new Map(services);
-	updated.set(key, service);
+	updated.set(`${service.namespace}/${service.name}`, service);
 	services = updated;
-	if (isNew) {
-		sortOrder = computeSortOrder(services);
-		if (service.status !== 'healthy') {
-			initialNeedsAttentionKeys.add(key);
-			initialNeedsAttentionKeys = new Set(initialNeedsAttentionKeys);
-		}
-	}
 	const checkedAt = parseLastChecked(service.lastChecked);
 	if (checkedAt && (!lastUpdated || checkedAt.getTime() > lastUpdated.getTime())) {
 		lastUpdated = checkedAt;
@@ -169,12 +133,9 @@ export function addOrUpdate(service: Service): void {
 }
 
 export function remove(namespace: string, name: string): void {
-	const key = `${namespace}/${name}`;
 	const updated = new Map(services);
-	updated.delete(key);
+	updated.delete(`${namespace}/${name}`);
 	services = updated;
-	sortOrder = sortOrder.filter((k) => k !== key);
-	initialNeedsAttentionKeys.delete(key);
 }
 
 export function setConnectionStatus(status: ConnectionStatus): void {
@@ -192,8 +153,6 @@ export function _resetForTesting(): void {
 	connectionStatus = 'connecting';
 	lastUpdated = null;
 	appVersion = '';
-	sortOrder = [];
-	initialNeedsAttentionKeys = new Set();
 	k8sConnected = false;
 	k8sLastEvent = null;
 	healthCheckIntervalMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS;

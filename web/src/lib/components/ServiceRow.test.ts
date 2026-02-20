@@ -427,7 +427,6 @@ describe('ServiceRow', () => {
 			vi.advanceTimersByTime(200);
 			await tick();
 
-			expect(screen.getByText(/checked 12s ago/)).toBeInTheDocument();
 			expect(screen.getByText(/healthy for 2h/)).toBeInTheDocument();
 		});
 	});
