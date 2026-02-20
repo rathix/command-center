@@ -462,6 +462,33 @@ func TestClientKeyFileHasCorrectPEMType(t *testing.T) {
 	_ = loadKeyFromFile(t, result.ClientKeyPath)
 }
 
+func TestPrivateKeyFilesHaveRestrictivePermissions(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := CertsConfig{DataDir: dir}
+	assets, err := LoadOrGenerateCerts(cfg)
+	if err != nil {
+		t.Fatalf("LoadOrGenerateCerts: %v", err)
+	}
+
+	keyFiles := []string{
+		filepath.Join(dir, "certs", "ca.key"),
+		assets.ServerKeyPath,
+		assets.ClientKeyPath,
+	}
+
+	for _, keyFile := range keyFiles {
+		info, err := os.Stat(keyFile)
+		if err != nil {
+			t.Fatalf("stat %s: %v", keyFile, err)
+		}
+		perm := info.Mode().Perm()
+		if perm != 0o600 {
+			t.Errorf("%s has permissions %o, want 0600", filepath.Base(keyFile), perm)
+		}
+	}
+}
+
 func TestLoadOrGenerateCertsExpiredCertsRegenerate(t *testing.T) {
 	dir := t.TempDir()
 

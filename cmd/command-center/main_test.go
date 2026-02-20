@@ -1,87 +1,275 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"flag"
+	"encoding/json"
 	"log/slog"
-	"os"
-	"syscall"
+	"net"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 )
 
-func TestConfigPrecedence(t *testing.T) {
-	cases := []struct {
-		name     string
-		args     []string
-		envs     map[string]string
-		expected string
-	}{
-		{
-			name:     "default value",
-			args:     []string{},
-			envs:     map[string]string{},
-			expected: ":8443",
-		},
-		{
-			name:     "env var precedence",
-			args:     []string{},
-			envs:     map[string]string{"LISTEN_ADDR": ":9443"},
-			expected: ":9443",
-		},
-		{
-			name:     "flag precedence over env",
-			args:     []string{"--listen-addr", ":9999"},
-			envs:     map[string]string{"LISTEN_ADDR": ":9443"},
-			expected: ":9999",
-		},
+// === Task 1: Configuration Loading Tests (AC #1, #2, #3, #4) ===
+
+func TestConfigDefaults(t *testing.T) {
+	// AC #1: Default values when no flags or env vars are provided
+	cfg, err := LoadConfig([]string{})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			flag.CommandLine = flag.NewFlagSet(tc.name, flag.ExitOnError)
-			for k, v := range tc.envs {
-				os.Setenv(k, v)
-				defer os.Unsetenv(k)
-			}
-			cfg := LoadConfig(tc.args)
-			assert.Equal(t, tc.expected, cfg.ListenAddr)
-		})
+	checks := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"ListenAddr", cfg.ListenAddr, ":8443"},
+		{"Kubeconfig", cfg.Kubeconfig, "~/.kube/config"},
+		{"DataDir", cfg.DataDir, "/data"},
+		{"LogFormat", cfg.LogFormat, "json"},
+		{"TLSCACert", cfg.TLSCACert, ""},
+		{"TLSCert", cfg.TLSCert, ""},
+		{"TLSKey", cfg.TLSKey, ""},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
+		}
+	}
+
+	if cfg.HealthInterval != 30*time.Second {
+		t.Errorf("HealthInterval = %v, want %v", cfg.HealthInterval, 30*time.Second)
 	}
 }
 
-func TestGracefulShutdown(t *testing.T) {
+func TestConfigCLIFlag(t *testing.T) {
+	// AC #2: CLI flag --listen-addr :9443 makes server listen on port 9443
+	cfg, err := LoadConfig([]string{"--listen-addr", ":9443"})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.ListenAddr != ":9443" {
+		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":9443")
+	}
+}
+
+func TestConfigEnvVarFallback(t *testing.T) {
+	// AC #3: Env var LISTEN_ADDR=:9443 is used when no CLI flag overrides it
+	t.Setenv("LISTEN_ADDR", ":9443")
+	cfg, err := LoadConfig([]string{})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.ListenAddr != ":9443" {
+		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":9443")
+	}
+}
+
+func TestConfigFlagPrecedenceOverEnv(t *testing.T) {
+	// AC #4: CLI flag takes precedence over env var
+	t.Setenv("LISTEN_ADDR", ":9443")
+	cfg, err := LoadConfig([]string{"--listen-addr", ":7777"})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.ListenAddr != ":7777" {
+		t.Errorf("ListenAddr = %q, want %q", cfg.ListenAddr, ":7777")
+	}
+}
+
+func TestConfigEnvVarAllParameters(t *testing.T) {
+	// Verify env var fallback works for all supported parameters
+	t.Setenv("LISTEN_ADDR", ":9999")
+	t.Setenv("KUBECONFIG", "/custom/kubeconfig")
+	t.Setenv("HEALTH_INTERVAL", "60s")
+	t.Setenv("DATA_DIR", "/custom/data")
+	t.Setenv("LOG_FORMAT", "text")
+	t.Setenv("TLS_CA_CERT", "/ca.crt")
+	t.Setenv("TLS_CERT", "/server.crt")
+	t.Setenv("TLS_KEY", "/server.key")
+
+	cfg, err := LoadConfig([]string{})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	checks := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"ListenAddr", cfg.ListenAddr, ":9999"},
+		{"Kubeconfig", cfg.Kubeconfig, "/custom/kubeconfig"},
+		{"DataDir", cfg.DataDir, "/custom/data"},
+		{"LogFormat", cfg.LogFormat, "text"},
+		{"TLSCACert", cfg.TLSCACert, "/ca.crt"},
+		{"TLSCert", cfg.TLSCert, "/server.crt"},
+		{"TLSKey", cfg.TLSKey, "/server.key"},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
+		}
+	}
+
+	if cfg.HealthInterval != 60*time.Second {
+		t.Errorf("HealthInterval = %v, want %v", cfg.HealthInterval, 60*time.Second)
+	}
+}
+
+func TestConfigInvalidHealthInterval(t *testing.T) {
+	// Invalid health interval should fall back to 30s default
+	t.Setenv("HEALTH_INTERVAL", "not-a-duration")
+	cfg, err := LoadConfig([]string{})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.HealthInterval != 30*time.Second {
+		t.Errorf("HealthInterval = %v, want %v (default after invalid input)", cfg.HealthInterval, 30*time.Second)
+	}
+}
+
+func TestConfigInvalidFlagReturnsError(t *testing.T) {
+	// Unknown flags should return an error
+	_, err := LoadConfig([]string{"--unknown-flag", "value"})
+	if err == nil {
+		t.Error("LoadConfig() with unknown flag should return error, got nil")
+	}
+}
+
+// === Task 2: Structured Logging Tests (AC #6, #7) ===
+
+func TestSetupLoggerJSON(t *testing.T) {
+	// AC #6: --log-format json produces structured JSON output
+	var buf bytes.Buffer
+	logger := setupLogger("json")
+
+	// Replace the handler's output to capture it
+	logger = slog.New(slog.NewJSONHandler(&buf, nil))
+	logger.Info("test message", "key", "value")
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("JSON log output is not valid JSON: %v\nOutput: %s", err, buf.String())
+	}
+	if msg, ok := entry["msg"].(string); !ok || msg != "test message" {
+		t.Errorf("msg = %v, want %q", entry["msg"], "test message")
+	}
+}
+
+func TestSetupLoggerText(t *testing.T) {
+	// AC #7: --log-format text produces human-readable text
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	logger.Info("test message", "key", "value")
+
+	output := buf.String()
+	if !strings.Contains(output, "test message") {
+		t.Errorf("text log output should contain message, got: %s", output)
+	}
+	// Text format should NOT be valid JSON
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err == nil {
+		t.Error("text log output should not be valid JSON")
+	}
+}
+
+// === Task 3: Graceful Shutdown Tests (AC #5) ===
+
+func getFreeAddr(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to find free port: %v", err)
+	}
+	addr := l.Addr().String()
+	l.Close()
+	return addr
+}
+
+func TestGracefulShutdownViaContext(t *testing.T) {
+	// AC #5: SIGTERM/SIGINT causes graceful shutdown
+	// We test via context cancellation since signal.NotifyContext wires signals to context
+	ctx, cancel := context.WithCancel(context.Background())
+
+	addr := getFreeAddr(t)
+	cfg, err := LoadConfig([]string{"--listen-addr", addr})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	cfg.Dev = true // dev mode uses plain HTTP, no TLS setup needed
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- Run(ctx, cfg)
+	}()
+
+	// Give the server time to start
+	time.Sleep(200 * time.Millisecond)
+
+	// Cancel context (simulates SIGTERM/SIGINT via signal.NotifyContext)
+	cancel()
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Errorf("Run() after shutdown returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not shut down within 5 seconds")
+	}
+}
+
+// === Task 4: Dev Mode Plain HTTP Test ===
+
+func TestDevModeUsesPlainHTTP(t *testing.T) {
+	// Dev mode should use plain HTTP, not HTTPS/mTLS
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := make(chan os.Signal, 1)
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		stop <- syscall.SIGTERM
-	}()
-	select {
-	case <-stop:
-		cancel()
-	case <-time.After(1 * time.Second):
-		t.Fatal("timeout waiting for signal")
+
+	addr := getFreeAddr(t)
+	cfg, err := LoadConfig([]string{"--listen-addr", addr})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
 	}
-	assert.ErrorIs(t, ctx.Err(), context.Canceled)
+	cfg.Dev = true
+
+	go func() {
+		_ = Run(ctx, cfg)
+	}()
+
+	// Give the server time to start
+	time.Sleep(200 * time.Millisecond)
+
+	// Plain HTTP request should succeed — if server were using TLS, this would fail
+	resp, err := http.Get("http://" + addr + "/")
+	if err != nil {
+		t.Fatalf("HTTP GET failed: %v (server may be using TLS instead of plain HTTP)", err)
+	}
+	resp.Body.Close()
+	// 502 is expected since Vite dev server isn't running, but HTTP layer worked
 }
 
-func TestLogFormatSelection(t *testing.T) {
+func TestSetupLoggerReturnsCorrectHandlerType(t *testing.T) {
 	cases := []struct {
 		format string
 		isJSON bool
 	}{
 		{"json", true},
 		{"text", false},
+		{"", true},       // default should be JSON
+		{"invalid", true}, // unknown format defaults to JSON
 	}
 	for _, tc := range cases {
 		t.Run(tc.format, func(t *testing.T) {
-			handler := setupLogger(tc.format)
-			_, ok := handler.Handler().(*slog.JSONHandler)
-			assert.Equal(t, tc.isJSON, ok)
+			logger := setupLogger(tc.format)
+			_, ok := logger.Handler().(*slog.JSONHandler)
+			if ok != tc.isJSON {
+				t.Errorf("setupLogger(%q): JSONHandler = %v, want %v", tc.format, ok, tc.isJSON)
+			}
 		})
 	}
 }

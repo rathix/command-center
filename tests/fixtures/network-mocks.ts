@@ -5,10 +5,7 @@ export const mockK8sApiSuccess = async (page: Page) => {
     route.fulfill({
       status: 200,
       contentType: 'text/event-stream',
-      body: 'event: state
-data: {"services": []}
-
-',
+      body: 'event: state\ndata: {"services": []}\n\n',
     });
   });
 };

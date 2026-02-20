@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,8 +32,12 @@ type Config struct {
 }
 
 func main() {
-	cfg := LoadConfig(os.Args[1:])
-	
+	cfg, err := LoadConfig(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -45,34 +48,36 @@ func main() {
 }
 
 // LoadConfig parses flags and environment variables with precedence: Flag > Env > Default
-func LoadConfig(args []string) Config {
+func LoadConfig(args []string) (Config, error) {
 	fs := flag.NewFlagSet("command-center", flag.ContinueOnError)
 
 	cfg := Config{}
 	fs.BoolVar(&cfg.Dev, "dev", getEnvBool("DEV", false), "proxy frontend requests to Vite dev server")
 	fs.StringVar(&cfg.ListenAddr, "listen-addr", getEnv("LISTEN_ADDR", defaultAddr), "listen address")
 	fs.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", "~/.kube/config"), "path to kubeconfig file")
-	
+
 	healthIntervalStr := getEnv("HEALTH_INTERVAL", "30s")
 	fs.StringVar(&healthIntervalStr, "health-interval", healthIntervalStr, "health check interval")
-	
+
 	fs.StringVar(&cfg.DataDir, "data-dir", getEnv("DATA_DIR", "/data"), "data directory for certificates")
 	fs.StringVar(&cfg.LogFormat, "log-format", getEnv("LOG_FORMAT", "json"), "log format (json or text)")
 	fs.StringVar(&cfg.TLSCACert, "tls-ca-cert", getEnv("TLS_CA_CERT", ""), "custom CA certificate path")
 	fs.StringVar(&cfg.TLSCert, "tls-cert", getEnv("TLS_CERT", ""), "custom server certificate path")
 	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
 
-	_ = fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return Config{}, err
+	}
 
 	interval, err := time.ParseDuration(healthIntervalStr)
 	if err != nil {
-		log.Printf("Warning: invalid health interval %q, using default 30s", healthIntervalStr)
+		slog.Warn("invalid health interval, using default 30s", "value", healthIntervalStr)
 		cfg.HealthInterval = 30 * time.Second
 	} else {
 		cfg.HealthInterval = interval
 	}
 
-	return cfg
+	return cfg, nil
 }
 
 func getEnv(key, fallback string) string {
@@ -113,7 +118,7 @@ func Run(ctx context.Context, cfg Config) error {
 			return fmt.Errorf("failed to create dev proxy: %w", err)
 		}
 		mux.Handle("/", proxy)
-		slog.Info("Dev mode: proxying to Vite", "url", viteURL, "mtls", "disabled")
+		slog.Info("Dev mode: proxying to Vite", "url", viteURL)
 	} else {
 		handler, err := server.NewSPAHandler(commandcenter.WebFS, "web/build")
 		if err != nil {
@@ -122,49 +127,61 @@ func Run(ctx context.Context, cfg Config) error {
 		mux.Handle("/", handler)
 	}
 
-	// Load or generate TLS certificates
-	certsCfg := certs.CertsConfig{
-		DataDir:      cfg.DataDir,
-		CustomCACert: cfg.TLSCACert,
-		CustomCert:   cfg.TLSCert,
-		CustomKey:    cfg.TLSKey,
-	}
-
-	assets, err := certs.LoadOrGenerateCerts(certsCfg)
-	if err != nil {
-		return fmt.Errorf("failed to load certificates: %w", err)
-	}
-
-	if assets.WasGenerated {
-		slog.Info("No TLS certificates configured — generating self-signed CA")
-		slog.Info("Certificates generated", 
-			"ca", assets.CACertPath, 
-			"server", assets.ServerCertPath, 
-			"client", assets.ClientCertPath)
-		slog.Info("Install client.crt + client.key in your browser to access Command Center")
-	} else if certsCfg.CustomCACert != "" {
-		slog.Info("Using custom TLS certificates")
-	} else {
-		slog.Info("Using existing certificates", "dir", assets.CACertPath)
-	}
-
-	tlsConfig, err := certs.NewTLSConfig(assets.CACertPath, assets.ServerCertPath, assets.ServerKeyPath)
-	if err != nil {
-		return fmt.Errorf("failed to create TLS config: %w", err)
-	}
-
 	srv := &http.Server{
-		Addr:      cfg.ListenAddr,
-		Handler:   mux,
-		TLSConfig: tlsConfig,
+		Addr:    cfg.ListenAddr,
+		Handler: mux,
+	}
+
+	// Configure TLS/mTLS for non-dev mode
+	if !cfg.Dev {
+		certsCfg := certs.CertsConfig{
+			DataDir:      cfg.DataDir,
+			CustomCACert: cfg.TLSCACert,
+			CustomCert:   cfg.TLSCert,
+			CustomKey:    cfg.TLSKey,
+		}
+
+		assets, err := certs.LoadOrGenerateCerts(certsCfg)
+		if err != nil {
+			return fmt.Errorf("failed to load certificates: %w", err)
+		}
+
+		if assets.WasGenerated {
+			slog.Info("No TLS certificates configured — generating self-signed CA")
+			slog.Info("Certificates generated",
+				"ca", assets.CACertPath,
+				"server", assets.ServerCertPath,
+				"client", assets.ClientCertPath)
+			slog.Info("Install client.crt + client.key in your browser to access Command Center")
+		} else if certsCfg.CustomCACert != "" {
+			slog.Info("Using custom TLS certificates")
+		} else {
+			slog.Info("Using existing certificates",
+				"ca", assets.CACertPath,
+				"client", assets.ClientCertPath)
+			slog.Info("Install client.crt + client.key in your browser to access Command Center")
+		}
+
+		tlsConfig, err := certs.NewTLSConfig(assets.CACertPath, assets.ServerCertPath, assets.ServerKeyPath)
+		if err != nil {
+			return fmt.Errorf("failed to create TLS config: %w", err)
+		}
+		srv.TLSConfig = tlsConfig
 	}
 
 	// Channel to catch server errors
 	serverError := make(chan error, 1)
 
 	go func() {
-		slog.Info("Listening", "addr", cfg.ListenAddr, "mtls", "enabled")
-		if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+		var err error
+		if cfg.Dev {
+			slog.Info("Listening (HTTP)", "addr", cfg.ListenAddr)
+			err = srv.ListenAndServe()
+		} else {
+			slog.Info("Listening (HTTPS+mTLS)", "addr", cfg.ListenAddr)
+			err = srv.ListenAndServeTLS("", "")
+		}
+		if err != nil && err != http.ErrServerClosed {
 			serverError <- err
 		}
 	}()
