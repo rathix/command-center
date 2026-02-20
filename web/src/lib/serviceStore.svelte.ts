@@ -17,6 +17,7 @@ let services = $state(new Map<string, Service>());
 let connectionStatus = $state<ConnectionStatus>('connecting');
 let lastUpdated = $state<Date | null>(null);
 let sortOrder = $state<string[]>([]);
+let initialNeedsAttentionKeys = $state(new Set<string>());
 
 function computeSortOrder(svcMap: Map<string, Service>): string[] {
 	return [...svcMap.values()]
@@ -26,6 +27,16 @@ function computeSortOrder(svcMap: Map<string, Service>): string[] {
 			return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
 		})
 		.map((s) => `${s.namespace}/${s.name}`);
+}
+
+function computeNeedsAttentionKeys(svcMap: Map<string, Service>): Set<string> {
+	return new Set(
+		[...svcMap.values()]
+			.filter(
+				(s) => s.status === 'unhealthy' || s.status === 'authBlocked' || s.status === 'unknown'
+			)
+			.map((s) => `${s.namespace}/${s.name}`)
+	);
 }
 
 // Internal derived computations
@@ -38,15 +49,20 @@ const sortedServices = $derived.by(() => {
 });
 
 const groupedServices = $derived.by<GroupedServices>(() => {
-	// Spread services.values() to establish reactivity on the entire map
-	const byKey = new Map([...services.values()].map((s) => [`${s.namespace}/${s.name}`, s]));
-	const ordered = sortOrder
-		.map((key) => byKey.get(key))
-		.filter((s): s is Service => s !== undefined);
-	const needsAttention = ordered.filter(
-		(s) => s.status === 'unhealthy' || s.status === 'authBlocked' || s.status === 'unknown'
-	);
-	const healthy = ordered.filter((s) => s.status === 'healthy');
+	const needsAttention: Service[] = [];
+	const healthy: Service[] = [];
+
+	for (const key of sortOrder) {
+		const s = services.get(key);
+		if (!s) continue;
+
+		if (initialNeedsAttentionKeys.has(key)) {
+			needsAttention.push(s);
+		} else {
+			healthy.push(s);
+		}
+	}
+
 	return { needsAttention, healthy };
 });
 
@@ -91,6 +107,7 @@ export function getGroupedServices(): GroupedServices {
 export function replaceAll(newServices: Service[]): void {
 	services = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
 	sortOrder = computeSortOrder(services);
+	initialNeedsAttentionKeys = computeNeedsAttentionKeys(services);
 	lastUpdated = new Date();
 }
 
@@ -102,6 +119,9 @@ export function addOrUpdate(service: Service): void {
 	services = updated;
 	if (isNew) {
 		sortOrder = computeSortOrder(services);
+		if (service.status !== 'healthy') {
+			initialNeedsAttentionKeys.add(key);
+		}
 	}
 	lastUpdated = new Date();
 }
@@ -111,6 +131,8 @@ export function remove(namespace: string, name: string): void {
 	const updated = new Map(services);
 	updated.delete(key);
 	services = updated;
+	sortOrder = sortOrder.filter((k) => k !== key);
+	initialNeedsAttentionKeys.delete(key);
 	lastUpdated = new Date();
 }
 
@@ -124,4 +146,5 @@ export function _resetForTesting(): void {
 	connectionStatus = 'connecting';
 	lastUpdated = null;
 	sortOrder = [];
+	initialNeedsAttentionKeys = new Set();
 }

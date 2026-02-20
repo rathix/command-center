@@ -7,12 +7,9 @@
 	const showLabels = $derived.by(
 		() => groups.needsAttention.length > 0 && groups.healthy.length > 0
 	);
-	const hasServices = $derived.by(
-		() => groups.needsAttention.length + groups.healthy.length > 0
-	);
 </script>
 
-{#if hasServices}
+{#if groups.needsAttention.length > 0 || groups.healthy.length > 0}
 	<ul class="m-0 list-none p-0">
 		{#if showLabels}
 			<SectionLabel label="needs attention" />
@@ -24,8 +21,7 @@
 				<ServiceRow {service} odd={(groups.needsAttention.length + i) % 2 !== 0} />
 			{/each}
 		{:else}
-			{@const allServices = groups.needsAttention.length > 0 ? groups.needsAttention : groups.healthy}
-			{#each allServices as service, i (`${service.namespace}/${service.name}`)}
+			{#each groups.needsAttention.length > 0 ? groups.needsAttention : groups.healthy as service, i (`${service.namespace}/${service.name}`)}
 				<ServiceRow {service} odd={i % 2 !== 0} />
 			{/each}
 		{/if}
