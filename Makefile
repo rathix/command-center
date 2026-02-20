@@ -1,11 +1,13 @@
 .PHONY: build test dev clean docker
 
+CONTAINER_TOOL ?= $(shell if command -v docker >/dev/null 2>&1; then echo docker; elif command -v podman >/dev/null 2>&1; then echo podman; else echo docker; fi)
+
 build:
 	cd web && npm ci && npm run build
 	go build -o bin/command-center ./cmd/command-center
 
 docker:
-	podman build -t command-center .
+	$(CONTAINER_TOOL) build -t command-center .
 
 test:
 	go test ./...

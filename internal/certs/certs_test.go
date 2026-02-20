@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -498,6 +499,10 @@ func TestLoadOrGenerateCertsExpiredCertsRegenerate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first LoadOrGenerateCerts: %v", err)
 	}
+	caBefore, err := os.ReadFile(filepath.Join(dir, "certs", "ca.crt"))
+	if err != nil {
+		t.Fatalf("reading CA cert before renewal: %v", err)
+	}
 
 	// Overwrite server cert with an expired one
 	writeExpiredCert(t, filepath.Join(dir, "certs", "server.crt"))
@@ -516,6 +521,14 @@ func TestLoadOrGenerateCertsExpiredCertsRegenerate(t *testing.T) {
 	cert := loadCertFromFile(t, assets.ServerCertPath)
 	if time.Now().After(cert.NotAfter) {
 		t.Error("regenerated cert should not be expired")
+	}
+
+	caAfter, err := os.ReadFile(filepath.Join(dir, "certs", "ca.crt"))
+	if err != nil {
+		t.Fatalf("reading CA cert after renewal: %v", err)
+	}
+	if string(caBefore) != string(caAfter) {
+		t.Error("CA certificate should not rotate when only leaf certs expire")
 	}
 }
 
@@ -549,6 +562,10 @@ func TestLoadOrGenerateCertsExpiredClientCertRegenerates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first LoadOrGenerateCerts: %v", err)
 	}
+	caBefore, err := os.ReadFile(filepath.Join(dir, "certs", "ca.crt"))
+	if err != nil {
+		t.Fatalf("reading CA cert before renewal: %v", err)
+	}
 
 	// Overwrite client cert with an expired one (server cert is still valid)
 	writeExpiredCert(t, filepath.Join(dir, "certs", "client.crt"))
@@ -567,6 +584,14 @@ func TestLoadOrGenerateCertsExpiredClientCertRegenerates(t *testing.T) {
 	cert := loadCertFromFile(t, assets.ClientCertPath)
 	if time.Now().After(cert.NotAfter) {
 		t.Error("regenerated client cert should not be expired")
+	}
+
+	caAfter, err := os.ReadFile(filepath.Join(dir, "certs", "ca.crt"))
+	if err != nil {
+		t.Fatalf("reading CA cert after renewal: %v", err)
+	}
+	if string(caBefore) != string(caAfter) {
+		t.Error("CA certificate should not rotate when only leaf certs expire")
 	}
 }
 
@@ -642,6 +667,20 @@ func generateTestCerts(t *testing.T) (*TLSAssets, string) {
 	return assets, dir
 }
 
+func startTLSTestServer(t *testing.T, tlsCfg *tls.Config, handler http.Handler) *httptest.Server {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("skipping network-bound TLS test: cannot bind loopback socket: %v", err)
+	}
+
+	srv := httptest.NewUnstartedServer(handler)
+	srv.Listener = ln
+	srv.TLS = tlsCfg
+	srv.StartTLS()
+	return srv
+}
+
 func TestNewTLSConfigMinVersionTLS13(t *testing.T) {
 	assets, _ := generateTestCerts(t)
 
@@ -702,11 +741,9 @@ func TestTLSHandshakeValidClientAccepted(t *testing.T) {
 		t.Fatalf("NewTLSConfig: %v", err)
 	}
 
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := startTLSTestServer(t, tlsCfg, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	srv.TLS = tlsCfg
-	srv.StartTLS()
 	defer srv.Close()
 
 	// Load client cert
@@ -751,11 +788,9 @@ func TestTLSHandshakeNoClientCertRejected(t *testing.T) {
 		t.Fatalf("NewTLSConfig: %v", err)
 	}
 
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := startTLSTestServer(t, tlsCfg, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	srv.TLS = tlsCfg
-	srv.StartTLS()
 	defer srv.Close()
 
 	// Load CA cert for server verification but provide NO client cert
@@ -788,11 +823,9 @@ func TestTLSHandshakeWrongCARejected(t *testing.T) {
 		t.Fatalf("NewTLSConfig: %v", err)
 	}
 
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := startTLSTestServer(t, tlsCfg, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	srv.TLS = tlsCfg
-	srv.StartTLS()
 	defer srv.Close()
 
 	// Generate a separate CA and client cert (different CA)

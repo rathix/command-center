@@ -5,3 +5,10 @@ web/.svelte-kit/
 _bmad-output/
 _bmad/
 .git/
+.env
+.env.local
+.env.*.local
+certs/
+*.pem
+*.crt
+*.key

@@ -14,6 +14,7 @@ describe('+page.svelte', () => {
 		render(Page);
 		const statusBar = screen.getByRole('banner');
 		expect(statusBar).toBeInTheDocument();
+		expect(statusBar).toHaveClass('fixed');
 	});
 
 	it('renders a main content area with service-list id', () => {
@@ -21,5 +22,6 @@ describe('+page.svelte', () => {
 		const main = screen.getByRole('main');
 		expect(main).toBeInTheDocument();
 		expect(main).toHaveAttribute('id', 'service-list');
+		expect(main).toHaveAttribute('tabindex', '-1');
 	});
 });

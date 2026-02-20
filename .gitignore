@@ -5,6 +5,7 @@ _bmad/_memory/
 # Go build output
 bin/
 /command-center
+.gocache/
 
 # Node
 node_modules/

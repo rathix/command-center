@@ -1,14 +1,27 @@
 package server
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
+func startLocalHTTPServer(t *testing.T, h http.Handler) *httptest.Server {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("skipping network-bound test: cannot bind loopback socket: %v", err)
+	}
+	srv := httptest.NewUnstartedServer(h)
+	srv.Listener = ln
+	srv.Start()
+	return srv
+}
+
 func TestDevProxyHandlerForwardsToTarget(t *testing.T) {
 	// Mock Vite dev server
-	vite := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	vite := startLocalHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("vite:" + r.URL.Path))
 	}))
 	defer vite.Close()
@@ -31,7 +44,7 @@ func TestDevProxyHandlerForwardsToTarget(t *testing.T) {
 }
 
 func TestDevProxyHandlerPreservesPath(t *testing.T) {
-	vite := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	vite := startLocalHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("vite:" + r.URL.Path))
 	}))
 	defer vite.Close()

@@ -200,7 +200,16 @@ type TLSAssets struct {
 	ClientCertPath string
 	ClientKeyPath  string
 	WasGenerated   bool
+	// GenerationReason clarifies whether assets were reused, generated fresh, or leaf certs were renewed.
+	GenerationReason string
 }
+
+const (
+	generationReasonCustom         = "custom"
+	generationReasonReused         = "reused"
+	generationReasonFullGeneration = "full-generation"
+	generationReasonLeafRenewal    = "leaf-renewal"
+)
 
 // LoadOrGenerateCerts resolves TLS certificates based on configuration:
 //   - If all custom paths are set, validates and uses them
@@ -225,10 +234,11 @@ func LoadOrGenerateCerts(cfg CertsConfig) (*TLSAssets, error) {
 			f.Close()
 		}
 		return &TLSAssets{
-			CACertPath:     cfg.CustomCACert,
-			ServerCertPath: cfg.CustomCert,
-			ServerKeyPath:  cfg.CustomKey,
-			WasGenerated:   false,
+			CACertPath:       cfg.CustomCACert,
+			ServerCertPath:   cfg.CustomCert,
+			ServerKeyPath:    cfg.CustomKey,
+			WasGenerated:     false,
+			GenerationReason: generationReasonCustom,
 		}, nil
 	}
 
@@ -261,15 +271,15 @@ func LoadOrGenerateCerts(cfg CertsConfig) (*TLSAssets, error) {
 		}
 		if !serverExpired && !clientExpired {
 			return &TLSAssets{
-				CACertPath:     caCertPath,
-				ServerCertPath: serverCertPath,
-				ServerKeyPath:  serverKeyPath,
-				ClientCertPath: clientCertPath,
-				ClientKeyPath:  clientKeyPath,
-				WasGenerated:   false,
+				CACertPath:       caCertPath,
+				ServerCertPath:   serverCertPath,
+				ServerKeyPath:    serverKeyPath,
+				ClientCertPath:   clientCertPath,
+				ClientKeyPath:    clientKeyPath,
+				WasGenerated:     false,
+				GenerationReason: generationReasonReused,
 			}, nil
 		}
-		// Certs expired — fall through to regeneration
 	}
 
 	// Generate new certs with lock file to prevent race conditions
@@ -302,12 +312,37 @@ func LoadOrGenerateCerts(cfg CertsConfig) (*TLSAssets, error) {
 		}
 		if !serverExpired && !clientExpired {
 			return &TLSAssets{
-				CACertPath:     caCertPath,
-				ServerCertPath: serverCertPath,
-				ServerKeyPath:  serverKeyPath,
-				ClientCertPath: clientCertPath,
-				ClientKeyPath:  clientKeyPath,
-				WasGenerated:   false,
+				CACertPath:       caCertPath,
+				ServerCertPath:   serverCertPath,
+				ServerKeyPath:    serverKeyPath,
+				ClientCertPath:   clientCertPath,
+				ClientKeyPath:    clientKeyPath,
+				WasGenerated:     false,
+				GenerationReason: generationReasonReused,
+			}, nil
+		}
+
+		// Existing CA is still valid trust material; renew only expired leaf certificates.
+		caResult, err := loadCAFromDisk(caCertPath, caKeyPath)
+		if err == nil {
+			if serverExpired {
+				if _, err := GenerateServerCert(certsDir, caResult); err != nil {
+					return nil, fmt.Errorf("renewing server cert: %w", err)
+				}
+			}
+			if clientExpired {
+				if _, err := GenerateClientCert(certsDir, caResult); err != nil {
+					return nil, fmt.Errorf("renewing client cert: %w", err)
+				}
+			}
+			return &TLSAssets{
+				CACertPath:       caCertPath,
+				ServerCertPath:   serverCertPath,
+				ServerKeyPath:    serverKeyPath,
+				ClientCertPath:   clientCertPath,
+				ClientKeyPath:    clientKeyPath,
+				WasGenerated:     true,
+				GenerationReason: generationReasonLeafRenewal,
 			}, nil
 		}
 	}
@@ -328,12 +363,13 @@ func LoadOrGenerateCerts(cfg CertsConfig) (*TLSAssets, error) {
 	}
 
 	return &TLSAssets{
-		CACertPath:     caResult.CACertPath,
-		ServerCertPath: serverResult.ServerCertPath,
-		ServerKeyPath:  serverResult.ServerKeyPath,
-		ClientCertPath: clientResult.ClientCertPath,
-		ClientKeyPath:  clientResult.ClientKeyPath,
-		WasGenerated:   true,
+		CACertPath:       caResult.CACertPath,
+		ServerCertPath:   serverResult.ServerCertPath,
+		ServerKeyPath:    serverResult.ServerKeyPath,
+		ClientCertPath:   clientResult.ClientCertPath,
+		ClientKeyPath:    clientResult.ClientKeyPath,
+		WasGenerated:     true,
+		GenerationReason: generationReasonFullGeneration,
 	}, nil
 }
 
@@ -407,6 +443,42 @@ func certExpired(certPath string) (bool, error) {
 		return false, fmt.Errorf("parsing certificate: %w", err)
 	}
 	return time.Now().After(cert.NotAfter), nil
+}
+
+// loadCAFromDisk loads a previously generated CA cert and key pair.
+func loadCAFromDisk(caCertPath, caKeyPath string) (*CAResult, error) {
+	caCertPEM, err := os.ReadFile(caCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading CA certificate: %w", err)
+	}
+	caCertBlock, _ := pem.Decode(caCertPEM)
+	if caCertBlock == nil {
+		return nil, fmt.Errorf("no PEM data in CA certificate %s", caCertPath)
+	}
+	caCert, err := x509.ParseCertificate(caCertBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parsing CA certificate: %w", err)
+	}
+
+	caKeyPEM, err := os.ReadFile(caKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading CA key: %w", err)
+	}
+	caKeyBlock, _ := pem.Decode(caKeyPEM)
+	if caKeyBlock == nil {
+		return nil, fmt.Errorf("no PEM data in CA key %s", caKeyPath)
+	}
+	caKey, err := x509.ParseECPrivateKey(caKeyBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parsing CA key: %w", err)
+	}
+
+	return &CAResult{
+		CACertPath: caCertPath,
+		CAKeyPath:  caKeyPath,
+		CACert:     caCert,
+		CAKey:      caKey,
+	}, nil
 }
 
 func randomSerial() (*big.Int, error) {

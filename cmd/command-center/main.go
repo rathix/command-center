@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -76,6 +77,9 @@ func LoadConfig(args []string) (Config, error) {
 		slog.Warn("invalid health interval, using default 30s", "value", healthIntervalStr)
 		cfg.HealthInterval = 30 * time.Second
 	} else {
+		if interval <= 0 {
+			return Config{}, fmt.Errorf("health interval must be greater than zero, got %q", healthIntervalStr)
+		}
 		cfg.HealthInterval = interval
 	}
 
@@ -113,11 +117,15 @@ func defaultKubeconfig() string {
 }
 
 func setupLogger(format string) *slog.Logger {
+	return setupLoggerWithWriter(format, os.Stdout)
+}
+
+func setupLoggerWithWriter(format string, writer io.Writer) *slog.Logger {
 	var handler slog.Handler
 	if format == "text" {
-		handler = slog.NewTextHandler(os.Stdout, nil)
+		handler = slog.NewTextHandler(writer, nil)
 	} else {
-		handler = slog.NewJSONHandler(os.Stdout, nil)
+		handler = slog.NewJSONHandler(writer, nil)
 	}
 	return slog.New(handler)
 }
@@ -165,18 +173,30 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 
 		if assets.WasGenerated {
-			slog.Info("No TLS certificates configured — generating self-signed CA")
-			slog.Info("Certificates generated",
+			if assets.GenerationReason == "leaf-renewal" {
+				slog.Warn("Existing TLS leaf certificates expired — renewed server/client certificates")
+			} else {
+				slog.Info("No usable TLS certificates found — generating self-signed CA")
+			}
+			slog.Info("Certificates ready",
 				"ca", assets.CACertPath,
 				"server", assets.ServerCertPath,
-				"client", assets.ClientCertPath)
+				"server_key", assets.ServerKeyPath,
+				"client", assets.ClientCertPath,
+				"client_key", assets.ClientKeyPath)
 			slog.Info("Install client.crt + client.key in your browser to access Command Center")
 		} else if certsCfg.CustomCACert != "" {
-			slog.Info("Using custom TLS certificates")
+			slog.Info("Using custom TLS certificates",
+				"ca", assets.CACertPath,
+				"server", assets.ServerCertPath,
+				"server_key", assets.ServerKeyPath)
 		} else {
 			slog.Info("Using existing certificates",
 				"ca", assets.CACertPath,
-				"client", assets.ClientCertPath)
+				"server", assets.ServerCertPath,
+				"server_key", assets.ServerKeyPath,
+				"client", assets.ClientCertPath,
+				"client_key", assets.ClientKeyPath)
 			slog.Info("Install client.crt + client.key in your browser to access Command Center")
 		}
 
@@ -213,6 +233,7 @@ func Run(ctx context.Context, cfg Config) error {
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("server forced to shutdown: %w", err)
 		}
+		slog.Info("Connections drained")
 		slog.Info("Server stopped")
 	case err := <-serverError:
 		return fmt.Errorf("server error: %w", err)

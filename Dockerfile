@@ -19,4 +19,5 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /command-center ./cmd/command-cen
 FROM gcr.io/distroless/static-debian12
 COPY --from=backend /command-center /command-center
 EXPOSE 8443
+USER 65532:65532
 ENTRYPOINT ["/command-center"]
