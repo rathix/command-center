@@ -64,16 +64,14 @@ jobs:
           retention-days: 1
 
   test-go:
-    needs: test-web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
-      - name: Download Web Build
-        uses: actions/download-artifact@v4
-        with:
-          name: web-build
-          path: web/build/
+      - name: Mock Web Build for Go Compiler
+        run: |
+          mkdir -p web/build
+          touch web/build/index.html
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -95,6 +93,12 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v5
+
+      - name: Download Web Build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web/build/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
