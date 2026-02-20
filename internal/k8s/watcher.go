@@ -72,12 +72,14 @@ func NewWatcherWithClient(clientset kubernetes.Interface, updater StateUpdater, 
 		logger:  logger,
 	}
 
-	_ = ingressInformer.Informer().SetWatchErrorHandler(func(r *cache.Reflector, err error) {
+	if err := ingressInformer.Informer().SetWatchErrorHandler(func(r *cache.Reflector, err error) {
 		w.logger.Warn("k8s API watch error", "error", err)
 		if w.k8sConnected.CompareAndSwap(true, false) {
 			w.updater.SetK8sConnected(false)
 		}
-	})
+	}); err != nil {
+		w.logger.Warn("failed to set k8s watch error handler", "error", err)
+	}
 
 	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    w.onAdd,
@@ -92,9 +94,22 @@ func NewWatcherWithClient(clientset kubernetes.Interface, updater StateUpdater, 
 func (w *Watcher) Run(ctx context.Context) {
 	w.logger.Info("Starting Kubernetes Ingress watcher")
 	w.factory.Start(ctx.Done())
-	w.factory.WaitForCacheSync(ctx.Done())
-	w.markK8sConnected()
-	w.logger.Info("Kubernetes Ingress watcher synced")
+	syncStatus := w.factory.WaitForCacheSync(ctx.Done())
+	allSynced := len(syncStatus) > 0
+	for _, synced := range syncStatus {
+		if !synced {
+			allSynced = false
+			break
+		}
+	}
+
+	if allSynced {
+		w.markK8sConnected()
+		w.logger.Info("Kubernetes Ingress watcher synced")
+	} else {
+		w.logger.Warn("Kubernetes Ingress watcher cache sync incomplete")
+	}
+
 	<-ctx.Done()
 	w.factory.Shutdown()
 	w.logger.Info("Kubernetes Ingress watcher stopped")

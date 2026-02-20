@@ -212,6 +212,21 @@ describe('sseClient', () => {
 
 			expect(replaceAll).not.toHaveBeenCalled();
 		});
+
+		it('ignores state payload when optional k8sConnected has invalid type', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+
+			es.emit(
+				'state',
+				JSON.stringify({ services, appVersion: 'v1.0.0', k8sConnected: 'true' })
+			);
+
+			expect(replaceAll).not.toHaveBeenCalled();
+			expect(setK8sStatus).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('discovered event', () => {

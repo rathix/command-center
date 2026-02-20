@@ -581,6 +581,23 @@ func TestWatcherSetsK8sConnectedOnDiscovery(t *testing.T) {
 	}
 }
 
+func TestWatcherDoesNotSetK8sConnectedWhenCacheSyncIncomplete(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	updater := &fakeStateUpdater{}
+	logger := slog.Default()
+
+	w := NewWatcherWithClient(clientset, updater, logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Force WaitForCacheSync to fail immediately
+
+	w.Run(ctx)
+
+	if calls := updater.getK8sCalls(); len(calls) != 0 {
+		t.Fatalf("expected no SetK8sConnected calls when cache sync fails, got %v", calls)
+	}
+}
+
 func TestWatcherPreservesStatusOnUpdate(t *testing.T) {
 	ingress := newTestIngress("status-app", "default", "status.example.com", false)
 
@@ -623,7 +640,7 @@ func TestWatcherPreservesStatusOnUpdate(t *testing.T) {
 					break
 				}
 			}
-			
+
 			if found && latest.Status == state.StatusHealthy {
 				// Success: status was preserved
 				return

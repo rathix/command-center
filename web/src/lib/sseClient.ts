@@ -2,6 +2,12 @@ import { replaceAll, addOrUpdate, remove, setConnectionStatus, setK8sStatus } fr
 import type { HealthStatus, Service, K8sStatusPayload } from './types';
 
 let eventSource: EventSource | null = null;
+type StatePayload = {
+	services: Service[];
+	appVersion?: string;
+	k8sConnected?: boolean;
+	k8sLastEvent?: string | null;
+};
 
 function closeActiveConnection(): void {
 	eventSource?.close();
@@ -49,9 +55,16 @@ function isService(value: unknown): value is Service {
 	);
 }
 
-function isStatePayload(value: unknown): value is { services: Service[]; appVersion?: string } {
+function isStatePayload(value: unknown): value is StatePayload {
 	if (!isRecord(value) || !Array.isArray(value.services)) return false;
 	if (value.appVersion !== undefined && typeof value.appVersion !== 'string') return false;
+	if (value.k8sConnected !== undefined && typeof value.k8sConnected !== 'boolean') return false;
+	if (
+		value.k8sLastEvent !== undefined &&
+		value.k8sLastEvent !== null &&
+		typeof value.k8sLastEvent !== 'string'
+	)
+		return false;
 	return value.services.every((service) => isService(service));
 }
 
@@ -95,7 +108,7 @@ export function connect(): void {
 		const payload = parseJson(e.data);
 		if (!isStatePayload(payload)) return;
 		replaceAll(payload.services, payload.appVersion ?? '');
-		if ('k8sConnected' in payload) {
+		if (payload.k8sConnected !== undefined || payload.k8sLastEvent !== undefined) {
 			setK8sStatus(payload.k8sConnected ?? false, payload.k8sLastEvent ?? null);
 		}
 	});
