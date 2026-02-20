@@ -70,7 +70,7 @@ describe('StatusBar', () => {
 		expect(connectionLost).toHaveClass('text-health-error');
 		// Health summary is still visible
 		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
-		expect(screen.getByText('Last updated 0s ago')).toBeInTheDocument();
+		expect(screen.getByText(/Last updated 0s ago — connection lost/)).toBeInTheDocument();
 		expect(screen.queryByText('Command Center v1.0.0')).not.toBeInTheDocument();
 	});
 
@@ -182,6 +182,80 @@ describe('StatusBar', () => {
 			expect(screen.queryByText(/all healthy/)).not.toBeInTheDocument();
 			expect(screen.getByText('1 unknown')).toBeInTheDocument();
 			expect(screen.getByText('1 healthy')).toBeInTheDocument();
+		});
+	});
+
+	describe('data freshness and staleness', () => {
+		it('live-ticks the timestamp — updates from "0s ago" to "1m ago" after 65s', async () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			render(StatusBar);
+			expect(screen.getByText(/Last updated 0s ago/)).toBeInTheDocument();
+
+			vi.advanceTimersByTime(65_000);
+			await vi.dynamicImportSettled();
+			expect(screen.getByText(/Last updated 1m ago/)).toBeInTheDocument();
+		});
+
+		it('shows fresh staleness color (subtext-0) when data is recent', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			render(StatusBar);
+			const timeEl = screen.getByText(/Last updated/).closest('time');
+			expect(timeEl).toHaveStyle({ color: 'var(--color-subtext-0)' });
+		});
+
+		it('shows aging staleness color (yellow) when data exceeds 2x interval', async () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0', 30_000);
+			render(StatusBar);
+
+			// Advance past 2x interval (61s with 30s interval)
+			vi.advanceTimersByTime(61_000);
+			await vi.dynamicImportSettled();
+			const timeEl = screen.getByText(/Last updated/).closest('time');
+			expect(timeEl).toHaveStyle({ color: 'var(--color-health-auth-blocked)' });
+		});
+
+		it('shows stale staleness color (red) when data exceeds 5x interval', async () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0', 30_000);
+			render(StatusBar);
+
+			// Advance past 5x interval (151s with 30s interval)
+			vi.advanceTimersByTime(151_000);
+			await vi.dynamicImportSettled();
+			const timeEl = screen.getByText(/Last updated/).closest('time');
+			expect(timeEl).toHaveStyle({ color: 'var(--color-health-error)' });
+		});
+
+		it('shows stale color and "connection lost" text when SSE disconnects', () => {
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setConnectionStatus('disconnected');
+			render(StatusBar);
+			const timeEl = screen.getByText(/Last updated/).closest('time');
+			expect(timeEl).toHaveStyle({ color: 'var(--color-health-error)' });
+			expect(timeEl?.textContent).toContain('— connection lost');
+		});
+
+		it('reflects lastUpdated (health check time) during K8s outage, not k8sLastEvent', () => {
+			setConnectionStatus('connected');
+			// Simulate: K8s outage (last K8s event was 5 minutes ago), but health checks still running
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0', 30_000);
+			render(StatusBar);
+			// The timestamp should show "0s ago" (from lastUpdated) not something stale from k8sLastEvent
+			expect(screen.getByText(/Last updated 0s ago/)).toBeInTheDocument();
+			const timeEl = screen.getByText(/Last updated/).closest('time');
+			expect(timeEl).toHaveStyle({ color: 'var(--color-subtext-0)' });
+		});
+
+		it('has <time> element with datetime attribute containing ISO string', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			render(StatusBar);
+			const timeEl = screen.getByText(/Last updated/).closest('time');
+			expect(timeEl).toBeTruthy();
+			expect(timeEl?.getAttribute('datetime')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 		});
 	});
 });

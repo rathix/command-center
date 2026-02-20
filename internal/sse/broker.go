@@ -28,30 +28,32 @@ type sseEvent struct {
 
 // Broker manages SSE client connections and broadcasts state events.
 type Broker struct {
-	source            StateSource
-	logger            *slog.Logger
-	appVersion        string
-	clients           map[chan sseEvent]struct{}
-	keepaliveInterval time.Duration
-	mu                sync.Mutex
+	source              StateSource
+	logger              *slog.Logger
+	appVersion          string
+	healthCheckInterval time.Duration
+	clients             map[chan sseEvent]struct{}
+	keepaliveInterval   time.Duration
+	mu                  sync.Mutex
 }
 
 // NewBroker creates a new SSE broker.
-func NewBroker(source StateSource, logger *slog.Logger, appVersion string) *Broker {
-	return newBrokerWithKeepalive(source, logger, appVersion, defaultKeepaliveInterval)
+func NewBroker(source StateSource, logger *slog.Logger, appVersion string, healthCheckInterval time.Duration) *Broker {
+	return newBrokerWithKeepalive(source, logger, appVersion, healthCheckInterval, defaultKeepaliveInterval)
 }
 
-func newBrokerWithKeepalive(source StateSource, logger *slog.Logger, appVersion string, keepaliveInterval time.Duration) *Broker {
+func newBrokerWithKeepalive(source StateSource, logger *slog.Logger, appVersion string, healthCheckInterval time.Duration, keepaliveInterval time.Duration) *Broker {
 	if keepaliveInterval <= 0 {
 		keepaliveInterval = defaultKeepaliveInterval
 	}
 
 	return &Broker{
-		source:            source,
-		logger:            logger,
-		appVersion:        appVersion,
-		clients:           make(map[chan sseEvent]struct{}),
-		keepaliveInterval: keepaliveInterval,
+		source:              source,
+		logger:              logger,
+		appVersion:          appVersion,
+		healthCheckInterval: healthCheckInterval,
+		clients:             make(map[chan sseEvent]struct{}),
+		keepaliveInterval:   keepaliveInterval,
 	}
 }
 
@@ -170,10 +172,11 @@ func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		k8sLastEvent = &t
 	}
 	initialData, err := formatSSEEvent("state", StateEventPayload{
-		AppVersion:   b.appVersion,
-		Services:     services,
-		K8sConnected: b.source.K8sConnected(),
-		K8sLastEvent: k8sLastEvent,
+		AppVersion:            b.appVersion,
+		Services:              services,
+		K8sConnected:          b.source.K8sConnected(),
+		K8sLastEvent:          k8sLastEvent,
+		HealthCheckIntervalMs: int(b.healthCheckInterval.Milliseconds()),
 	})
 	if err != nil {
 		b.logger.Debug("failed to format initial state event", "error", err)

@@ -34,6 +34,7 @@ export interface StateEventPayload {
 	services: Service[];
 	k8sConnected?: boolean;
 	k8sLastEvent?: string | null;
+	healthCheckIntervalMs?: number;
 }
 
 export interface K8sStatusPayload {

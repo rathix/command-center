@@ -9,6 +9,7 @@ import {
 	getAppVersion,
 	getK8sConnected,
 	getK8sLastEvent,
+	getHealthCheckIntervalMs,
 	replaceAll,
 	addOrUpdate,
 	remove,
@@ -385,6 +386,28 @@ describe('serviceStore', () => {
 			_resetForTesting();
 			expect(getK8sConnected()).toBe(false);
 			expect(getK8sLastEvent()).toBeNull();
+		});
+	});
+
+	describe('healthCheckIntervalMs', () => {
+		it('defaults to 30000', () => {
+			expect(getHealthCheckIntervalMs()).toBe(30_000);
+		});
+
+		it('stores interval from replaceAll', () => {
+			replaceAll([makeService({ name: 'svc' })], 'v1.0.0', 15_000);
+			expect(getHealthCheckIntervalMs()).toBe(15_000);
+		});
+
+		it('falls back to 30000 when not provided', () => {
+			replaceAll([makeService({ name: 'svc' })], 'v1.0.0');
+			expect(getHealthCheckIntervalMs()).toBe(30_000);
+		});
+
+		it('is reset by _resetForTesting', () => {
+			replaceAll([makeService({ name: 'svc' })], 'v1.0.0', 15_000);
+			_resetForTesting();
+			expect(getHealthCheckIntervalMs()).toBe(30_000);
 		});
 	});
 

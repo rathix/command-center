@@ -21,6 +21,7 @@ let sortOrder = $state<string[]>([]);
 let initialNeedsAttentionKeys = $state(new Set<string>());
 let k8sConnected = $state<boolean>(false);
 let k8sLastEvent = $state<Date | null>(null);
+let healthCheckIntervalMs = $state<number>(30_000);
 
 function computeSortOrder(svcMap: Map<string, Service>): string[] {
 	return [...svcMap.values()]
@@ -114,11 +115,15 @@ export function getK8sConnected(): boolean {
 export function getK8sLastEvent(): Date | null {
 	return k8sLastEvent;
 }
+export function getHealthCheckIntervalMs(): number {
+	return healthCheckIntervalMs;
+}
 
 // Mutation functions (called by sseClient only)
-export function replaceAll(newServices: Service[], newAppVersion: string): void {
+export function replaceAll(newServices: Service[], newAppVersion: string, newHealthCheckIntervalMs?: number): void {
 	services = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
 	appVersion = newAppVersion;
+	healthCheckIntervalMs = newHealthCheckIntervalMs ?? 30_000;
 	sortOrder = computeSortOrder(services);
 	initialNeedsAttentionKeys = computeNeedsAttentionKeys(services);
 	lastUpdated = new Date();
@@ -169,4 +174,5 @@ export function _resetForTesting(): void {
 	initialNeedsAttentionKeys = new Set();
 	k8sConnected = false;
 	k8sLastEvent = null;
+	healthCheckIntervalMs = 30_000;
 }

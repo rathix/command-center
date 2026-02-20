@@ -143,7 +143,7 @@ describe('sseClient', () => {
 			// Simulate having received some service data
 			const services = [makeService({ name: 'svc-a' })];
 			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0' }));
-			expect(replaceAll).toHaveBeenCalledWith(services, 'v1.0.0');
+			expect(replaceAll).toHaveBeenCalledWith(services, 'v1.0.0', undefined);
 			// Simulate connection drop — should NOT call replaceAll again
 			vi.clearAllMocks();
 			es.readyState = MockEventSource.CONNECTING;
@@ -165,7 +165,7 @@ describe('sseClient', () => {
 			// Simulate state event after reconnect
 			const services = [makeService({ name: 'svc-refreshed' })];
 			es.emit('state', JSON.stringify({ services, appVersion: 'v2.0.0' }));
-			expect(replaceAll).toHaveBeenCalledWith(services, 'v2.0.0');
+			expect(replaceAll).toHaveBeenCalledWith(services, 'v2.0.0', undefined);
 		});
 
 		it('closes the previous EventSource when called more than once', async () => {
@@ -190,7 +190,7 @@ describe('sseClient', () => {
 			const services = [makeService({ name: 'svc-a' }), makeService({ name: 'svc-b' })];
 			const appVersion = 'v1.2.3';
 			es.emit('state', JSON.stringify({ services, appVersion }));
-			expect(replaceAll).toHaveBeenCalledWith(services, appVersion);
+			expect(replaceAll).toHaveBeenCalledWith(services, appVersion, undefined);
 		});
 
 		it('ignores malformed JSON', async () => {
@@ -332,7 +332,7 @@ describe('sseClient', () => {
 					k8sLastEvent: '2026-02-20T14:30:00Z'
 				})
 			);
-			expect(replaceAll).toHaveBeenCalledWith(services, 'v1.0.0');
+			expect(replaceAll).toHaveBeenCalledWith(services, 'v1.0.0', undefined);
 			expect(setK8sStatus).toHaveBeenCalledWith(true, '2026-02-20T14:30:00Z');
 		});
 

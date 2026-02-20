@@ -7,6 +7,7 @@ type StatePayload = {
 	appVersion?: string;
 	k8sConnected?: boolean;
 	k8sLastEvent?: string | null;
+	healthCheckIntervalMs?: number;
 };
 
 function closeActiveConnection(): void {
@@ -107,7 +108,7 @@ export function connect(): void {
 	source.addEventListener('state', (e: MessageEvent) => {
 		const payload = parseJson(e.data);
 		if (!isStatePayload(payload)) return;
-		replaceAll(payload.services, payload.appVersion ?? '');
+		replaceAll(payload.services, payload.appVersion ?? '', payload.healthCheckIntervalMs);
 		if (payload.k8sConnected !== undefined || payload.k8sLastEvent !== undefined) {
 			setK8sStatus(payload.k8sConnected ?? false, payload.k8sLastEvent ?? null);
 		}

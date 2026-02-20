@@ -79,7 +79,7 @@ func TestBrokerInitialStateEvent(t *testing.T) {
 		{Name: "api", Namespace: "default", URL: "https://api.example.com", Status: "healthy"},
 	}
 	source := newMockSource(services)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -134,7 +134,7 @@ func TestBrokerInitialStateEvent(t *testing.T) {
 
 func TestBrokerDiscoveredBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -191,7 +191,7 @@ func TestBrokerDiscoveredBroadcast(t *testing.T) {
 
 func TestBrokerRemovedBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -252,7 +252,7 @@ func TestBrokerRemovedBroadcast(t *testing.T) {
 
 func TestBrokerKeepaliveTiming(t *testing.T) {
 	source := newMockSource(nil)
-	broker := newBrokerWithKeepalive(source, discardLogger(), "v1.0.0", 40*time.Millisecond)
+	broker := newBrokerWithKeepalive(source, discardLogger(), "v1.0.0", 30*time.Second, 40*time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -298,7 +298,7 @@ func TestBrokerKeepaliveTiming(t *testing.T) {
 
 func TestBrokerClientDisconnectCleanup(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -341,7 +341,7 @@ func TestBrokerClientDisconnectCleanup(t *testing.T) {
 
 func TestBrokerMultiClientBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -415,7 +415,7 @@ func TestBrokerMultiClientBroadcast(t *testing.T) {
 
 func TestBrokerGracefulShutdown(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go broker.Run(ctx)
@@ -464,7 +464,7 @@ func TestBrokerGracefulShutdown(t *testing.T) {
 
 func TestBrokerSourceChannelClosedStopsBroker(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -639,7 +639,7 @@ func TestBrokerInitialStateIncludesK8sMetadata(t *testing.T) {
 	source := newMockSource(nil)
 	source.k8sConnected = true
 	source.lastK8sEvent = time.Date(2026, 2, 20, 14, 30, 0, 0, time.UTC)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -687,7 +687,7 @@ func TestBrokerK8sStatusEventBroadcast(t *testing.T) {
 	source := newMockSource(nil)
 	source.k8sConnected = true
 	source.lastK8sEvent = time.Date(2026, 2, 20, 14, 30, 0, 0, time.UTC)
-	broker := NewBroker(source, discardLogger(), "v1.0.0")
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -782,6 +782,49 @@ func TestStateEventPayloadK8sFieldsCamelCaseJSON(t *testing.T) {
 	}
 	if !strings.Contains(jsonStr, `"k8sLastEvent"`) {
 		t.Errorf("expected 'k8sLastEvent' field in JSON: %s", jsonStr)
+	}
+}
+
+func TestBrokerInitialStateIncludesHealthCheckInterval(t *testing.T) {
+	source := newMockSource(nil)
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "state" {
+		t.Errorf("expected event type 'state', got %q", eventType)
+	}
+
+	var payload StateEventPayload
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if payload.HealthCheckIntervalMs != 30000 {
+		t.Errorf("expected healthCheckIntervalMs 30000, got %d", payload.HealthCheckIntervalMs)
 	}
 }
 

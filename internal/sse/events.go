@@ -11,10 +11,11 @@ import (
 
 // StateEventPayload wraps the full service list for the initial "state" event.
 type StateEventPayload struct {
-	AppVersion   string          `json:"appVersion"`
-	Services     []state.Service `json:"services"`
-	K8sConnected bool            `json:"k8sConnected"`
-	K8sLastEvent *time.Time      `json:"k8sLastEvent"`
+	AppVersion             string          `json:"appVersion"`
+	Services               []state.Service `json:"services"`
+	K8sConnected           bool            `json:"k8sConnected"`
+	K8sLastEvent           *time.Time      `json:"k8sLastEvent"`
+	HealthCheckIntervalMs  int             `json:"healthCheckIntervalMs"`
 }
 
 // K8sStatusPayload is the JSON payload for "k8sStatus" events.
