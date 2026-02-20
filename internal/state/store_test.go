@@ -1,6 +1,7 @@
 package state
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -197,6 +198,171 @@ func TestStoreAll(t *testing.T) {
 	}
 	if got.Name == "mutated" {
 		t.Error("All() should return a snapshot, not a reference to internal data")
+	}
+}
+
+func TestSubscribeDiscoveredEvent(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	svc := Service{
+		Name:      "web",
+		Namespace: "default",
+		URL:       "https://web.example.com",
+		Status:    StatusUnknown,
+	}
+	store.AddOrUpdate(svc)
+
+	select {
+	case evt := <-events:
+		if evt.Type != EventDiscovered {
+			t.Errorf("expected EventDiscovered, got %v", evt.Type)
+		}
+		if evt.Service.Name != "web" {
+			t.Errorf("expected service name 'web', got %q", evt.Service.Name)
+		}
+		if evt.Service.Namespace != "default" {
+			t.Errorf("expected namespace 'default', got %q", evt.Service.Namespace)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for discovered event")
+	}
+}
+
+func TestSubscribeUpdatedEvent(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	svc := Service{
+		Name:      "api",
+		Namespace: "prod",
+		URL:       "https://api.example.com",
+		Status:    StatusUnknown,
+	}
+	store.AddOrUpdate(svc) // First add → Discovered
+
+	// Drain the discovered event
+	select {
+	case <-events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial discovered event")
+	}
+
+	// Update the same service → Updated
+	svc.Status = StatusHealthy
+	store.AddOrUpdate(svc)
+
+	select {
+	case evt := <-events:
+		if evt.Type != EventUpdated {
+			t.Errorf("expected EventUpdated, got %v", evt.Type)
+		}
+		if evt.Service.Status != StatusHealthy {
+			t.Errorf("expected status %q, got %q", StatusHealthy, evt.Service.Status)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for updated event")
+	}
+}
+
+func TestSubscribeRemovedEvent(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	svc := Service{
+		Name:      "worker",
+		Namespace: "jobs",
+		URL:       "https://worker.example.com",
+		Status:    StatusUnknown,
+	}
+	store.AddOrUpdate(svc)
+
+	// Drain the discovered event
+	select {
+	case <-events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for discovered event")
+	}
+
+	store.Remove("jobs", "worker")
+
+	select {
+	case evt := <-events:
+		if evt.Type != EventRemoved {
+			t.Errorf("expected EventRemoved, got %v", evt.Type)
+		}
+		if evt.Namespace != "jobs" {
+			t.Errorf("expected namespace 'jobs', got %q", evt.Namespace)
+		}
+		if evt.Name != "worker" {
+			t.Errorf("expected name 'worker', got %q", evt.Name)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for removed event")
+	}
+}
+
+func TestSubscribeNoEventForMissingRemove(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	store.Remove("default", "missing")
+
+	select {
+	case evt := <-events:
+		t.Fatalf("expected no event for missing remove, got %+v", evt)
+	case <-time.After(50 * time.Millisecond):
+		// Success: no event emitted.
+	}
+}
+
+func TestSubscribeNonBlocking(t *testing.T) {
+	store := NewStore()
+	// Don't read from the subscribe channel — fill the buffer
+	_ = store.Subscribe()
+
+	// Send more events than the buffer size (64) without reading
+	// This must not block or panic
+	done := make(chan struct{})
+	go func() {
+		for i := range 100 {
+			store.AddOrUpdate(Service{
+				Name:      fmt.Sprintf("svc-%d", i),
+				Namespace: "default",
+				URL:       "https://example.com",
+				Status:    StatusUnknown,
+			})
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success — mutations did not block
+	case <-time.After(2 * time.Second):
+		t.Fatal("mutations blocked due to full event channel")
+	}
+}
+
+func TestSubscribeEventOrder(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	// Add svc-a (discovered), update svc-a (updated), remove svc-a (removed)
+	store.AddOrUpdate(Service{Name: "svc-a", Namespace: "ns", URL: "https://a.example.com", Status: StatusUnknown})
+	store.AddOrUpdate(Service{Name: "svc-a", Namespace: "ns", URL: "https://a.example.com", Status: StatusHealthy})
+	store.Remove("ns", "svc-a")
+
+	expected := []EventType{EventDiscovered, EventUpdated, EventRemoved}
+	for i, want := range expected {
+		select {
+		case evt := <-events:
+			if evt.Type != want {
+				t.Errorf("event[%d]: expected %v, got %v", i, want, evt.Type)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for event[%d]", i)
+		}
 	}
 }
 

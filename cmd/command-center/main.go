@@ -18,6 +18,7 @@ import (
 	"github.com/rathix/command-center/internal/certs"
 	"github.com/rathix/command-center/internal/k8s"
 	"github.com/rathix/command-center/internal/server"
+	"github.com/rathix/command-center/internal/sse"
 	"github.com/rathix/command-center/internal/state"
 )
 
@@ -149,7 +150,14 @@ func run(ctx context.Context, cfg config) error {
 		go watcher.Run(watcherCtx)
 	}
 
+	// Create and start SSE broker for real-time event streaming
+	broker := sse.NewBroker(store, logger)
+	go broker.Run(ctx)
+
 	mux := http.NewServeMux()
+
+	// Register SSE endpoint before the catch-all static handler
+	mux.Handle("GET /api/events", broker)
 
 	if cfg.Dev {
 		viteURL := "http://localhost:5173"
