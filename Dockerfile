@@ -14,7 +14,7 @@ COPY go.mod go.su[m] ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /app/web/build ./web/build
-RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version='${VERSION}'" -o /command-center ./cmd/command-center
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${VERSION}" -o /command-center ./cmd/command-center
 
 # Stage 3: Final distroless image
 FROM gcr.io/distroless/static-debian12
