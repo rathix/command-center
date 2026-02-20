@@ -540,6 +540,61 @@ func writeExpiredCert(t *testing.T, path string) {
 	}
 }
 
+func TestLoadOrGenerateCertsExpiredClientCertRegenerates(t *testing.T) {
+	dir := t.TempDir()
+
+	// Generate valid certs first
+	cfg := CertsConfig{DataDir: dir}
+	_, err := LoadOrGenerateCerts(cfg)
+	if err != nil {
+		t.Fatalf("first LoadOrGenerateCerts: %v", err)
+	}
+
+	// Overwrite client cert with an expired one (server cert is still valid)
+	writeExpiredCert(t, filepath.Join(dir, "certs", "client.crt"))
+
+	// Second run should detect client cert expiration and regenerate
+	assets, err := LoadOrGenerateCerts(cfg)
+	if err != nil {
+		t.Fatalf("second LoadOrGenerateCerts: %v", err)
+	}
+
+	if !assets.WasGenerated {
+		t.Error("should regenerate when client cert is expired")
+	}
+
+	// Verify regenerated client cert is valid (not expired)
+	cert := loadCertFromFile(t, assets.ClientCertPath)
+	if time.Now().After(cert.NotAfter) {
+		t.Error("regenerated client cert should not be expired")
+	}
+}
+
+func TestAcquireLockRecoversStaleLock(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, ".lock")
+
+	// Create a stale lock file with old modification time
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatalf("creating stale lock: %v", err)
+	}
+	f.Close()
+
+	// Set modification time to well beyond the stale threshold
+	staleTime := time.Now().Add(-10 * time.Minute)
+	if err := os.Chtimes(lockPath, staleTime, staleTime); err != nil {
+		t.Fatalf("setting stale lock mtime: %v", err)
+	}
+
+	// acquireLock should recover the stale lock and succeed
+	unlock, err := acquireLock(dir)
+	if err != nil {
+		t.Fatalf("acquireLock should recover stale lock: %v", err)
+	}
+	unlock()
+}
+
 func TestLoadOrGenerateCertsConcurrentSafe(t *testing.T) {
 	dir := t.TempDir()
 	cfg := CertsConfig{DataDir: dir}

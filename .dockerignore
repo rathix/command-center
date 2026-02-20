@@ -1,0 +1,7 @@
+bin/
+web/node_modules/
+web/build/
+web/.svelte-kit/
+_bmad-output/
+_bmad/
+.git/

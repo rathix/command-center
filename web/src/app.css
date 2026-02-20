@@ -1,1 +1,66 @@
 @import "tailwindcss";
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono[wght].woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --color-*: initial;
+
+  /* Catppuccin Mocha — Base/Surface */
+  --color-base: #1e1e2e;
+  --color-mantle: #181825;
+  --color-crust: #11111b;
+  --color-surface-0: #313244;
+  --color-surface-1: #45475a;
+  --color-surface-2: #585b70;
+
+  /* Catppuccin Mocha — Overlays */
+  --color-overlay-0: #6c7086;
+  --color-overlay-1: #7f849c;
+  --color-overlay-2: #9399b2;
+
+  /* Catppuccin Mocha — Text */
+  --color-text: #cdd6f4;
+  --color-subtext-1: #bac2de;
+  --color-subtext-0: #a6adc8;
+
+  /* Semantic Health Colors */
+  --color-health-ok: #a6e3a1;
+  --color-health-error: #f38ba8;
+  --color-health-auth-blocked: #f9e2af;
+  --color-health-unknown: #7f849c;
+
+  /* Accent Colors */
+  --color-accent-lavender: #b4befe;
+  --color-accent-blue: #89b4fa;
+  --color-accent-mauve: #cba6f7;
+  --color-accent-peach: #fab387;
+
+  /* Typography */
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+
+  /* Spacing — base 8px via 4px unit */
+  --spacing: 4px;
+}
+
+body {
+  font-family: var(--font-mono);
+  background-color: var(--color-base);
+  color: var(--color-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

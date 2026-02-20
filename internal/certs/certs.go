@@ -216,11 +216,13 @@ func LoadOrGenerateCerts(cfg CertsConfig) (*TLSAssets, error) {
 	}
 
 	if allCustom {
-		// Validate custom cert files exist and are readable
+		// Validate custom cert files exist and are readable (open + close, not just stat)
 		for _, path := range []string{cfg.CustomCACert, cfg.CustomCert, cfg.CustomKey} {
-			if _, err := os.Stat(path); err != nil {
-				return nil, fmt.Errorf("custom cert file not accessible: %w", err)
+			f, err := os.Open(path)
+			if err != nil {
+				return nil, fmt.Errorf("custom cert file not readable: %w", err)
 			}
+			f.Close()
 		}
 		return &TLSAssets{
 			CACertPath:     cfg.CustomCACert,
@@ -249,11 +251,15 @@ func LoadOrGenerateCerts(cfg CertsConfig) (*TLSAssets, error) {
 
 	if allExist {
 		// Check if certs are still valid (not expired)
-		expired, err := certExpired(serverCertPath)
+		serverExpired, err := certExpired(serverCertPath)
 		if err != nil {
-			return nil, fmt.Errorf("checking certificate expiration: %w", err)
+			return nil, fmt.Errorf("checking server certificate expiration: %w", err)
 		}
-		if !expired {
+		clientExpired, err := certExpired(clientCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("checking client certificate expiration: %w", err)
+		}
+		if !serverExpired && !clientExpired {
 			return &TLSAssets{
 				CACertPath:     caCertPath,
 				ServerCertPath: serverCertPath,
@@ -286,11 +292,15 @@ func LoadOrGenerateCerts(cfg CertsConfig) (*TLSAssets, error) {
 		}
 	}
 	if allExistNow {
-		expired, err := certExpired(serverCertPath)
+		serverExpired, err := certExpired(serverCertPath)
 		if err != nil {
-			return nil, fmt.Errorf("checking certificate expiration: %w", err)
+			return nil, fmt.Errorf("checking server certificate expiration: %w", err)
 		}
-		if !expired {
+		clientExpired, err := certExpired(clientCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("checking client certificate expiration: %w", err)
+		}
+		if !serverExpired && !clientExpired {
 			return &TLSAssets{
 				CACertPath:     caCertPath,
 				ServerCertPath: serverCertPath,
@@ -352,8 +362,13 @@ func NewTLSConfig(caCertPath, serverCertPath, serverKeyPath string) (*tls.Config
 	}, nil
 }
 
+// staleLockAge is the maximum age of a lock file before it is considered stale
+// and eligible for cleanup (e.g., left behind by a crashed process).
+const staleLockAge = 5 * time.Minute
+
 // acquireLock creates an exclusive lock file in certsDir to prevent concurrent
 // certificate generation by multiple processes. Returns an unlock function.
+// If a lock file older than staleLockAge is found, it is removed as stale.
 func acquireLock(certsDir string) (func(), error) {
 	lockPath := filepath.Join(certsDir, ".lock")
 	for i := 0; i < 10; i++ {
@@ -364,6 +379,13 @@ func acquireLock(certsDir string) (func(), error) {
 		}
 		if !os.IsExist(err) {
 			return nil, fmt.Errorf("creating lock file: %w", err)
+		}
+		// Check if the existing lock is stale
+		if info, statErr := os.Stat(lockPath); statErr == nil {
+			if time.Since(info.ModTime()) > staleLockAge {
+				os.Remove(lockPath)
+				continue // retry immediately after cleaning stale lock
+			}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}

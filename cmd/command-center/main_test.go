@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,13 +23,19 @@ func TestConfigDefaults(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("os.UserHomeDir() error = %v", err)
+	}
+	expectedKubeconfig := filepath.Join(home, ".kube", "config")
+
 	checks := []struct {
 		name string
 		got  string
 		want string
 	}{
 		{"ListenAddr", cfg.ListenAddr, ":8443"},
-		{"Kubeconfig", cfg.Kubeconfig, "~/.kube/config"},
+		{"Kubeconfig", cfg.Kubeconfig, expectedKubeconfig},
 		{"DataDir", cfg.DataDir, "/data"},
 		{"LogFormat", cfg.LogFormat, "json"},
 		{"TLSCACert", cfg.TLSCACert, ""},
@@ -251,6 +259,9 @@ func TestDevModeUsesPlainHTTP(t *testing.T) {
 	}
 	resp.Body.Close()
 	// 502 is expected since Vite dev server isn't running, but HTTP layer worked
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("expected 502 (Vite not running), got %d", resp.StatusCode)
+	}
 }
 
 func TestSetupLoggerReturnsCorrectHandlerType(t *testing.T) {
@@ -260,8 +271,6 @@ func TestSetupLoggerReturnsCorrectHandlerType(t *testing.T) {
 	}{
 		{"json", true},
 		{"text", false},
-		{"", true},       // default should be JSON
-		{"invalid", true}, // unknown format defaults to JSON
 	}
 	for _, tc := range cases {
 		t.Run(tc.format, func(t *testing.T) {
@@ -271,5 +280,69 @@ func TestSetupLoggerReturnsCorrectHandlerType(t *testing.T) {
 				t.Errorf("setupLogger(%q): JSONHandler = %v, want %v", tc.format, ok, tc.isJSON)
 			}
 		})
+	}
+}
+
+func TestConfigInvalidLogFormatReturnsError(t *testing.T) {
+	_, err := LoadConfig([]string{"--log-format", "invalid"})
+	if err == nil {
+		t.Error("LoadConfig() with invalid log format should return error")
+	}
+	if !strings.Contains(err.Error(), "unsupported log format") {
+		t.Errorf("error should mention unsupported log format, got: %v", err)
+	}
+}
+
+func TestConfigEmptyLogFormatReturnsError(t *testing.T) {
+	_, err := LoadConfig([]string{"--log-format", ""})
+	if err == nil {
+		t.Error("LoadConfig() with empty log format should return error")
+	}
+}
+
+func TestConfigKubeconfigExpandsHomePath(t *testing.T) {
+	// Default kubeconfig should be an absolute path, not ~
+	cfg, err := LoadConfig([]string{})
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if strings.HasPrefix(cfg.Kubeconfig, "~") {
+		t.Errorf("Kubeconfig default should be expanded, got %q", cfg.Kubeconfig)
+	}
+	if !filepath.IsAbs(cfg.Kubeconfig) {
+		t.Errorf("Kubeconfig default should be absolute path, got %q", cfg.Kubeconfig)
+	}
+}
+
+func TestGetEnvBoolParsesBoolValues(t *testing.T) {
+	cases := []struct {
+		value string
+		want  bool
+	}{
+		{"true", true},
+		{"TRUE", true},
+		{"True", true},
+		{"1", true},
+		{"false", false},
+		{"FALSE", false},
+		{"False", false},
+		{"0", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("TEST_BOOL", tc.value)
+			got := getEnvBool("TEST_BOOL", false)
+			if got != tc.want {
+				t.Errorf("getEnvBool(%q) = %v, want %v", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetEnvBoolInvalidFallsBackToDefault(t *testing.T) {
+	t.Setenv("TEST_BOOL", "not-a-bool")
+	got := getEnvBool("TEST_BOOL", true)
+	if !got {
+		t.Error("getEnvBool with invalid value should return fallback (true)")
 	}
 }

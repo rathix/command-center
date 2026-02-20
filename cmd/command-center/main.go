@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -54,7 +56,7 @@ func LoadConfig(args []string) (Config, error) {
 	cfg := Config{}
 	fs.BoolVar(&cfg.Dev, "dev", getEnvBool("DEV", false), "proxy frontend requests to Vite dev server")
 	fs.StringVar(&cfg.ListenAddr, "listen-addr", getEnv("LISTEN_ADDR", defaultAddr), "listen address")
-	fs.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", "~/.kube/config"), "path to kubeconfig file")
+	fs.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", defaultKubeconfig()), "path to kubeconfig file")
 
 	healthIntervalStr := getEnv("HEALTH_INTERVAL", "30s")
 	fs.StringVar(&healthIntervalStr, "health-interval", healthIntervalStr, "health check interval")
@@ -77,6 +79,10 @@ func LoadConfig(args []string) (Config, error) {
 		cfg.HealthInterval = interval
 	}
 
+	if cfg.LogFormat != "json" && cfg.LogFormat != "text" {
+		return Config{}, fmt.Errorf("unsupported log format %q: must be \"json\" or \"text\"", cfg.LogFormat)
+	}
+
 	return cfg, nil
 }
 
@@ -89,9 +95,21 @@ func getEnv(key, fallback string) string {
 
 func getEnvBool(key string, fallback bool) bool {
 	if value, ok := os.LookupEnv(key); ok {
-		return value == "true"
+		b, err := strconv.ParseBool(value)
+		if err != nil {
+			return fallback
+		}
+		return b
 	}
 	return fallback
+}
+
+func defaultKubeconfig() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "~/.kube/config"
+	}
+	return filepath.Join(home, ".kube", "config")
 }
 
 func setupLogger(format string) *slog.Logger {

@@ -1,8 +1,11 @@
-.PHONY: build test dev clean
+.PHONY: build test dev clean docker
 
 build:
 	cd web && npm ci && npm run build
 	go build -o bin/command-center ./cmd/command-center
+
+docker:
+	podman build -t command-center .
 
 test:
 	go test ./...

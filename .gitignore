@@ -12,3 +12,12 @@ node_modules/
 # SvelteKit build artifacts
 web/build/
 web/.svelte-kit/
+
+# Environment files (not .env.example)
+.env
+.env.local
+.env.*.local
+
+# Generated TLS certificates
+*.pem
+certs/

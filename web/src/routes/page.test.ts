@@ -3,14 +3,23 @@ import { describe, it, expect } from 'vitest';
 import Page from './+page.svelte';
 
 describe('+page.svelte', () => {
-	it('renders welcome heading', () => {
+	it('renders a skip-to-content link', () => {
 		render(Page);
-		expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome to SvelteKit');
+		const skipLink = screen.getByText('Skip to service list');
+		expect(skipLink).toBeInTheDocument();
+		expect(skipLink).toHaveAttribute('href', '#service-list');
 	});
 
-	it('renders documentation link', () => {
+	it('renders a StatusBar placeholder area with banner role', () => {
 		render(Page);
-		const link = screen.getByRole('link');
-		expect(link).toHaveAttribute('href', 'https://svelte.dev/docs/kit');
+		const statusBar = screen.getByRole('banner');
+		expect(statusBar).toBeInTheDocument();
+	});
+
+	it('renders a main content area with service-list id', () => {
+		render(Page);
+		const main = screen.getByRole('main');
+		expect(main).toBeInTheDocument();
+		expect(main).toHaveAttribute('id', 'service-list');
 	});
 });
