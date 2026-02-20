@@ -46,6 +46,7 @@ This project is on a **public Git repository**. Every agent must enforce:
 
 ### SvelteKit Patterns
 - **Svelte 5 conventions** — `$props()`, `onclick`, `.svelte.ts` for rune files.
+- **Runes (`$state`, `$derived`) lose reactivity when exported from `.svelte.ts` modules** — exporting a rune value directly compiles without errors but consumers silently get stale data. Wrap in getter functions instead: `const val = $derived(...); export function getVal() { return val; }`. See `web/src/lib/serviceStore.svelte.ts` for the established pattern.
 - **Component naming** — PascalCase for components.
 - **Module naming** — camelCase for TypeScript modules.
 - **Tests** — co-located `.test.ts` files next to source, run with `vitest`.
