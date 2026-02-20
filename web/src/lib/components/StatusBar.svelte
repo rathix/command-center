@@ -37,42 +37,38 @@
 		return lastUpdatedIso ? formatRelativeTime(lastUpdatedIso) : null;
 	});
 
-	const dataAgeMs = $derived.by(() => {
-		const lu = getLastUpdated();
-		return lu ? now - lu.getTime() : null;
-	});
-
-	const stalenessLevel = $derived.by((): 'fresh' | 'aging' | 'stale' => {
-		if (getConnectionStatus() === 'disconnected') return 'stale';
-		if (dataAgeMs === null) return 'fresh';
-		const interval = getHealthCheckIntervalMs();
-		if (dataAgeMs > 5 * interval) return 'stale';
-		if (dataAgeMs > 2 * interval) return 'aging';
-		return 'fresh';
-	});
-
-	const stalenessColor = $derived.by(() => {
-		switch (stalenessLevel) {
-			case 'stale':
-				return 'var(--color-health-error)';
-			case 'aging':
-				return 'var(--color-health-auth-blocked)';
-			default:
-				return 'var(--color-subtext-0)';
-		}
-	});
-
-	const connectionStatus = $derived(getConnectionStatus());
-	const timestampText = $derived.by(() => {
-		if (!lastUpdatedLabel) return null;
-		const base = `Last updated ${lastUpdatedLabel}`;
-		if (connectionStatus === 'disconnected' && stalenessLevel === 'stale') {
-			return `${base} — connection lost`;
-		}
-		return base;
-	});
-</script>
-
+	        const dataAgeMs = $derived.by(() => {
+	                const lu = getLastUpdated();
+	                return lu ? Math.max(0, now - lu.getTime()) : null;
+	        });
+	
+	        const stalenessLevel = $derived.by((): 'fresh' | 'aging' | 'stale' => {
+	                const status = getConnectionStatus();
+	                if (status === 'disconnected' || status === 'reconnecting') return 'stale';
+	                if (dataAgeMs === null) return 'fresh';
+	                const interval = getHealthCheckIntervalMs();
+	                if (dataAgeMs > 5 * interval) return 'stale';
+	                if (dataAgeMs > 2 * interval) return 'aging';
+	                return 'fresh';
+	        });
+	
+	        const stalenessColor = $derived.by(() => {
+	                switch (stalenessLevel) {
+	                        case 'stale':
+	                                return 'var(--color-health-error)';
+	                        case 'aging':
+	                                return 'var(--color-health-auth-blocked)';
+	                        default:
+	                                return 'var(--color-subtext-0)';
+	                }
+	        });
+	
+	        const connectionStatus = $derived(getConnectionStatus());
+	        const timestampText = $derived.by(() => {
+	                if (!lastUpdatedLabel) return null;
+	                return `Last updated ${lastUpdatedLabel}`;
+	        });
+	</script>
 <div class="mx-auto max-w-[1200px]">
 	<div class="flex items-center justify-between" role="status" aria-live="polite">
 		<div class="flex items-center gap-2">

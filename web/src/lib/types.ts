@@ -16,6 +16,8 @@ export const HEALTH_STATUSES: HealthStatus[] = [
 	'unknown'
 ];
 
+export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 30_000;
+
 export interface Service {
 	name: string;
 	displayName: string;

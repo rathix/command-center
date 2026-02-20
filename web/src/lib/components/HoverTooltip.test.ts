@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/svelte';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import HoverTooltip from './HoverTooltip.svelte';
 import type { Service } from '$lib/types';
+import { replaceAll, _resetForTesting } from '$lib/serviceStore.svelte';
 
 function makeService(overrides: Partial<Service> = {}): Service {
 	return {
@@ -182,5 +183,55 @@ describe('HoverTooltip', () => {
 		expect(screen.getByText(/not yet checked/)).toBeInTheDocument();
 		expect(screen.getByText(/unknown for unknown/)).toBeInTheDocument();
 		expect(screen.getByRole('tooltip')).toBeInTheDocument();
+	});
+
+	describe('staleness', () => {
+		beforeEach(() => {
+			_resetForTesting();
+			// Set 30s interval
+			replaceAll([], 'v1', 30_000);
+		});
+
+		it('shows subtext-0 color for fresh check', () => {
+			render(HoverTooltip, {
+				props: {
+					service: makeService({ lastChecked: '2026-02-20T10:00:10Z' }), // 2s ago
+					visible: true,
+					position: 'below',
+					left: 0,
+					id: 'tooltip-test'
+				}
+			});
+			const checkedEl = screen.getByText(/checked 2s ago/);
+			expect(checkedEl).toHaveClass('text-subtext-0');
+		});
+
+		it('shows aging color (yellow) for aging check', () => {
+			render(HoverTooltip, {
+				props: {
+					service: makeService({ lastChecked: '2026-02-20T09:59:10Z' }), // 62s ago (> 2x 30s)
+					visible: true,
+					position: 'below',
+					left: 0,
+					id: 'tooltip-test'
+				}
+			});
+			const checkedEl = screen.getByText(/checked 1m ago/);
+			expect(checkedEl).toHaveClass('text-health-auth-blocked');
+		});
+
+		it('shows stale color (red) for stale check', () => {
+			render(HoverTooltip, {
+				props: {
+					service: makeService({ lastChecked: '2026-02-20T09:57:30Z' }), // 162s ago (> 5x 30s)
+					visible: true,
+					position: 'below',
+					left: 0,
+					id: 'tooltip-test'
+				}
+			});
+			const checkedEl = screen.getByText(/checked 2m ago/);
+			expect(checkedEl).toHaveClass('text-health-error');
+		});
 	});
 });

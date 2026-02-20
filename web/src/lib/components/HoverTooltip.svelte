@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Service, HealthStatus } from '$lib/types';
 	import { formatRelativeTime } from '$lib/formatRelativeTime';
+	import { getHealthCheckIntervalMs } from '$lib/serviceStore.svelte';
 
 	let { service, visible, position, left, id }: {
 		service: Service;
@@ -24,7 +25,36 @@
 		unknown: 'unknown for'
 	};
 
+	let now = $state(Date.now());
+
+	$effect(() => {
+		if (!visible) return;
+		const id = setInterval(() => {
+			now = Date.now();
+		}, 1000);
+		return () => clearInterval(id);
+	});
+
+	const checkedAtMs = $derived.by(() => {
+		if (!service.lastChecked) return null;
+		const t = new Date(service.lastChecked).getTime();
+		return Number.isNaN(t) ? null : t;
+	});
+
+	const dataAgeMs = $derived.by(() => {
+		return checkedAtMs ? Math.max(0, now - checkedAtMs) : null;
+	});
+
+	const stalenessColor = $derived.by(() => {
+		if (dataAgeMs === null) return 'text-subtext-0';
+		const interval = getHealthCheckIntervalMs();
+		if (dataAgeMs > 5 * interval) return 'text-health-error';
+		if (dataAgeMs > 2 * interval) return 'text-health-auth-blocked';
+		return 'text-subtext-0';
+	});
+
 	const checkedDisplay = $derived.by(() => {
+		void now;
 		if (!service.lastChecked) return 'not yet checked';
 		return `checked ${formatRelativeTime(service.lastChecked)}`;
 	});
@@ -73,7 +103,7 @@
 		class="absolute z-50 bg-surface-1 border border-overlay-1 rounded-sm p-2 text-[11px] text-subtext-0 max-w-[400px] {positionClasses}"
 		style:left="{adjustedLeft}px"
 	>
-		<div>{checkedDisplay}</div>
+		<div class={stalenessColor}>{checkedDisplay}</div>
 		<div class={stateColor}>{stateDisplay}</div>
 		{#if errorLine}
 			<div class="truncate">{errorLine}</div>

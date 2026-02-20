@@ -72,7 +72,7 @@ describe('StatusBar', () => {
 		expect(connectionLost).toHaveClass('text-health-error');
 		// Health summary is still visible
 		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
-		expect(screen.getByText(/Last updated 0s ago — connection lost/)).toBeInTheDocument();
+		expect(screen.getByText('Last updated 0s ago')).toBeInTheDocument();
 		expect(screen.queryByText('Command Center v1.0.0')).not.toBeInTheDocument();
 	});
 
@@ -232,15 +232,21 @@ describe('StatusBar', () => {
 		});
 
 		it('shows stale color and "connection lost" text when SSE disconnects', () => {
-			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
-			setConnectionStatus('disconnected');
-			render(StatusBar);
-			const timeEl = screen.getByText(/Last updated/).closest('time');
-			expect(timeEl).toHaveStyle({ color: 'var(--color-health-error)' });
-			expect(timeEl?.textContent).toContain('— connection lost');
-		});
-
-		it('reflects lastUpdated (health check time) during K8s outage, not k8sLastEvent', () => {
+					replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+					setConnectionStatus('disconnected');
+					render(StatusBar);
+							const timeEl = screen.getByText(/Last updated/).closest('time');
+							expect(timeEl).toHaveStyle({ color: 'var(--color-health-error)' });
+							expect(timeEl?.textContent).not.toContain('— connection lost');
+						});
+					
+						it('shows stale color when reconnecting', () => {
+							replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+							setConnectionStatus('reconnecting');
+							render(StatusBar);
+							const timeEl = screen.getByText(/Last updated/).closest('time');
+							expect(timeEl).toHaveStyle({ color: 'var(--color-health-error)' });
+						});		it('reflects lastUpdated (health check time) during K8s outage, not k8sLastEvent', () => {
 			setConnectionStatus('connected');
 			setK8sStatus(false, '2026-02-20T11:55:00Z');
 			// Simulate: K8s outage (last K8s event was 5 minutes ago), but health checks still running

@@ -1,4 +1,5 @@
 import type { Service, HealthStatus, ConnectionStatus } from './types';
+import { DEFAULT_HEALTH_CHECK_INTERVAL_MS } from './types';
 
 const statusPriority: Record<HealthStatus, number> = {
 	unhealthy: 0,
@@ -21,7 +22,7 @@ let sortOrder = $state<string[]>([]);
 let initialNeedsAttentionKeys = $state(new Set<string>());
 let k8sConnected = $state<boolean>(false);
 let k8sLastEvent = $state<Date | null>(null);
-let healthCheckIntervalMs = $state<number>(30_000);
+let healthCheckIntervalMs = $state<number>(DEFAULT_HEALTH_CHECK_INTERVAL_MS);
 
 function parseLastChecked(value: string | null): Date | null {
 	if (!value) return null;
@@ -142,7 +143,7 @@ export function getHealthCheckIntervalMs(): number {
 export function replaceAll(newServices: Service[], newAppVersion: string, newHealthCheckIntervalMs?: number): void {
 	services = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
 	appVersion = newAppVersion;
-	healthCheckIntervalMs = newHealthCheckIntervalMs ?? 30_000;
+	healthCheckIntervalMs = newHealthCheckIntervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 	sortOrder = computeSortOrder(services);
 	initialNeedsAttentionKeys = computeNeedsAttentionKeys(services);
 	lastUpdated = newestLastChecked(services.values());
@@ -195,5 +196,5 @@ export function _resetForTesting(): void {
 	initialNeedsAttentionKeys = new Set();
 	k8sConnected = false;
 	k8sLastEvent = null;
-	healthCheckIntervalMs = 30_000;
+	healthCheckIntervalMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 }
