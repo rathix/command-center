@@ -249,6 +249,46 @@ describe('sseClient', () => {
 
 				expect(replaceAll).not.toHaveBeenCalled();
 			});
+
+			it('ignores state payload when healthCheckIntervalMs is zero or negative', async () => {
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
+				const services = [makeService({ name: 'svc-a' })];
+
+				es.emit(
+					'state',
+					JSON.stringify({ services, appVersion: 'v1.0.0', healthCheckIntervalMs: 0 })
+				);
+				expect(replaceAll).not.toHaveBeenCalled();
+
+				es.emit(
+					'state',
+					JSON.stringify({ services, appVersion: 'v1.0.0', healthCheckIntervalMs: -100 })
+				);
+				expect(replaceAll).not.toHaveBeenCalled();
+			});
+
+			it('ignores state payload when services is missing or not an array', async () => {
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
+
+				es.emit('state', JSON.stringify({ appVersion: 'v1.0.0' }));
+				expect(replaceAll).not.toHaveBeenCalled();
+
+				es.emit('state', JSON.stringify({ services: 'not-an-array', appVersion: 'v1.0.0' }));
+				expect(replaceAll).not.toHaveBeenCalled();
+			});
+
+			it('ignores state payload when services array contains invalid objects', async () => {
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
+
+				es.emit('state', JSON.stringify({ services: [{ name: 'incomplete' }] }));
+				expect(replaceAll).not.toHaveBeenCalled();
+			});
 		});
 
 	describe('discovered event', () => {

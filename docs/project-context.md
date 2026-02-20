@@ -56,11 +56,15 @@ Current: v0.2.4 (App Version Display story complete). Next story tag: v0.2.5.
 - **Error handling** — return errors, never panic in library code. Only `log.Fatal` in main.
 - **Naming** — files: `snake_case.go`, packages: lowercase single word, exports: PascalCase.
 - **Tests** — co-located `_test.go` files next to source.
+- **Resilience** — Use `atomic.Bool` or `sync.Mutex` for all cross-goroutine flags/state.
+- **Race Detection** — `go test -race ./...` is mandatory for all Go changes.
 
 ### SvelteKit Patterns
 - **Svelte 5 conventions** — `$props()`, `onclick`, `.svelte.ts` for rune files.
 - **Runes (`$state`, `$derived`) lose reactivity when exported from `.svelte.ts` modules** — exporting a rune value directly compiles without errors but consumers silently get stale data. Wrap in getter functions instead: `const val = $derived(...); export function getVal() { return val; }`. See `web/src/lib/serviceStore.svelte.ts` for the established pattern.
 - **`$state(Map)` and `$state(Set)` reactivity gotcha** — mutations like `.set()`, `.delete()`, or `.add()` on a proxied Map/Set do not consistently trigger `$derived` or `$derived.by` updates. **Workaround:** Reassign the entire Map/Set after mutation to ensure reactivity propagates: `myMap.set(k, v); myMap = myMap;`.
+- **`_resetForTesting()` Completeness** — Every new `$state` field in a store must be reset in its `_resetForTesting()` helper. This is enforced by structural tests (e.g., `web/src/lib/serviceStore.structural.test.ts`) that assert defaults are restored and check getter counts.
+- **Payload Validation** — SSE payloads must be strictly validated with type guards (e.g., `isStatePayload`) before being applied to the store. Zero-tolerance for malformed data.
 - **Component naming** — PascalCase for components.
 - **Module naming** — camelCase for TypeScript modules.
 - **Tests** — co-located `.test.ts` files next to source, run with `vitest`.
