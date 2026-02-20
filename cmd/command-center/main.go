@@ -1,39 +1,187 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	commandcenter "github.com/kenny/command-center"
+	"github.com/kenny/command-center/internal/certs"
 	"github.com/kenny/command-center/internal/server"
 )
 
-const defaultAddr = ":8080"
+const defaultAddr = ":8443"
+
+// Config holds all server configuration
+type Config struct {
+	Dev            bool
+	ListenAddr     string
+	Kubeconfig     string
+	HealthInterval time.Duration
+	DataDir        string
+	LogFormat      string
+	TLSCACert      string
+	TLSCert        string
+	TLSKey         string
+}
 
 func main() {
-	dev := flag.Bool("dev", false, "proxy frontend requests to Vite dev server")
-	flag.Parse()
+	cfg := LoadConfig(os.Args[1:])
+	
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := Run(ctx, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// LoadConfig parses flags and environment variables with precedence: Flag > Env > Default
+func LoadConfig(args []string) Config {
+	fs := flag.NewFlagSet("command-center", flag.ContinueOnError)
+
+	cfg := Config{}
+	fs.BoolVar(&cfg.Dev, "dev", getEnvBool("DEV", false), "proxy frontend requests to Vite dev server")
+	fs.StringVar(&cfg.ListenAddr, "listen-addr", getEnv("LISTEN_ADDR", defaultAddr), "listen address")
+	fs.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", "~/.kube/config"), "path to kubeconfig file")
+	
+	healthIntervalStr := getEnv("HEALTH_INTERVAL", "30s")
+	fs.StringVar(&healthIntervalStr, "health-interval", healthIntervalStr, "health check interval")
+	
+	fs.StringVar(&cfg.DataDir, "data-dir", getEnv("DATA_DIR", "/data"), "data directory for certificates")
+	fs.StringVar(&cfg.LogFormat, "log-format", getEnv("LOG_FORMAT", "json"), "log format (json or text)")
+	fs.StringVar(&cfg.TLSCACert, "tls-ca-cert", getEnv("TLS_CA_CERT", ""), "custom CA certificate path")
+	fs.StringVar(&cfg.TLSCert, "tls-cert", getEnv("TLS_CERT", ""), "custom server certificate path")
+	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
+
+	_ = fs.Parse(args)
+
+	interval, err := time.ParseDuration(healthIntervalStr)
+	if err != nil {
+		log.Printf("Warning: invalid health interval %q, using default 30s", healthIntervalStr)
+		cfg.HealthInterval = 30 * time.Second
+	} else {
+		cfg.HealthInterval = interval
+	}
+
+	return cfg
+}
+
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if value, ok := os.LookupEnv(key); ok {
+		return value == "true"
+	}
+	return fallback
+}
+
+func setupLogger(format string) *slog.Logger {
+	var handler slog.Handler
+	if format == "text" {
+		handler = slog.NewTextHandler(os.Stdout, nil)
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, nil)
+	}
+	return slog.New(handler)
+}
+
+// Run starts the server and handles graceful shutdown
+func Run(ctx context.Context, cfg Config) error {
+	logger := setupLogger(cfg.LogFormat)
+	slog.SetDefault(logger)
 
 	mux := http.NewServeMux()
 
-	if *dev {
+	if cfg.Dev {
 		viteURL := "http://localhost:5173"
 		proxy, err := server.NewDevProxyHandler(viteURL)
 		if err != nil {
-			log.Fatalf("failed to create dev proxy: %v", err)
+			return fmt.Errorf("failed to create dev proxy: %w", err)
 		}
 		mux.Handle("/", proxy)
-		fmt.Printf("Dev mode: proxying to Vite at %s\n", viteURL)
+		slog.Info("Dev mode: proxying to Vite", "url", viteURL, "mtls", "disabled")
 	} else {
 		handler, err := server.NewSPAHandler(commandcenter.WebFS, "web/build")
 		if err != nil {
-			log.Fatalf("failed to create SPA handler: %v", err)
+			return fmt.Errorf("failed to create SPA handler: %w", err)
 		}
 		mux.Handle("/", handler)
 	}
 
-	fmt.Printf("Listening on %s\n", defaultAddr)
-	log.Fatal(http.ListenAndServe(defaultAddr, mux))
+	// Load or generate TLS certificates
+	certsCfg := certs.CertsConfig{
+		DataDir:      cfg.DataDir,
+		CustomCACert: cfg.TLSCACert,
+		CustomCert:   cfg.TLSCert,
+		CustomKey:    cfg.TLSKey,
+	}
+
+	assets, err := certs.LoadOrGenerateCerts(certsCfg)
+	if err != nil {
+		return fmt.Errorf("failed to load certificates: %w", err)
+	}
+
+	if assets.WasGenerated {
+		slog.Info("No TLS certificates configured — generating self-signed CA")
+		slog.Info("Certificates generated", 
+			"ca", assets.CACertPath, 
+			"server", assets.ServerCertPath, 
+			"client", assets.ClientCertPath)
+		slog.Info("Install client.crt + client.key in your browser to access Command Center")
+	} else if certsCfg.CustomCACert != "" {
+		slog.Info("Using custom TLS certificates")
+	} else {
+		slog.Info("Using existing certificates", "dir", assets.CACertPath)
+	}
+
+	tlsConfig, err := certs.NewTLSConfig(assets.CACertPath, assets.ServerCertPath, assets.ServerKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to create TLS config: %w", err)
+	}
+
+	srv := &http.Server{
+		Addr:      cfg.ListenAddr,
+		Handler:   mux,
+		TLSConfig: tlsConfig,
+	}
+
+	// Channel to catch server errors
+	serverError := make(chan error, 1)
+
+	go func() {
+		slog.Info("Listening", "addr", cfg.ListenAddr, "mtls", "enabled")
+		if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			serverError <- err
+		}
+	}()
+
+	// Wait for interruption or server error
+	select {
+	case <-ctx.Done():
+		slog.Info("Shutting down gracefully...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("server forced to shutdown: %w", err)
+		}
+		slog.Info("Server stopped")
+	case err := <-serverError:
+		return fmt.Errorf("server error: %w", err)
+	}
+
+	return nil
 }

@@ -4,6 +4,7 @@ _bmad/_memory/
 
 # Go build output
 bin/
+/command-center
 
 # Node
 node_modules/
