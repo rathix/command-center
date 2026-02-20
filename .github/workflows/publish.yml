@@ -32,6 +32,10 @@ jobs:
         run: npm test
         working-directory: web
 
+      - name: Build Frontend
+        run: npm run build
+        working-directory: web
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:

@@ -10,6 +10,8 @@ docker:
 	$(CONTAINER_TOOL) build -t command-center .
 
 test:
+	@# Ensure web/build exists so go test -v ./... doesn't fail on embed.FS
+	@mkdir -p web/build && touch web/build/index.html
 	go test ./...
 	cd web && npx vitest run
 
