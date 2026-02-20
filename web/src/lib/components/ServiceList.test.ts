@@ -23,7 +23,8 @@ beforeEach(() => {
 });
 
 describe('ServiceList', () => {
-	it('has role="list"', () => {
+	it('has role="list" when services are present', () => {
+		replaceAll([makeService({ name: 'alpha' })]);
 		render(ServiceList);
 		expect(screen.getByRole('list')).toBeInTheDocument();
 	});

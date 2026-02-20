@@ -8,7 +8,7 @@
 <a
 	href={service.url}
 	target="_blank"
-	rel="noopener"
+	rel="noopener noreferrer"
 	role="listitem"
 	class="flex h-[46px] cursor-pointer items-center gap-3 px-4 transition-colors duration-150
 		hover:bg-surface-1

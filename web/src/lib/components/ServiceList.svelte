@@ -3,8 +3,10 @@
 	import ServiceRow from './ServiceRow.svelte';
 </script>
 
-<div role="list">
-	{#each getSortedServices() as service, index (`${service.namespace}/${service.name}`)}
-		<ServiceRow {service} odd={index % 2 !== 0} />
-	{/each}
-</div>
+{#if getSortedServices().length > 0}
+	<div role="list">
+		{#each getSortedServices() as service, index (`${service.namespace}/${service.name}`)}
+			<ServiceRow {service} odd={index % 2 !== 0} />
+		{/each}
+	</div>
+{/if}

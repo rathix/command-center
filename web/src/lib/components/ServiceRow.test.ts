@@ -40,11 +40,11 @@ describe('ServiceRow', () => {
 		expect(link).toHaveAttribute('href', 'https://grafana.example.com');
 	});
 
-	it('has target="_blank" and rel="noopener"', () => {
+	it('has target="_blank" and rel="noopener noreferrer"', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: false } });
 		const link = screen.getByRole('listitem');
 		expect(link).toHaveAttribute('target', '_blank');
-		expect(link).toHaveAttribute('rel', 'noopener');
+		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 	});
 
 	it('renders TuiDot with service status', () => {

@@ -63,15 +63,13 @@ export function replaceAll(newServices: Service[]): void {
 
 export function addOrUpdate(service: Service): void {
 	const key = `${service.namespace}/${service.name}`;
-	services = new Map([...services, [key, service]]);
+	services.set(key, service);
 	lastUpdated = new Date();
 }
 
 export function remove(namespace: string, name: string): void {
 	const key = `${namespace}/${name}`;
-	const next = new Map(services);
-	next.delete(key);
-	services = next;
+	services.delete(key);
 	lastUpdated = new Date();
 }
 

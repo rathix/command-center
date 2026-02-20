@@ -23,9 +23,9 @@ describe('TuiDot', () => {
 		expect(screen.getByRole('img')).toHaveAttribute('aria-label', 'unhealthy');
 	});
 
-	it('renders with aria-label="authBlocked" when status is authBlocked', () => {
+	it('renders with aria-label="authentication blocked" when status is authBlocked', () => {
 		render(TuiDot, { props: { status: 'authBlocked' } });
-		expect(screen.getByRole('img')).toHaveAttribute('aria-label', 'authBlocked');
+		expect(screen.getByRole('img')).toHaveAttribute('aria-label', 'authentication blocked');
 	});
 
 	it('applies bg-health-ok class for healthy status', () => {

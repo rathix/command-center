@@ -44,10 +44,12 @@ describe('StatusBar', () => {
 		expect(screen.getByText('3 services')).toBeInTheDocument();
 	});
 
-	it('shows "Reconnecting..." when connectionStatus is disconnected', () => {
+	it('shows "Reconnecting..." AND service count when disconnected', () => {
+		replaceAll([makeService({ name: 'svc-1' })]);
 		setConnectionStatus('disconnected');
 		render(StatusBar);
 		expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
+		expect(screen.getByText('1 services')).toBeInTheDocument();
 	});
 
 	it('shows "No services discovered" when connected but empty', () => {
