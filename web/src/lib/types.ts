@@ -32,4 +32,11 @@ export interface Service {
 export interface StateEventPayload {
 	appVersion: string;
 	services: Service[];
+	k8sConnected?: boolean;
+	k8sLastEvent?: string | null;
+}
+
+export interface K8sStatusPayload {
+	k8sConnected: boolean;
+	k8sLastEvent: string | null;
 }

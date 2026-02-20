@@ -6,11 +6,12 @@ vi.mock('./serviceStore.svelte', () => ({
 	replaceAll: vi.fn(),
 	addOrUpdate: vi.fn(),
 	remove: vi.fn(),
-	setConnectionStatus: vi.fn()
+	setConnectionStatus: vi.fn(),
+	setK8sStatus: vi.fn()
 }));
 
 // Import mocked functions for assertions
-import { replaceAll, addOrUpdate, remove, setConnectionStatus } from './serviceStore.svelte';
+import { replaceAll, addOrUpdate, remove, setConnectionStatus, setK8sStatus } from './serviceStore.svelte';
 
 // MockEventSource to simulate browser EventSource
 type EventHandler = (e: MessageEvent) => void;
@@ -272,6 +273,62 @@ describe('sseClient', () => {
 			es.emit('removed', JSON.stringify({ name: 'old-svc' }));
 
 			expect(remove).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('k8sStatus event', () => {
+		it('calls setK8sStatus with parsed payload', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			es.emit('k8sStatus', JSON.stringify({ k8sConnected: true, k8sLastEvent: '2026-02-20T14:30:00Z' }));
+			expect(setK8sStatus).toHaveBeenCalledWith(true, '2026-02-20T14:30:00Z');
+		});
+
+		it('calls setK8sStatus with false and null', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			es.emit('k8sStatus', JSON.stringify({ k8sConnected: false, k8sLastEvent: null }));
+			expect(setK8sStatus).toHaveBeenCalledWith(false, null);
+		});
+
+		it('ignores malformed k8sStatus payloads', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			es.emit('k8sStatus', JSON.stringify({ k8sConnected: 'yes' }));
+			expect(setK8sStatus).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('state event with K8s metadata', () => {
+		it('extracts k8sConnected from enriched state event', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+			es.emit(
+				'state',
+				JSON.stringify({
+					services,
+					appVersion: 'v1.0.0',
+					k8sConnected: true,
+					k8sLastEvent: '2026-02-20T14:30:00Z'
+				})
+			);
+			expect(replaceAll).toHaveBeenCalledWith(services, 'v1.0.0');
+			expect(setK8sStatus).toHaveBeenCalledWith(true, '2026-02-20T14:30:00Z');
+		});
+
+		it('does not call setK8sStatus when k8sConnected is absent from state event', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0' }));
+			expect(replaceAll).toHaveBeenCalled();
+			expect(setK8sStatus).not.toHaveBeenCalled();
 		});
 	});
 

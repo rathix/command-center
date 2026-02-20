@@ -3,8 +3,10 @@
 		getCounts,
 		getConnectionStatus,
 		getHasProblems,
-		getAppVersion
+		getAppVersion,
+		getLastUpdated
 	} from '$lib/serviceStore.svelte';
+	import { formatRelativeTime } from '$lib/formatRelativeTime';
 
 	const segments = $derived.by(() => {
 		const c = getCounts();
@@ -18,6 +20,11 @@
 		if (c.healthy > 0) parts.push({ label: 'healthy', count: c.healthy, color: 'text-health-ok' });
 		return parts;
 	});
+
+	const lastUpdatedIso = $derived.by(() => getLastUpdated()?.toISOString() ?? null);
+	const lastUpdatedLabel = $derived.by(() =>
+		lastUpdatedIso ? formatRelativeTime(lastUpdatedIso) : null
+	);
 </script>
 
 <div class="mx-auto max-w-[1200px]">
@@ -41,14 +48,20 @@
 			{/if}
 		</div>
 
-		{#if getConnectionStatus() === 'reconnecting'}
-			<span class="text-sm font-semibold text-subtext-0 italic">Reconnecting...</span>
-		{:else if getConnectionStatus() === 'disconnected'}
-			<span class="text-sm font-semibold text-health-error">Connection lost</span>
-		{/if}
+		<div class="flex items-center gap-3">
+			{#if getConnectionStatus() === 'reconnecting'}
+				<span class="text-sm font-semibold text-subtext-0 italic">Reconnecting...</span>
+			{:else if getConnectionStatus() === 'disconnected'}
+				<span class="text-sm font-semibold text-health-error">Connection lost</span>
+			{:else if getAppVersion()}
+				<span class="text-xs text-subtext-0">Command Center {getAppVersion()}</span>
+			{/if}
 
-		{#if getAppVersion()}
-			<span class="text-xs text-subtext-0">Command Center {getAppVersion()}</span>
-		{/if}
+			{#if lastUpdatedIso && lastUpdatedLabel}
+				<time class="text-xs text-subtext-0" datetime={lastUpdatedIso}>
+					Last updated {lastUpdatedLabel}
+				</time>
+			{/if}
+		</div>
 	</div>
 </div>

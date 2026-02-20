@@ -35,6 +35,14 @@ beforeEach(() => {
 });
 
 describe('serviceStore', () => {
+	it('reset helper clears appVersion to avoid test state leakage', () => {
+		replaceAll([makeService({ name: 'svc-a' })], 'v1.2.3');
+		expect(getAppVersion()).toBe('v1.2.3');
+
+		_resetForTesting();
+		expect(getAppVersion()).toBe('');
+	});
+
 	describe('replaceAll', () => {
 		it('replaces entire services map with new data', () => {
 			replaceAll([makeService({ name: 'svc-a' }), makeService({ name: 'svc-b' })], 'v1.0.0');

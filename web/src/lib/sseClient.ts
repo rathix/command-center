@@ -1,5 +1,5 @@
-import { replaceAll, addOrUpdate, remove, setConnectionStatus } from './serviceStore.svelte';
-import type { HealthStatus, Service } from './types';
+import { replaceAll, addOrUpdate, remove, setConnectionStatus, setK8sStatus } from './serviceStore.svelte';
+import type { HealthStatus, Service, K8sStatusPayload } from './types';
 
 let eventSource: EventSource | null = null;
 
@@ -60,6 +60,14 @@ function isRemovedPayload(value: unknown): value is { namespace: string; name: s
 	return typeof value.namespace === 'string' && typeof value.name === 'string';
 }
 
+function isK8sStatusPayload(value: unknown): value is K8sStatusPayload {
+	if (!isRecord(value)) return false;
+	return (
+		typeof value.k8sConnected === 'boolean' &&
+		(value.k8sLastEvent === null || typeof value.k8sLastEvent === 'string')
+	);
+}
+
 export function connect(): void {
 	closeActiveConnection();
 
@@ -87,6 +95,9 @@ export function connect(): void {
 		const payload = parseJson(e.data);
 		if (!isStatePayload(payload)) return;
 		replaceAll(payload.services, payload.appVersion ?? '');
+		if ('k8sConnected' in payload) {
+			setK8sStatus(payload.k8sConnected ?? false, payload.k8sLastEvent ?? null);
+		}
 	});
 
 	source.addEventListener('discovered', (e: MessageEvent) => {
@@ -105,6 +116,12 @@ export function connect(): void {
 		const payload = parseJson(e.data);
 		if (!isRemovedPayload(payload)) return;
 		remove(payload.namespace, payload.name);
+	});
+
+	source.addEventListener('k8sStatus', (e: MessageEvent) => {
+		const payload = parseJson(e.data);
+		if (!isK8sStatusPayload(payload)) return;
+		setK8sStatus(payload.k8sConnected, payload.k8sLastEvent);
 	});
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { HEALTH_STATUSES, CONNECTION_STATUSES } from './types';
-import type { HealthStatus, ConnectionStatus, Service } from './types';
+import type { HealthStatus, ConnectionStatus, Service, StateEventPayload, K8sStatusPayload } from './types';
 
 describe('types', () => {
 	it('HEALTH_STATUSES contains all valid status values', () => {
@@ -29,6 +29,43 @@ describe('types', () => {
 			'disconnected'
 		];
 		expect(statuses).toEqual(CONNECTION_STATUSES);
+	});
+
+	it('StateEventPayload includes optional K8s fields', () => {
+		const payload: StateEventPayload = {
+			appVersion: 'v1.0.0',
+			services: [],
+			k8sConnected: true,
+			k8sLastEvent: '2026-02-20T14:30:00Z'
+		};
+		expect(payload).toHaveProperty('k8sConnected');
+		expect(payload).toHaveProperty('k8sLastEvent');
+	});
+
+	it('StateEventPayload K8s fields are optional', () => {
+		const payload: StateEventPayload = {
+			appVersion: 'v1.0.0',
+			services: []
+		};
+		expect(payload.k8sConnected).toBeUndefined();
+		expect(payload.k8sLastEvent).toBeUndefined();
+	});
+
+	it('K8sStatusPayload matches the SSE k8sStatus event shape', () => {
+		const payload: K8sStatusPayload = {
+			k8sConnected: true,
+			k8sLastEvent: '2026-02-20T14:30:00Z'
+		};
+		expect(payload).toHaveProperty('k8sConnected');
+		expect(payload).toHaveProperty('k8sLastEvent');
+	});
+
+	it('K8sStatusPayload allows null k8sLastEvent', () => {
+		const payload: K8sStatusPayload = {
+			k8sConnected: false,
+			k8sLastEvent: null
+		};
+		expect(payload.k8sLastEvent).toBeNull();
 	});
 
 	it('Service interface matches the SSE data model shape', () => {

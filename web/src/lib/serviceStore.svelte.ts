@@ -153,4 +153,5 @@ export function _resetForTesting(): void {
 	lastUpdated = null;
 	sortOrder = [];
 	initialNeedsAttentionKeys = new Set();
+	appVersion = '';
 }

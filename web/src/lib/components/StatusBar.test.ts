@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/svelte';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import StatusBar from './StatusBar.svelte';
 import {
 	replaceAll,
@@ -24,7 +24,13 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 }
 
 beforeEach(() => {
+	vi.useFakeTimers();
+	vi.setSystemTime(new Date('2026-02-20T12:00:00Z'));
 	_resetForTesting();
+});
+
+afterEach(() => {
+	vi.useRealTimers();
 });
 
 describe('StatusBar', () => {
@@ -51,6 +57,8 @@ describe('StatusBar', () => {
 		render(StatusBar);
 		expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
 		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
+		expect(screen.getByText('Last updated 0s ago')).toBeInTheDocument();
+		expect(screen.queryByText('Command Center v1.0.0')).not.toBeInTheDocument();
 	});
 
 	it('shows "Connection lost" in error color when disconnected', () => {
@@ -62,6 +70,8 @@ describe('StatusBar', () => {
 		expect(connectionLost).toHaveClass('text-health-error');
 		// Health summary is still visible
 		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
+		expect(screen.getByText('Last updated 0s ago')).toBeInTheDocument();
+		expect(screen.queryByText('Command Center v1.0.0')).not.toBeInTheDocument();
 	});
 
 	it('shows "No services discovered" when connected but empty', () => {
@@ -85,6 +95,7 @@ describe('StatusBar', () => {
 		replaceAll([], 'v0.2.0');
 		render(StatusBar);
 		expect(screen.getByText('Command Center v0.2.0')).toBeInTheDocument();
+		expect(screen.getByText('Last updated 0s ago')).toBeInTheDocument();
 	});
 
 	it('returns to normal health summary when connection status transitions back to connected', () => {
