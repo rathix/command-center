@@ -191,12 +191,24 @@ func TestStoreAll(t *testing.T) {
 		t.Fatalf("expected 3 services, got %d", len(all))
 	}
 
+	// Find svc-a (has HTTPCode set) — map iteration order is random
+	var svcA *Service
+	for i := range all {
+		if all[i].Name == "svc-a" {
+			svcA = &all[i]
+			break
+		}
+	}
+	if svcA == nil {
+		t.Fatal("expected svc-a in All() results")
+	}
+
 	// Verify All returns a snapshot with deep copies (modifying returned pointers shouldn't affect store)
-	if all[0].HTTPCode == nil {
+	if svcA.HTTPCode == nil {
 		t.Fatal("expected HTTPCode pointer to be populated")
 	}
-	*all[0].HTTPCode = 500
-	
+	*svcA.HTTPCode = 500
+
 	got, _ := store.Get("ns1", "svc-a")
 	if *got.HTTPCode != 200 {
 		t.Errorf("All() returned a shallow copy, modifying nested pointer affected store: got %d, want 200", *got.HTTPCode)
