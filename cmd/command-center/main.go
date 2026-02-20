@@ -32,6 +32,7 @@ var Version = "(unknown)"
 // config holds all server configuration.
 type config struct {
 	Dev            bool
+	ShowVersion    bool
 	ListenAddr     string
 	Kubeconfig     string
 	HealthInterval time.Duration
@@ -43,6 +44,14 @@ type config struct {
 }
 
 func main() {
+	// Quick check for version flag before full config loading
+	for _, arg := range os.Args[1:] {
+		if arg == "-version" || arg == "--version" {
+			fmt.Printf("Command Center version %s\n", Version)
+			return
+		}
+	}
+
 	cfg, err := loadConfig(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -64,6 +73,7 @@ func loadConfig(args []string) (config, error) {
 
 	cfg := config{}
 	fs.BoolVar(&cfg.Dev, "dev", getEnvBool("DEV", false), "proxy frontend requests to Vite dev server")
+	fs.BoolVar(&cfg.ShowVersion, "version", false, "print version and exit")
 	fs.StringVar(&cfg.ListenAddr, "listen-addr", getEnv("LISTEN_ADDR", defaultAddr), "listen address")
 	fs.StringVar(&cfg.Kubeconfig, "kubeconfig", getEnv("KUBECONFIG", defaultKubeconfig()), "path to kubeconfig file")
 

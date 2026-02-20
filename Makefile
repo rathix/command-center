@@ -3,12 +3,19 @@
 CONTAINER_TOOL ?= $(shell if command -v docker >/dev/null 2>&1; then echo docker; elif command -v podman >/dev/null 2>&1; then echo podman; else echo docker; fi)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
+# Ensure version is not empty
+ifeq ($(VERSION),)
+$(error VERSION is not set)
+endif
+
+LDFLAGS = -X main.Version=$(VERSION)
+
 build:
 	cd web && npm ci && npm run build
-	go build -ldflags "-X main.Version=$(VERSION)" -o bin/command-center ./cmd/command-center
+	go build -ldflags "$(LDFLAGS)" -o bin/command-center ./cmd/command-center
 
 docker:
-	$(CONTAINER_TOOL) build -t command-center .
+	$(CONTAINER_TOOL) build --build-arg VERSION="$(VERSION)" -t command-center .
 
 test:
 	@# Ensure web/build exists so go test -v ./... doesn't fail on embed.FS
@@ -19,7 +26,7 @@ test:
 dev:
 	@set -m; cd web && npm run dev & VITE_PID=$$!; \
 	trap "kill -- -$$VITE_PID 2>/dev/null; wait" EXIT INT TERM; \
-	go run ./cmd/command-center --dev
+	go run -ldflags "$(LDFLAGS)" ./cmd/command-center --dev
 
 clean:
 	rm -rf bin/ web/build/ web/.svelte-kit/
