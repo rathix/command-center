@@ -6,6 +6,7 @@ import {
 	getHasProblems,
 	getConnectionStatus,
 	getLastUpdated,
+	getAppVersion,
 	replaceAll,
 	addOrUpdate,
 	remove,
@@ -36,29 +37,32 @@ beforeEach(() => {
 describe('serviceStore', () => {
 	describe('replaceAll', () => {
 		it('replaces entire services map with new data', () => {
-			replaceAll([makeService({ name: 'svc-a' }), makeService({ name: 'svc-b' })]);
+			replaceAll([makeService({ name: 'svc-a' }), makeService({ name: 'svc-b' })], 'v1.0.0');
 			expect(getSortedServices()).toHaveLength(2);
+			expect(getAppVersion()).toBe('v1.0.0');
 		});
 
 		it('clears previous data when replacing', () => {
-			replaceAll([makeService({ name: 'old' })]);
-			replaceAll([makeService({ name: 'new' })]);
+			replaceAll([makeService({ name: 'old' })], 'v1');
+			replaceAll([makeService({ name: 'new' })], 'v2');
 			expect(getSortedServices()).toHaveLength(1);
 			expect(getSortedServices()[0].name).toBe('new');
+			expect(getAppVersion()).toBe('v2');
 		});
 
 		it('handles empty array', () => {
-			replaceAll([makeService({ name: 'existing' })]);
-			replaceAll([]);
+			replaceAll([makeService({ name: 'existing' })], 'v1');
+			replaceAll([], 'v2');
 			expect(getSortedServices()).toHaveLength(0);
 			expect(getCounts().total).toBe(0);
+			expect(getAppVersion()).toBe('v2');
 		});
 
 		it('keys services by namespace/name', () => {
 			replaceAll([
 				makeService({ name: 'svc', namespace: 'ns1' }),
 				makeService({ name: 'svc', namespace: 'ns2' })
-			]);
+			], 'v1');
 			expect(getSortedServices()).toHaveLength(2);
 		});
 	});
@@ -83,14 +87,14 @@ describe('serviceStore', () => {
 			replaceAll([
 				makeService({ name: 'svc-a', namespace: 'default' }),
 				makeService({ name: 'svc-b', namespace: 'default' })
-			]);
+			], 'v1');
 			remove('default', 'svc-a');
 			expect(getSortedServices()).toHaveLength(1);
 			expect(getSortedServices()[0].name).toBe('svc-b');
 		});
 
 		it('is a no-op for non-existent key', () => {
-			replaceAll([makeService({ name: 'existing' })]);
+			replaceAll([makeService({ name: 'existing' })], 'v1');
 			remove('default', 'non-existent');
 			expect(getSortedServices()).toHaveLength(1);
 		});
@@ -103,7 +107,7 @@ describe('serviceStore', () => {
 				makeService({ name: 'unknown-svc', status: 'unknown' }),
 				makeService({ name: 'blocked-svc', status: 'authBlocked' }),
 				makeService({ name: 'unhealthy-svc', status: 'unhealthy' })
-			]);
+			], 'v1.0.0');
 			expect(getSortedServices().map((s) => s.status)).toEqual([
 				'unhealthy',
 				'authBlocked',
@@ -117,7 +121,7 @@ describe('serviceStore', () => {
 				makeService({ name: 'zebra', status: 'healthy' }),
 				makeService({ name: 'alpha', status: 'healthy' }),
 				makeService({ name: 'mid', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			expect(getSortedServices().map((s) => s.name)).toEqual(['alpha', 'mid', 'zebra']);
 		});
 
@@ -125,7 +129,7 @@ describe('serviceStore', () => {
 			replaceAll([
 				makeService({ name: 'Bravo', status: 'healthy' }),
 				makeService({ name: 'alpha', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			expect(getSortedServices().map((s) => s.name)).toEqual(['alpha', 'Bravo']);
 		});
 	});
@@ -138,7 +142,7 @@ describe('serviceStore', () => {
 				makeService({ name: 'u1', status: 'unhealthy' }),
 				makeService({ name: 'a1', status: 'authBlocked' }),
 				makeService({ name: 'k1', status: 'unknown' })
-			]);
+			], 'v1.0.0');
 			expect(getCounts()).toEqual({
 				total: 5,
 				healthy: 2,
@@ -161,12 +165,12 @@ describe('serviceStore', () => {
 
 	describe('hasProblems', () => {
 		it('is true when unhealthy services exist', () => {
-			replaceAll([makeService({ name: 'bad', status: 'unhealthy' })]);
+			replaceAll([makeService({ name: 'bad', status: 'unhealthy' })], 'v1.0.0');
 			expect(getHasProblems()).toBe(true);
 		});
 
 		it('is true when authBlocked services exist', () => {
-			replaceAll([makeService({ name: 'blocked', status: 'authBlocked' })]);
+			replaceAll([makeService({ name: 'blocked', status: 'authBlocked' })], 'v1.0.0');
 			expect(getHasProblems()).toBe(true);
 		});
 
@@ -174,7 +178,7 @@ describe('serviceStore', () => {
 			replaceAll([
 				makeService({ name: 'good', status: 'healthy' }),
 				makeService({ name: 'new', status: 'unknown' })
-			]);
+			], 'v1.0.0');
 			expect(getHasProblems()).toBe(true);
 		});
 
@@ -215,7 +219,7 @@ describe('serviceStore', () => {
 				makeService({ name: 'good-svc', status: 'healthy' }),
 				makeService({ name: 'bad-svc', status: 'unhealthy' }),
 				makeService({ name: 'blocked-svc', status: 'authBlocked' })
-			]);
+			], 'v1.0.0');
 			const groups = getGroupedServices();
 			expect(groups.needsAttention.map((s) => s.name)).toEqual(['bad-svc', 'blocked-svc']);
 			expect(groups.healthy.map((s) => s.name)).toEqual(['good-svc']);
@@ -227,7 +231,7 @@ describe('serviceStore', () => {
 				makeService({ name: 'alpha', status: 'healthy' }),
 				makeService({ name: 'delta', status: 'unhealthy' }),
 				makeService({ name: 'bravo', status: 'unhealthy' })
-			]);
+			], 'v1.0.0');
 			const groups = getGroupedServices();
 			expect(groups.needsAttention.map((s) => s.name)).toEqual(['bravo', 'delta']);
 			expect(groups.healthy.map((s) => s.name)).toEqual(['alpha', 'zebra']);
@@ -237,7 +241,7 @@ describe('serviceStore', () => {
 			replaceAll([
 				makeService({ name: 'alpha', status: 'healthy' }),
 				makeService({ name: 'bravo', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			const groups = getGroupedServices();
 			expect(groups.needsAttention).toEqual([]);
 			expect(groups.healthy.map((s) => s.name)).toEqual(['alpha', 'bravo']);
@@ -247,7 +251,7 @@ describe('serviceStore', () => {
 			replaceAll([
 				makeService({ name: 'bad-a', status: 'unhealthy' }),
 				makeService({ name: 'bad-b', status: 'authBlocked' })
-			]);
+			], 'v1.0.0');
 			const groups = getGroupedServices();
 			expect(groups.needsAttention.map((s) => s.name)).toEqual(['bad-a', 'bad-b']);
 			expect(groups.healthy).toEqual([]);
@@ -257,7 +261,7 @@ describe('serviceStore', () => {
 			replaceAll([
 				makeService({ name: 'new-svc', status: 'unknown' }),
 				makeService({ name: 'good-svc', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			const groups = getGroupedServices();
 			expect(groups.needsAttention.map((s) => s.name)).toEqual(['new-svc']);
 			expect(groups.healthy.map((s) => s.name)).toEqual(['good-svc']);
@@ -270,7 +274,7 @@ describe('serviceStore', () => {
 				makeService({ name: 'alpha', status: 'healthy' }),
 				makeService({ name: 'bravo', status: 'healthy' }),
 				makeService({ name: 'charlie', status: 'unhealthy' })
-			]);
+			], 'v1.0.0');
 			// Initial order: charlie (unhealthy) in needsAttention; alpha, bravo (healthy) in healthy
 			const initialGroups = getGroupedServices();
 			expect(initialGroups.needsAttention.map((s) => s.name)).toEqual(['charlie']);
@@ -289,7 +293,7 @@ describe('serviceStore', () => {
 			replaceAll([
 				makeService({ name: 'alpha', status: 'healthy' }),
 				makeService({ name: 'bravo', status: 'unhealthy' })
-			]);
+			], 'v1.0.0');
 			// bravo first (unhealthy), then alpha (healthy)
 			expect(getGroupedServices().needsAttention.map((s) => s.name)).toEqual(['bravo']);
 			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['alpha']);
@@ -298,14 +302,14 @@ describe('serviceStore', () => {
 			replaceAll([
 				makeService({ name: 'alpha', status: 'unhealthy' }),
 				makeService({ name: 'bravo', status: 'healthy' })
-			]);
+			], 'v2.0.0');
 			// Sort order recalculated: alpha (unhealthy) first, then bravo (healthy)
 			expect(getGroupedServices().needsAttention.map((s) => s.name)).toEqual(['alpha']);
 			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['bravo']);
 		});
 
 		it('recalculates sort order when a new service appears via addOrUpdate', () => {
-			replaceAll([makeService({ name: 'bravo', status: 'healthy' })]);
+			replaceAll([makeService({ name: 'bravo', status: 'healthy' })], 'v1.0.0');
 			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['bravo']);
 
 			// New service via addOrUpdate — triggers sort recalc since key is new
@@ -320,7 +324,7 @@ describe('serviceStore', () => {
 		});
 
 		it('updates on replaceAll', () => {
-			replaceAll([makeService({ name: 'svc' })]);
+			replaceAll([makeService({ name: 'svc' })], 'v1.0.0');
 			expect(getLastUpdated()).toBeInstanceOf(Date);
 		});
 
@@ -330,7 +334,7 @@ describe('serviceStore', () => {
 		});
 
 		it('updates on remove', () => {
-			replaceAll([makeService({ name: 'svc' })]);
+			replaceAll([makeService({ name: 'svc' })], 'v1.0.0');
 			remove('default', 'svc');
 			expect(getLastUpdated()).toBeInstanceOf(Date);
 		});

@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { getCounts, getConnectionStatus, getHasProblems } from '$lib/serviceStore.svelte';
+	import {
+		getCounts,
+		getConnectionStatus,
+		getHasProblems,
+		getAppVersion
+	} from '$lib/serviceStore.svelte';
 
 	const segments = $derived.by(() => {
 		const c = getCounts();
@@ -38,6 +43,10 @@
 
 		{#if getConnectionStatus() === 'disconnected'}
 			<span class="text-sm font-semibold text-subtext-0 italic">Reconnecting...</span>
+		{/if}
+
+		{#if getAppVersion()}
+			<span class="text-xs text-subtext-0">Command Center {getAppVersion()}</span>
 		{/if}
 	</div>
 </div>

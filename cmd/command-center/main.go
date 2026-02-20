@@ -26,6 +26,9 @@ import (
 
 const defaultAddr = ":8443"
 
+// Version is injected at build time using ldflags.
+var Version = "(unknown)"
+
 // config holds all server configuration.
 type config struct {
 	Dev            bool
@@ -138,7 +141,7 @@ func run(ctx context.Context, cfg config) error {
 	logger := setupLogger(cfg.LogFormat)
 	slog.SetDefault(logger)
 
-	// Create in-memory service state store
+	slog.Info("Starting Command Center", "version", Version)
 	store := state.NewStore()
 
 	// Start Kubernetes Ingress watcher
@@ -153,7 +156,7 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	// Create and start SSE broker for real-time event streaming
-	broker := sse.NewBroker(store, logger)
+	broker := sse.NewBroker(store, logger, Version)
 	go broker.Run(ctx)
 
 	// Create and start HTTP health checker

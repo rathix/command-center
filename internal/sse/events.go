@@ -11,7 +11,8 @@ import (
 
 // StateEventPayload wraps the full service list for the initial "state" event.
 type StateEventPayload struct {
-	Services []state.Service `json:"services"`
+	AppVersion string          `json:"appVersion"`
+	Services   []state.Service `json:"services"`
 }
 
 // DiscoveredEventPayload is the JSON payload for "discovered" and "update" events.

@@ -21,3 +21,8 @@ export interface Service {
 	lastStateChange: string | null;
 	errorSnippet: string | null;
 }
+
+export interface StateEventPayload {
+	appVersion: string;
+	services: Service[];
+}

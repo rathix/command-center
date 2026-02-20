@@ -25,7 +25,7 @@ beforeEach(() => {
 
 describe('ServiceList', () => {
 	it('has role="list" when services are present', () => {
-		replaceAll([makeService({ name: 'alpha' })]);
+		replaceAll([makeService({ name: 'alpha' })], 'v1.0.0');
 		render(ServiceList);
 		expect(screen.getByRole('list')).toBeInTheDocument();
 	});
@@ -35,7 +35,7 @@ describe('ServiceList', () => {
 			makeService({ name: 'alpha' }),
 			makeService({ name: 'bravo' }),
 			makeService({ name: 'charlie' })
-		]);
+		], 'v1.0.0');
 		render(ServiceList);
 		const items = screen.getAllByRole('listitem');
 		expect(items).toHaveLength(3);
@@ -46,7 +46,7 @@ describe('ServiceList', () => {
 			makeService({ name: 'charlie' }),
 			makeService({ name: 'alpha' }),
 			makeService({ name: 'bravo' })
-		]);
+		], 'v1.0.0');
 		render(ServiceList);
 		const items = screen.getAllByRole('listitem');
 		// All unknown = all in needsAttention with no labels, flat alphabetical
@@ -60,7 +60,7 @@ describe('ServiceList', () => {
 			makeService({ name: 'alpha' }),
 			makeService({ name: 'bravo' }),
 			makeService({ name: 'charlie' })
-		]);
+		], 'v1.0.0');
 		render(ServiceList);
 		const items = screen.getAllByRole('listitem');
 		// index 0 → odd=false (no bg-surface-0), index 1 → odd=true, index 2 → odd=false
@@ -80,7 +80,7 @@ describe('ServiceList', () => {
 			replaceAll([
 				makeService({ name: 'bad-svc', status: 'unhealthy' }),
 				makeService({ name: 'good-svc', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			render(ServiceList);
 			const headings = screen.getAllByRole('heading');
 			expect(headings).toHaveLength(2);
@@ -94,7 +94,7 @@ describe('ServiceList', () => {
 				makeService({ name: 'good-b', status: 'healthy' }),
 				makeService({ name: 'bad-a', status: 'unhealthy' }),
 				makeService({ name: 'blocked-a', status: 'authBlocked' })
-			]);
+			], 'v1.0.0');
 			render(ServiceList);
 			// Section labels have role="heading", service rows have role="listitem"
 			const headings = screen.getAllByRole('heading');
@@ -115,7 +115,7 @@ describe('ServiceList', () => {
 			replaceAll([
 				makeService({ name: 'alpha', status: 'healthy' }),
 				makeService({ name: 'bravo', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			render(ServiceList);
 			expect(screen.queryByRole('heading')).not.toBeInTheDocument();
 			const items = screen.getAllByRole('listitem');
@@ -128,7 +128,7 @@ describe('ServiceList', () => {
 			replaceAll([
 				makeService({ name: 'bad-a', status: 'unhealthy' }),
 				makeService({ name: 'bad-b', status: 'authBlocked' })
-			]);
+			], 'v1.0.0');
 			render(ServiceList);
 			expect(screen.queryByRole('heading')).not.toBeInTheDocument();
 			const items = screen.getAllByRole('listitem');
@@ -141,7 +141,7 @@ describe('ServiceList', () => {
 				makeService({ name: 'alpha', status: 'healthy' }),
 				makeService({ name: 'delta', status: 'unhealthy' }),
 				makeService({ name: 'bravo', status: 'unhealthy' })
-			]);
+			], 'v1.0.0');
 			render(ServiceList);
 			const items = screen.getAllByRole('listitem');
 			// needsAttention: bravo, delta; healthy: alpha, zebra
@@ -156,7 +156,7 @@ describe('ServiceList', () => {
 				makeService({ name: 'bad-a', status: 'unhealthy' }),
 				makeService({ name: 'bad-b', status: 'authBlocked' }),
 				makeService({ name: 'good-a', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			render(ServiceList);
 			const items = screen.getAllByRole('listitem');
 			// items[0] = bad-a (row index 0 → odd=false → no bg-surface-0)
@@ -171,7 +171,7 @@ describe('ServiceList', () => {
 			replaceAll([
 				makeService({ name: 'bad-svc', status: 'unhealthy' }),
 				makeService({ name: 'good-svc', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			render(ServiceList);
 			const headings = screen.getAllByRole('heading');
 			for (const heading of headings) {

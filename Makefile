@@ -1,10 +1,11 @@
 .PHONY: build test dev clean docker
 
 CONTAINER_TOOL ?= $(shell if command -v docker >/dev/null 2>&1; then echo docker; elif command -v podman >/dev/null 2>&1; then echo podman; else echo docker; fi)
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
 build:
 	cd web && npm ci && npm run build
-	go build -o bin/command-center ./cmd/command-center
+	go build -ldflags "-X main.Version=$(VERSION)" -o bin/command-center ./cmd/command-center
 
 docker:
 	$(CONTAINER_TOOL) build -t command-center .

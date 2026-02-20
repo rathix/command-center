@@ -40,13 +40,13 @@ describe('StatusBar', () => {
 			makeService({ name: 'svc-1', status: 'healthy' }),
 			makeService({ name: 'svc-2', status: 'healthy' }),
 			makeService({ name: 'svc-3', status: 'healthy' })
-		]);
+		], 'v1.0.0');
 		render(StatusBar);
 		expect(screen.getByText('3 services — all healthy')).toBeInTheDocument();
 	});
 
 	it('shows "Reconnecting..." AND service count when disconnected', () => {
-		replaceAll([makeService({ name: 'svc-1', status: 'healthy' })]);
+		replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
 		setConnectionStatus('disconnected');
 		render(StatusBar);
 		expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
@@ -69,6 +69,13 @@ describe('StatusBar', () => {
 		expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
 	});
 
+	it('shows app version when set', () => {
+		setConnectionStatus('connected');
+		replaceAll([], 'v0.2.0');
+		render(StatusBar);
+		expect(screen.getByText('Command Center v0.2.0')).toBeInTheDocument();
+	});
+
 	describe('health breakdown', () => {
 		it('shows "all healthy" in green when no problems exist', () => {
 			setConnectionStatus('connected');
@@ -76,7 +83,7 @@ describe('StatusBar', () => {
 				makeService({ name: 'svc-1', status: 'healthy' }),
 				makeService({ name: 'svc-2', status: 'healthy' }),
 				makeService({ name: 'svc-3', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			render(StatusBar);
 			const allHealthy = screen.getByText('3 services — all healthy');
 			expect(allHealthy).toBeInTheDocument();
@@ -92,7 +99,7 @@ describe('StatusBar', () => {
 				makeService({ name: 'svc-4', status: 'unknown' }),
 				makeService({ name: 'svc-5', status: 'healthy' }),
 				makeService({ name: 'svc-6', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			render(StatusBar);
 			const unhealthySegment = screen.getByText('2 unhealthy');
 			expect(unhealthySegment).toHaveClass('text-health-error');
@@ -110,7 +117,7 @@ describe('StatusBar', () => {
 				makeService({ name: 'svc-1', status: 'unhealthy' }),
 				makeService({ name: 'svc-2', status: 'healthy' }),
 				makeService({ name: 'svc-3', status: 'healthy' })
-			]);
+			], 'v1.0.0');
 			render(StatusBar);
 			expect(screen.getByText('1 unhealthy')).toBeInTheDocument();
 			expect(screen.getByText('2 healthy')).toBeInTheDocument();
@@ -123,7 +130,7 @@ describe('StatusBar', () => {
 		});
 
 		it('preserves "Reconnecting..." state unchanged', () => {
-			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })]);
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
 			setConnectionStatus('disconnected');
 			render(StatusBar);
 			expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
@@ -134,7 +141,7 @@ describe('StatusBar', () => {
 			replaceAll([
 				makeService({ name: 'svc-1', status: 'healthy' }),
 				makeService({ name: 'svc-2', status: 'unknown' })
-			]);
+			], 'v1.0.0');
 			render(StatusBar);
 			expect(screen.queryByText(/all healthy/)).not.toBeInTheDocument();
 			expect(screen.getByText('1 unknown')).toBeInTheDocument();

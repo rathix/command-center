@@ -49,8 +49,9 @@ function isService(value: unknown): value is Service {
 	);
 }
 
-function isStatePayload(value: unknown): value is { services: Service[] } {
+function isStatePayload(value: unknown): value is { services: Service[]; appVersion?: string } {
 	if (!isRecord(value) || !Array.isArray(value.services)) return false;
+	if (value.appVersion !== undefined && typeof value.appVersion !== 'string') return false;
 	return value.services.every((service) => isService(service));
 }
 
@@ -81,7 +82,7 @@ export function connect(): void {
 	source.addEventListener('state', (e: MessageEvent) => {
 		const payload = parseJson(e.data);
 		if (!isStatePayload(payload)) return;
-		replaceAll(payload.services);
+		replaceAll(payload.services, payload.appVersion ?? '');
 	});
 
 	source.addEventListener('discovered', (e: MessageEvent) => {

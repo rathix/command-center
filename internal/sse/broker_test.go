@@ -69,7 +69,7 @@ func TestBrokerInitialStateEvent(t *testing.T) {
 		{Name: "api", Namespace: "default", URL: "https://api.example.com", Status: "healthy"},
 	}
 	source := newMockSource(services)
-	broker := NewBroker(source, discardLogger())
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -117,11 +117,14 @@ func TestBrokerInitialStateEvent(t *testing.T) {
 	if len(payload.Services) != 2 {
 		t.Errorf("expected 2 services in initial state, got %d", len(payload.Services))
 	}
+	if payload.AppVersion != "v1.0.0" {
+		t.Errorf("expected appVersion 'v1.0.0', got %q", payload.AppVersion)
+	}
 }
 
 func TestBrokerDiscoveredBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger())
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -178,7 +181,7 @@ func TestBrokerDiscoveredBroadcast(t *testing.T) {
 
 func TestBrokerRemovedBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger())
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -239,7 +242,7 @@ func TestBrokerRemovedBroadcast(t *testing.T) {
 
 func TestBrokerKeepaliveTiming(t *testing.T) {
 	source := newMockSource(nil)
-	broker := newBrokerWithKeepalive(source, discardLogger(), 40*time.Millisecond)
+	broker := newBrokerWithKeepalive(source, discardLogger(), "v1.0.0", 40*time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -285,7 +288,7 @@ func TestBrokerKeepaliveTiming(t *testing.T) {
 
 func TestBrokerClientDisconnectCleanup(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger())
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -328,7 +331,7 @@ func TestBrokerClientDisconnectCleanup(t *testing.T) {
 
 func TestBrokerMultiClientBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger())
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -402,7 +405,7 @@ func TestBrokerMultiClientBroadcast(t *testing.T) {
 
 func TestBrokerGracefulShutdown(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger())
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go broker.Run(ctx)
@@ -451,7 +454,7 @@ func TestBrokerGracefulShutdown(t *testing.T) {
 
 func TestBrokerSourceChannelClosedStopsBroker(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger())
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -491,6 +494,7 @@ func TestBrokerSourceChannelClosedStopsBroker(t *testing.T) {
 
 func TestFormatSSEEvent(t *testing.T) {
 	data, err := formatSSEEvent("state", StateEventPayload{
+		AppVersion: "v1.2.3",
 		Services: []state.Service{
 			{Name: "web", Namespace: "default", URL: "https://web.example.com", Status: "unknown"},
 		},

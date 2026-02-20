@@ -45,7 +45,7 @@ Semantic versioning with git tags tied to the story/epic lifecycle:
 After pushing a story or epic commit, create an annotated tag and push it:
 `git tag -a vX.Y.Z -m "description" && git push origin vX.Y.Z`
 
-Current: v0.2.0 (Epic 2 complete). Next story tag: v0.2.1.
+Current: v0.2.4 (App Version Display story complete). Next story tag: v0.2.5.
 
 ## Critical Implementation Rules
 

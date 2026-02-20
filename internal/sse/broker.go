@@ -28,17 +28,18 @@ type sseEvent struct {
 type Broker struct {
 	source            StateSource
 	logger            *slog.Logger
+	appVersion        string
 	clients           map[chan sseEvent]struct{}
 	keepaliveInterval time.Duration
 	mu                sync.Mutex
 }
 
 // NewBroker creates a new SSE broker.
-func NewBroker(source StateSource, logger *slog.Logger) *Broker {
-	return newBrokerWithKeepalive(source, logger, defaultKeepaliveInterval)
+func NewBroker(source StateSource, logger *slog.Logger, appVersion string) *Broker {
+	return newBrokerWithKeepalive(source, logger, appVersion, defaultKeepaliveInterval)
 }
 
-func newBrokerWithKeepalive(source StateSource, logger *slog.Logger, keepaliveInterval time.Duration) *Broker {
+func newBrokerWithKeepalive(source StateSource, logger *slog.Logger, appVersion string, keepaliveInterval time.Duration) *Broker {
 	if keepaliveInterval <= 0 {
 		keepaliveInterval = defaultKeepaliveInterval
 	}
@@ -46,6 +47,7 @@ func newBrokerWithKeepalive(source StateSource, logger *slog.Logger, keepaliveIn
 	return &Broker{
 		source:            source,
 		logger:            logger,
+		appVersion:        appVersion,
 		clients:           make(map[chan sseEvent]struct{}),
 		keepaliveInterval: keepaliveInterval,
 	}
@@ -155,7 +157,10 @@ func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Send initial state event with all current services.
 	services := b.source.All()
-	initialData, err := formatSSEEvent("state", StateEventPayload{Services: services})
+	initialData, err := formatSSEEvent("state", StateEventPayload{
+		AppVersion: b.appVersion,
+		Services:   services,
+	})
 	if err != nil {
 		b.logger.Debug("failed to format initial state event", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

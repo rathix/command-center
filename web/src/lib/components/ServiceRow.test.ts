@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/svelte';
-import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/svelte';
+import { tick } from 'svelte';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ServiceRow from './ServiceRow.svelte';
 import type { Service } from '$lib/types';
 
@@ -232,6 +233,172 @@ describe('ServiceRow', () => {
 			const listItem = screen.getByRole('listitem');
 			expect(listItem).toHaveClass('bg-surface-0');
 			expect(listItem.style.backgroundColor).toBe('rgba(243, 139, 168, 0.05)');
+		});
+	});
+
+	describe('hover tooltip integration', () => {
+		beforeEach(() => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date('2026-02-20T10:00:12Z'));
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('tooltip is NOT visible by default', () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ lastChecked: '2026-02-20T10:00:00Z' }),
+					odd: false
+				}
+			});
+			expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+		});
+
+		it('aria-describedby is set on the <a> element with the correct tooltip id', () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ name: 'grafana', namespace: 'monitoring' }),
+					odd: false
+				}
+			});
+			const link = screen.getByRole('link');
+			expect(link).toHaveAttribute('aria-describedby', 'tooltip-monitoring-grafana');
+		});
+
+		it('tooltip appears after mouseenter + 200ms delay', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({
+						lastChecked: '2026-02-20T10:00:00Z',
+						lastStateChange: '2026-02-20T08:00:00Z',
+						status: 'healthy'
+					}),
+					odd: false
+				}
+			});
+			const listItem = screen.getByRole('listitem');
+
+			await fireEvent.mouseEnter(listItem);
+			expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+			vi.advanceTimersByTime(200);
+			await tick();
+			expect(screen.getByRole('tooltip')).toBeInTheDocument();
+		});
+
+		it('positions tooltip above when row is near viewport bottom', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({
+						lastChecked: '2026-02-20T10:00:00Z',
+						lastStateChange: '2026-02-20T08:00:00Z',
+						status: 'healthy'
+					}),
+					odd: false
+				}
+			});
+			const listItem = screen.getByRole('listitem');
+			const originalInnerHeight = window.innerHeight;
+
+			Object.defineProperty(window, 'innerHeight', {
+				configurable: true,
+				value: 800
+			});
+			vi.spyOn(listItem, 'getBoundingClientRect').mockReturnValue({
+				x: 0,
+				y: 750,
+				top: 750,
+				bottom: 790,
+				left: 0,
+				right: 600,
+				width: 600,
+				height: 40,
+				toJSON: () => ({})
+			} as DOMRect);
+
+			try {
+				await fireEvent.mouseEnter(listItem);
+				vi.advanceTimersByTime(200);
+				await tick();
+
+				const tooltip = screen.getByRole('tooltip');
+				expect(tooltip).toHaveClass('bottom-full');
+				expect(tooltip).toHaveClass('mb-1');
+			} finally {
+				Object.defineProperty(window, 'innerHeight', {
+					configurable: true,
+					value: originalInnerHeight
+				});
+			}
+		});
+
+		it('tooltip disappears immediately on mouseleave', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({
+						lastChecked: '2026-02-20T10:00:00Z',
+						lastStateChange: '2026-02-20T08:00:00Z',
+						status: 'healthy'
+					}),
+					odd: false
+				}
+			});
+			const listItem = screen.getByRole('listitem');
+
+			await fireEvent.mouseEnter(listItem);
+			vi.advanceTimersByTime(200);
+			await tick();
+			expect(screen.getByRole('tooltip')).toBeInTheDocument();
+
+			await fireEvent.mouseLeave(listItem);
+			await tick();
+			expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+		});
+
+		it('tooltip does NOT appear if mouse leaves before 200ms delay', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({
+						lastChecked: '2026-02-20T10:00:00Z',
+						lastStateChange: '2026-02-20T08:00:00Z',
+						status: 'healthy'
+					}),
+					odd: false
+				}
+			});
+			const listItem = screen.getByRole('listitem');
+
+			await fireEvent.mouseEnter(listItem);
+			vi.advanceTimersByTime(100);
+			await fireEvent.mouseLeave(listItem);
+			await tick();
+			vi.advanceTimersByTime(200);
+			await tick();
+
+			expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+		});
+
+		it('tooltip renders service diagnostic data', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({
+						lastChecked: '2026-02-20T10:00:00Z',
+						lastStateChange: '2026-02-20T08:00:00Z',
+						status: 'healthy'
+					}),
+					odd: false
+				}
+			});
+			const listItem = screen.getByRole('listitem');
+
+			await fireEvent.mouseEnter(listItem);
+			vi.advanceTimersByTime(200);
+			await tick();
+
+			expect(screen.getByText(/checked 12s ago/)).toBeInTheDocument();
+			expect(screen.getByText(/healthy since 2h ago/)).toBeInTheDocument();
 		});
 	});
 });

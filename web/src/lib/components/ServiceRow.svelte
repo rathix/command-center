@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import type { Service, HealthStatus } from '$lib/types';
 	import TuiDot from './tui/TuiDot.svelte';
+	import HoverTooltip from './HoverTooltip.svelte';
 
 	let { service, odd }: { service: Service; odd: boolean } = $props();
 
@@ -52,11 +54,58 @@
 
 	const responseTextColor = $derived.by(() => responseTextColorMap[service.status]);
 	const tintColor = $derived.by(() => tintColorMap[service.status]);
+
+	const tooltipId = $derived.by(() => `tooltip-${service.namespace}-${service.name}`);
+
+	let rowElement: HTMLLIElement | undefined = $state(undefined);
+	let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+	let hovered = $state(false);
+	let showTooltip = $state(false);
+	let tooltipPosition: 'below' | 'above' = $state('below');
+
+	function clearHoverTimer() {
+		if (hoverTimer) {
+			clearTimeout(hoverTimer);
+			hoverTimer = null;
+		}
+	}
+
+	function getTooltipPosition(): 'below' | 'above' {
+		if (!rowElement) return 'below';
+		const rect = rowElement.getBoundingClientRect();
+		const spaceBelow = window.innerHeight - rect.bottom;
+		return spaceBelow < 200 ? 'above' : 'below';
+	}
+
+	function handleMouseEnter() {
+		hovered = true;
+		clearHoverTimer();
+
+		hoverTimer = setTimeout(() => {
+			if (!hovered) return;
+			tooltipPosition = getTooltipPosition();
+			showTooltip = true;
+			hoverTimer = null;
+		}, 200);
+	}
+
+	function handleMouseLeave() {
+		hovered = false;
+		showTooltip = false;
+		clearHoverTimer();
+	}
+
+	onDestroy(() => {
+		clearHoverTimer();
+	});
 </script>
 
 <li
-	class="h-[46px] transition-colors duration-300 hover:bg-surface-1 {odd ? 'bg-surface-0' : ''}"
+	bind:this={rowElement}
+	class="relative h-[46px] transition-colors duration-300 hover:bg-surface-1 {odd ? 'bg-surface-0' : ''}"
 	style:background-color={tintColor}
+	onmouseenter={handleMouseEnter}
+	onmouseleave={handleMouseLeave}
 >
 	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 	<a
@@ -64,6 +113,7 @@
 		target="_blank"
 		rel="noopener noreferrer"
 		aria-disabled={!safeHref}
+		aria-describedby={tooltipId}
 		class="flex h-full cursor-pointer items-center gap-3 px-4
 			focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-lavender"
 		onclick={preventUnsafeNavigation}
@@ -73,4 +123,5 @@
 		<span class="text-xs text-subtext-1">{service.url}</span>
 		<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
 	</a>
+	<HoverTooltip {service} visible={showTooltip} position={tooltipPosition} id={tooltipId} />
 </li>

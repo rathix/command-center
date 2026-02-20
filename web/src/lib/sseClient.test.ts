@@ -123,13 +123,14 @@ describe('sseClient', () => {
 	});
 
 	describe('state event', () => {
-		it('calls replaceAll with parsed services array', async () => {
+		it('calls replaceAll with parsed services array and appVersion', async () => {
 			const { connect } = await import('./sseClient');
 			connect();
 			const es = MockEventSource.instances[0];
 			const services = [makeService({ name: 'svc-a' }), makeService({ name: 'svc-b' })];
-			es.emit('state', JSON.stringify({ services }));
-			expect(replaceAll).toHaveBeenCalledWith(services);
+			const appVersion = 'v1.2.3';
+			es.emit('state', JSON.stringify({ services, appVersion }));
+			expect(replaceAll).toHaveBeenCalledWith(services, appVersion);
 		});
 
 		it('ignores malformed JSON', async () => {

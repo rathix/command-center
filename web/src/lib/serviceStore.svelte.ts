@@ -16,6 +16,7 @@ export interface GroupedServices {
 let services = $state(new Map<string, Service>());
 let connectionStatus = $state<ConnectionStatus>('connecting');
 let lastUpdated = $state<Date | null>(null);
+let appVersion = $state<string>('');
 let sortOrder = $state<string[]>([]);
 let initialNeedsAttentionKeys = $state(new Set<string>());
 
@@ -102,10 +103,14 @@ export function getLastUpdated(): Date | null {
 export function getGroupedServices(): GroupedServices {
 	return groupedServices;
 }
+export function getAppVersion(): string {
+	return appVersion;
+}
 
 // Mutation functions (called by sseClient only)
-export function replaceAll(newServices: Service[]): void {
+export function replaceAll(newServices: Service[], newAppVersion: string): void {
 	services = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
+	appVersion = newAppVersion;
 	sortOrder = computeSortOrder(services);
 	initialNeedsAttentionKeys = computeNeedsAttentionKeys(services);
 	lastUpdated = new Date();
