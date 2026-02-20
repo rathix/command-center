@@ -353,3 +353,44 @@ func TestGetEnvBoolInvalidFallsBackToDefault(t *testing.T) {
 		t.Error("getEnvBool with invalid value should return fallback (true)")
 	}
 }
+
+// === Story 2.1: K8s Watcher Integration Tests ===
+
+func TestRunWithInvalidKubeconfigContinuesServing(t *testing.T) {
+	// When kubeconfig is invalid, run() should warn but continue serving
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	addr := getFreeAddr(t)
+	cfg, err := loadConfig([]string{"--listen-addr", addr, "--kubeconfig", "/nonexistent/kubeconfig"})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	cfg.Dev = true
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- run(ctx, cfg)
+	}()
+
+	// Give the server time to start
+	time.Sleep(300 * time.Millisecond)
+
+	// Server should still be running despite invalid kubeconfig
+	resp, err := http.Get("http://" + addr + "/")
+	if err != nil {
+		t.Fatalf("server not running after invalid kubeconfig: %v", err)
+	}
+	resp.Body.Close()
+
+	cancel()
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Errorf("run() returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("run() did not shut down within 5 seconds")
+	}
+}

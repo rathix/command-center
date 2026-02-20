@@ -14,9 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	commandcenter "github.com/kenny/command-center"
-	"github.com/kenny/command-center/internal/certs"
-	"github.com/kenny/command-center/internal/server"
+	commandcenter "github.com/rathix/command-center"
+	"github.com/rathix/command-center/internal/certs"
+	"github.com/rathix/command-center/internal/k8s"
+	"github.com/rathix/command-center/internal/server"
+	"github.com/rathix/command-center/internal/state"
 )
 
 const defaultAddr = ":8443"
@@ -133,6 +135,20 @@ func run(ctx context.Context, cfg config) error {
 	logger := setupLogger(cfg.LogFormat)
 	slog.SetDefault(logger)
 
+	// Create in-memory service state store
+	store := state.NewStore()
+
+	// Start Kubernetes Ingress watcher
+	watcherCtx, watcherCancel := context.WithCancel(ctx)
+	defer watcherCancel()
+
+	watcher, err := k8s.NewWatcher(cfg.Kubeconfig, store, logger)
+	if err != nil {
+		slog.Warn("k8s watcher disabled: failed to create watcher", "error", err)
+	} else {
+		go watcher.Run(watcherCtx)
+	}
+
 	mux := http.NewServeMux()
 
 	if cfg.Dev {
@@ -226,6 +242,8 @@ func run(ctx context.Context, cfg config) error {
 	select {
 	case <-ctx.Done():
 		slog.Info("Shutting down gracefully...")
+		// Stop watcher before server shutdown
+		watcherCancel()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
