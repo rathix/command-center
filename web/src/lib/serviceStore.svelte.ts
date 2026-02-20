@@ -7,10 +7,26 @@ const statusPriority: Record<HealthStatus, number> = {
 	healthy: 3
 };
 
+export interface GroupedServices {
+	needsAttention: Service[];
+	healthy: Service[];
+}
+
 // Internal reactive state
 let services = $state(new Map<string, Service>());
 let connectionStatus = $state<ConnectionStatus>('connecting');
 let lastUpdated = $state<Date | null>(null);
+let sortOrder = $state<string[]>([]);
+
+function computeSortOrder(svcMap: Map<string, Service>): string[] {
+	return [...svcMap.values()]
+		.sort((a, b) => {
+			const pri = statusPriority[a.status] - statusPriority[b.status];
+			if (pri !== 0) return pri;
+			return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
+		})
+		.map((s) => `${s.namespace}/${s.name}`);
+}
 
 // Internal derived computations
 const sortedServices = $derived.by(() => {
@@ -19,6 +35,19 @@ const sortedServices = $derived.by(() => {
 		if (pri !== 0) return pri;
 		return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
 	});
+});
+
+const groupedServices = $derived.by<GroupedServices>(() => {
+	// Spread services.values() to establish reactivity on the entire map
+	const byKey = new Map([...services.values()].map((s) => [`${s.namespace}/${s.name}`, s]));
+	const ordered = sortOrder
+		.map((key) => byKey.get(key))
+		.filter((s): s is Service => s !== undefined);
+	const needsAttention = ordered.filter(
+		(s) => s.status === 'unhealthy' || s.status === 'authBlocked' || s.status === 'unknown'
+	);
+	const healthy = ordered.filter((s) => s.status === 'healthy');
+	return { needsAttention, healthy };
 });
 
 const counts = $derived.by(() => {
@@ -54,22 +83,34 @@ export function getConnectionStatus(): ConnectionStatus {
 export function getLastUpdated(): Date | null {
 	return lastUpdated;
 }
+export function getGroupedServices(): GroupedServices {
+	return groupedServices;
+}
 
 // Mutation functions (called by sseClient only)
 export function replaceAll(newServices: Service[]): void {
 	services = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
+	sortOrder = computeSortOrder(services);
 	lastUpdated = new Date();
 }
 
 export function addOrUpdate(service: Service): void {
 	const key = `${service.namespace}/${service.name}`;
-	services.set(key, service);
+	const isNew = !services.has(key);
+	const updated = new Map(services);
+	updated.set(key, service);
+	services = updated;
+	if (isNew) {
+		sortOrder = computeSortOrder(services);
+	}
 	lastUpdated = new Date();
 }
 
 export function remove(namespace: string, name: string): void {
 	const key = `${namespace}/${name}`;
-	services.delete(key);
+	const updated = new Map(services);
+	updated.delete(key);
+	services = updated;
 	lastUpdated = new Date();
 }
 
@@ -82,4 +123,5 @@ export function _resetForTesting(): void {
 	services = new Map();
 	connectionStatus = 'connecting';
 	lastUpdated = null;
+	sortOrder = [];
 }
