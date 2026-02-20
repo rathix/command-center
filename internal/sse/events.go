@@ -17,6 +17,7 @@ type StateEventPayload struct {
 // DiscoveredEventPayload is the JSON payload for "discovered" and "update" events.
 type DiscoveredEventPayload struct {
 	Name            string             `json:"name"`
+	DisplayName     string             `json:"displayName"`
 	Namespace       string             `json:"namespace"`
 	URL             string             `json:"url"`
 	Status          state.HealthStatus `json:"status"`
@@ -36,6 +37,7 @@ type RemovedEventPayload struct {
 func discoveredEventPayloadFromService(svc state.Service) DiscoveredEventPayload {
 	return DiscoveredEventPayload{
 		Name:            svc.Name,
+		DisplayName:     svc.DisplayName,
 		Namespace:       svc.Namespace,
 		URL:             svc.URL,
 		Status:          svc.Status,

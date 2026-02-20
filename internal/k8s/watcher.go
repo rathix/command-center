@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/rathix/command-center/internal/state"
 
@@ -93,7 +94,7 @@ func (w *Watcher) onAdd(obj interface{}) {
 		return
 	}
 
-	url, ok := extractServiceURL(ingress)
+	url, host, ok := extractServiceURL(ingress)
 	if !ok {
 		w.logger.Warn("skipping Ingress with no valid host",
 			"namespace", ingress.Namespace,
@@ -102,10 +103,11 @@ func (w *Watcher) onAdd(obj interface{}) {
 	}
 
 	svc := state.Service{
-		Name:      ingress.Name,
-		Namespace: ingress.Namespace,
-		URL:       url,
-		Status:    state.StatusUnknown,
+		Name:        ingress.Name,
+		DisplayName: displayName(host),
+		Namespace:   ingress.Namespace,
+		URL:         url,
+		Status:      state.StatusUnknown,
 	}
 	w.updater.AddOrUpdate(svc)
 	w.logger.Info("service discovered",
@@ -120,7 +122,7 @@ func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	url, ok := extractServiceURL(ingress)
+	url, host, ok := extractServiceURL(ingress)
 	if !ok {
 		w.logger.Warn("skipping Ingress with no valid host after update",
 			"namespace", ingress.Namespace,
@@ -135,10 +137,11 @@ func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 	}
 
 	svc := state.Service{
-		Name:      ingress.Name,
-		Namespace: ingress.Namespace,
-		URL:       url,
-		Status:    status,
+		Name:        ingress.Name,
+		DisplayName: displayName(host),
+		Namespace:   ingress.Namespace,
+		URL:         url,
+		Status:      status,
 	}
 	w.updater.AddOrUpdate(svc)
 	w.logger.Info("service updated",
@@ -167,10 +170,19 @@ func (w *Watcher) onDelete(obj interface{}) {
 		"name", ingress.Name)
 }
 
-// extractServiceURL extracts the service URL from an Ingress spec.
-// Returns the URL and true if valid, or empty string and false if the
+// displayName extracts a human-friendly display name from a hostname
+// by taking the prefix before the first dot.
+func displayName(host string) string {
+	if i := strings.IndexByte(host, '.'); i > 0 {
+		return host[:i]
+	}
+	return host
+}
+
+// extractServiceURL extracts the service URL and raw host from an Ingress spec.
+// Returns the URL, host, and true if valid, or empty strings and false if the
 // Ingress has no host defined in its rules or TLS config.
-func extractServiceURL(ingress *networkingv1.Ingress) (string, bool) {
+func extractServiceURL(ingress *networkingv1.Ingress) (string, string, bool) {
 	var host string
 
 	// 1. Try to get host from first rule
@@ -184,7 +196,7 @@ func extractServiceURL(ingress *networkingv1.Ingress) (string, bool) {
 	}
 
 	if host == "" {
-		return "", false
+		return "", "", false
 	}
 
 	scheme := "http"
@@ -200,5 +212,5 @@ func extractServiceURL(ingress *networkingv1.Ingress) (string, bool) {
 		}
 	}
 
-	return scheme + "://" + host, true
+	return scheme + "://" + host, host, true
 }

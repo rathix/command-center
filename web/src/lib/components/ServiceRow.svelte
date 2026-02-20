@@ -37,7 +37,7 @@
 		onclick={preventUnsafeNavigation}
 	>
 		<TuiDot status={service.status} />
-		<span class="text-sm font-medium text-text">{service.name}</span>
+		<span class="text-sm font-medium text-text">{service.displayName}</span>
 		<span class="text-xs text-subtext-1">{service.url}</span>
 	</a>
 </li>

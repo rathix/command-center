@@ -582,7 +582,7 @@ func TestStateEventPayloadCamelCaseJSON(t *testing.T) {
 
 	jsonStr := string(data)
 	// Verify camelCase field names from state.Service json tags
-	for _, field := range []string{"name", "namespace", "url", "status", "httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
+	for _, field := range []string{"name", "displayName", "namespace", "url", "status", "httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
 		if !strings.Contains(jsonStr, `"`+field+`"`) {
 			t.Errorf("expected camelCase field %q in JSON, got: %s", field, jsonStr)
 		}
@@ -597,6 +597,7 @@ func TestDiscoveredEventPayloadCamelCaseJSON(t *testing.T) {
 
 	payload := discoveredEventPayloadFromService(state.Service{
 		Name:            "web",
+		DisplayName:     "web",
 		Namespace:       "default",
 		URL:             "https://web.example.com",
 		Status:          "unknown",
@@ -613,7 +614,7 @@ func TestDiscoveredEventPayloadCamelCaseJSON(t *testing.T) {
 	}
 
 	jsonStr := string(data)
-	for _, field := range []string{"name", "namespace", "url", "status", "httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
+	for _, field := range []string{"name", "displayName", "namespace", "url", "status", "httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
 		if !strings.Contains(jsonStr, `"`+field+`"`) {
 			t.Errorf("expected camelCase field %q in JSON, got: %s", field, jsonStr)
 		}

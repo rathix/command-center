@@ -6,6 +6,7 @@ import type { Service } from '$lib/types';
 function makeService(overrides: Partial<Service> = {}): Service {
 	return {
 		name: 'grafana',
+		displayName: 'grafana',
 		namespace: 'monitoring',
 		url: 'https://grafana.example.com',
 		status: 'unknown',
@@ -19,8 +20,10 @@ function makeService(overrides: Partial<Service> = {}): Service {
 }
 
 describe('ServiceRow', () => {
-	it('renders service name text', () => {
-		render(ServiceRow, { props: { service: makeService({ name: 'my-service' }), odd: false } });
+	it('renders service display name text', () => {
+		render(ServiceRow, {
+			props: { service: makeService({ displayName: 'my-service' }), odd: false }
+		});
 		expect(screen.getByText('my-service')).toBeInTheDocument();
 	});
 

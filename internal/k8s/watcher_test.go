@@ -434,24 +434,49 @@ func TestWatcherContextCancellation(t *testing.T) {
 	}
 }
 
+func TestDisplayName(t *testing.T) {
+	tests := []struct {
+		host string
+		want string
+	}{
+		{"grafana.kenny.live", "grafana"},
+		{"longhorn.kenny.live", "longhorn"},
+		{"trilium.kenny.live", "trilium"},
+		{"app.example.com", "app"},
+		{"singlehost", "singlehost"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			got := displayName(tt.host)
+			if got != tt.want {
+				t.Errorf("displayName(%q) = %q, want %q", tt.host, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExtractServiceURL(t *testing.T) {
 	tests := []struct {
-		name    string
-		ingress *networkingv1.Ingress
-		wantURL string
-		wantOK  bool
+		name     string
+		ingress  *networkingv1.Ingress
+		wantURL  string
+		wantHost string
+		wantOK   bool
 	}{
 		{
-			name:    "https with TLS",
-			ingress: newTestIngress("app", "ns", "app.example.com", true),
-			wantURL: "https://app.example.com",
-			wantOK:  true,
+			name:     "https with TLS",
+			ingress:  newTestIngress("app", "ns", "app.example.com", true),
+			wantURL:  "https://app.example.com",
+			wantHost: "app.example.com",
+			wantOK:   true,
 		},
 		{
-			name:    "http without TLS",
-			ingress: newTestIngress("app", "ns", "app.example.com", false),
-			wantURL: "http://app.example.com",
-			wantOK:  true,
+			name:     "http without TLS",
+			ingress:  newTestIngress("app", "ns", "app.example.com", false),
+			wantURL:  "http://app.example.com",
+			wantHost: "app.example.com",
+			wantOK:   true,
 		},
 		{
 			name: "no rules",
@@ -459,8 +484,9 @@ func TestExtractServiceURL(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
 				Spec:       networkingv1.IngressSpec{},
 			},
-			wantURL: "",
-			wantOK:  false,
+			wantURL:  "",
+			wantHost: "",
+			wantOK:   false,
 		},
 		{
 			name: "empty host",
@@ -470,19 +496,23 @@ func TestExtractServiceURL(t *testing.T) {
 					Rules: []networkingv1.IngressRule{{Host: ""}},
 				},
 			},
-			wantURL: "",
-			wantOK:  false,
+			wantURL:  "",
+			wantHost: "",
+			wantOK:   false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotURL, gotOK := extractServiceURL(tt.ingress)
+			gotURL, gotHost, gotOK := extractServiceURL(tt.ingress)
 			if gotOK != tt.wantOK {
 				t.Errorf("extractServiceURL() ok = %v, want %v", gotOK, tt.wantOK)
 			}
 			if gotURL != tt.wantURL {
 				t.Errorf("extractServiceURL() url = %q, want %q", gotURL, tt.wantURL)
+			}
+			if gotHost != tt.wantHost {
+				t.Errorf("extractServiceURL() host = %q, want %q", gotHost, tt.wantHost)
 			}
 		})
 	}

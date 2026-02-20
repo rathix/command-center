@@ -18,6 +18,7 @@ const (
 // Service represents a discovered Kubernetes service with health information.
 type Service struct {
 	Name            string       `json:"name"`
+	DisplayName     string       `json:"displayName"`
 	Namespace       string       `json:"namespace"`
 	URL             string       `json:"url"`
 	Status          HealthStatus `json:"status"`

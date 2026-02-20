@@ -11,6 +11,7 @@ export const HEALTH_STATUSES: HealthStatus[] = [
 
 export interface Service {
 	name: string;
+	displayName: string;
 	namespace: string;
 	url: string;
 	status: HealthStatus;

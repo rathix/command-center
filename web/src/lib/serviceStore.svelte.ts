@@ -17,7 +17,7 @@ const sortedServices = $derived.by(() => {
 	return [...services.values()].sort((a, b) => {
 		const pri = statusPriority[a.status] - statusPriority[b.status];
 		if (pri !== 0) return pri;
-		return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+		return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
 	});
 });
 
