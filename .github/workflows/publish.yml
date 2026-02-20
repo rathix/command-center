@@ -56,10 +56,24 @@ jobs:
       - name: Build Frontend
         run: npm run build
 
+      - name: Upload Web Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: web/build/
+          retention-days: 1
+
   test-go:
+    needs: test-web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - name: Download Web Build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web/build/
 
       - name: Setup Go
         uses: actions/setup-go@v5
