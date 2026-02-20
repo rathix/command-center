@@ -1,5 +1,7 @@
 export type HealthStatus = 'healthy' | 'unhealthy' | 'authBlocked' | 'unknown';
 
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
+
 export const HEALTH_STATUSES: HealthStatus[] = [
 	'healthy',
 	'unhealthy',

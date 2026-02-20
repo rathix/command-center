@@ -1,6 +1,16 @@
 import { render, screen } from '@testing-library/svelte';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Page from './+page.svelte';
+
+// Mock EventSource for jsdom environment
+beforeEach(() => {
+	globalThis.EventSource = class {
+		addEventListener = vi.fn();
+		close = vi.fn();
+		onopen: (() => void) | null = null;
+		onerror: (() => void) | null = null;
+	} as unknown as typeof EventSource;
+});
 
 describe('+page.svelte', () => {
 	it('renders a skip-to-content link', () => {
