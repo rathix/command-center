@@ -15,6 +15,7 @@ describe('types', () => {
 	it('Service interface matches the SSE data model shape', () => {
 		const service: Service = {
 			name: 'api',
+			displayName: 'api',
 			namespace: 'default',
 			url: 'https://api.example.local',
 			status: 'healthy',
@@ -26,6 +27,7 @@ describe('types', () => {
 		};
 
 		expect(service).toHaveProperty('name');
+		expect(service).toHaveProperty('displayName');
 		expect(service).toHaveProperty('namespace');
 		expect(service).toHaveProperty('url');
 		expect(service).toHaveProperty('status');

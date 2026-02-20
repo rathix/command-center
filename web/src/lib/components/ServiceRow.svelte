@@ -58,6 +58,7 @@
 	class="h-[46px] transition-colors duration-300 hover:bg-surface-1 {odd ? 'bg-surface-0' : ''}"
 	style:background-color={tintColor}
 >
+	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 	<a
 		href={safeHref ?? '#'}
 		target="_blank"

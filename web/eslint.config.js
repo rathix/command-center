@@ -15,7 +15,15 @@ export default ts.config(
 			globals: {
 				...globals.browser,
 				...globals.node
+			},
+			parserOptions: {
+				parser: ts.parser,
+				extraFileExtensions: ['.svelte']
 			}
+		},
+		rules: {
+			'svelte/prefer-svelte-reactivity': 'off',
+			'svelte/no-navigation-without-resolve': 'off'
 		}
 	},
 	{

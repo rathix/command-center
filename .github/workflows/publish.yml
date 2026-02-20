@@ -4,12 +4,22 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
+      - '.dockerignore'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
+      - '.dockerignore'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -17,8 +27,11 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
+  test-web:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v5
       
@@ -31,15 +44,22 @@ jobs:
 
       - name: Install Frontend Deps
         run: npm ci
-        working-directory: web
+
+      - name: Lint and Type-check
+        run: |
+          npm run lint
+          npm run check
 
       - name: Run Frontend Tests
         run: npm test
-        working-directory: web
 
       - name: Build Frontend
         run: npm run build
-        working-directory: web
+
+  test-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -51,7 +71,7 @@ jobs:
         run: go test -v ./...
 
   publish:
-    needs: test
+    needs: [test-web, test-go]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
