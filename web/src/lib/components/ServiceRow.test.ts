@@ -95,13 +95,14 @@ describe('ServiceRow', () => {
 		expect(listItem).toHaveClass('h-[46px]');
 	});
 
-	it('sanitizes unsafe urls to a safe fallback link', () => {
+	it('renders non-interactive div for unsafe urls', () => {
 		render(ServiceRow, {
 			props: { service: makeService({ url: 'javascript:alert(1)' }), odd: false }
 		});
-		const link = screen.getByRole('link');
-		expect(link).toHaveAttribute('href', '#');
-		expect(link).toHaveAttribute('aria-disabled', 'true');
+		const div = screen.getByTitle('Invalid URL');
+		expect(div).toBeInTheDocument();
+		expect(screen.queryByRole('link')).toBeNull();
+		expect(screen.getByText(/javascript:alert\(1\) \(invalid\)/)).toBeInTheDocument();
 	});
 
 	describe('health response details', () => {

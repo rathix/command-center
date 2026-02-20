@@ -126,6 +126,7 @@ export function addOrUpdate(service: Service): void {
 		sortOrder = computeSortOrder(services);
 		if (service.status !== 'healthy') {
 			initialNeedsAttentionKeys.add(key);
+			initialNeedsAttentionKeys = new Set(initialNeedsAttentionKeys);
 		}
 	}
 	lastUpdated = new Date();

@@ -21,12 +21,6 @@
 
 	const safeHref = $derived.by(() => sanitizeServiceUrl(service.url));
 
-	function preventUnsafeNavigation(event: MouseEvent): void {
-		if (!safeHref) {
-			event.preventDefault();
-		}
-	}
-
 	const responseTextColorMap: Record<HealthStatus, string> = {
 		healthy: 'text-subtext-0',
 		unhealthy: 'text-health-error',
@@ -70,11 +64,13 @@
 		}
 	}
 
+	const TOOLTIP_FLIP_THRESHOLD = 200;
+
 	function getTooltipPosition(): 'below' | 'above' {
 		if (!rowElement) return 'below';
 		const rect = rowElement.getBoundingClientRect();
 		const spaceBelow = window.innerHeight - rect.bottom;
-		return spaceBelow < 200 ? 'above' : 'below';
+		return spaceBelow < TOOLTIP_FLIP_THRESHOLD ? 'above' : 'below';
 	}
 
 	function handleMouseEnter() {
@@ -107,21 +103,32 @@
 	onmouseenter={handleMouseEnter}
 	onmouseleave={handleMouseLeave}
 >
-	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-	<a
-		href={safeHref ?? '#'}
-		target="_blank"
-		rel="noopener noreferrer"
-		aria-disabled={!safeHref}
-		aria-describedby={tooltipId}
-		class="flex h-full cursor-pointer items-center gap-3 px-4
-			focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-lavender"
-		onclick={preventUnsafeNavigation}
-	>
-		<TuiDot status={service.status} />
-		<span class="text-sm font-medium text-text">{service.displayName}</span>
-		<span class="text-xs text-subtext-1">{service.url}</span>
-		<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
-	</a>
+	{#if safeHref}
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+		<a
+			href={safeHref}
+			target="_blank"
+			rel="noopener noreferrer"
+			aria-describedby={tooltipId}
+			class="flex h-full cursor-pointer items-center gap-3 px-4
+				focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-lavender"
+		>
+			<TuiDot status={service.status} />
+			<span class="text-sm font-medium text-text">{service.displayName}</span>
+			<span class="text-xs text-subtext-1">{service.url}</span>
+			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
+		</a>
+	{:else}
+		<div
+			aria-describedby={tooltipId}
+			class="flex h-full items-center gap-3 px-4 opacity-70"
+			title="Invalid URL"
+		>
+			<TuiDot status={service.status} />
+			<span class="text-sm font-medium text-text">{service.displayName}</span>
+			<span class="text-xs text-subtext-1">{service.url} (invalid)</span>
+			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
+		</div>
+	{/if}
 	<HoverTooltip {service} visible={showTooltip} position={tooltipPosition} id={tooltipId} />
 </li>

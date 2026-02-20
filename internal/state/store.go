@@ -162,6 +162,32 @@ func (s *Store) All() []Service {
 	return result
 }
 
+// Update performs a thread-safe read-modify-write operation on a single service.
+// The provided function 'fn' is called with a pointer to the service while the store is locked.
+// If the service does not exist, 'fn' is not called.
+func (s *Store) Update(namespace, name string, fn func(*Service)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := serviceKey(namespace, name)
+	svc, ok := s.services[key]
+	if !ok {
+		return
+	}
+
+	fn(&svc)
+	s.services[key] = svc
+
+	// Fan-out to all subscribers
+	event := Event{Type: EventUpdated, Service: svc.DeepCopy()}
+	for ch := range s.subs {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
+}
+
 // DeepCopy creates a complete copy of the Service, including pointer fields.
 func (s Service) DeepCopy() Service {
 	cp := s

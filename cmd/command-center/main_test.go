@@ -145,8 +145,8 @@ func TestConfigNonPositiveHealthIntervalReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("loadConfig() with non-positive health interval should return error")
 	}
-	if !strings.Contains(err.Error(), "greater than zero") {
-		t.Fatalf("error should mention greater than zero, got: %v", err)
+	if !strings.Contains(err.Error(), "at least 1s") {
+		t.Fatalf("error should mention at least 1s, got: %v", err)
 	}
 }
 

@@ -26,6 +26,7 @@ type StateReader interface {
 // StateWriter provides write access to the service store.
 type StateWriter interface {
 	AddOrUpdate(svc state.Service)
+	Update(namespace, name string, fn func(*state.Service))
 }
 
 // Checker performs periodic HTTP health checks against discovered services.
@@ -87,18 +88,10 @@ func (c *Checker) checkAll(ctx context.Context) {
 			// Perform the probe
 			result := c.probeService(ctx, s.URL)
 			
-			// Read-Modify-Write: Get the latest state before updating
-			// This prevents clobbering non-health fields and re-adding removed services.
-			current, ok := c.reader.Get(s.Namespace, s.Name)
-			if !ok {
-				c.logger.Debug("skipping health update: service no longer in store",
-					"service", s.Name,
-					"namespace", s.Namespace)
-				return
-			}
-
-			updated := c.applyResult(current, result)
-			c.writer.AddOrUpdate(updated)
+			// Atomically update only health fields
+			c.writer.Update(s.Namespace, s.Name, func(svc *state.Service) {
+				c.applyResult(svc, result)
+			})
 		}(svc)
 	}
 	wg.Wait()
@@ -159,7 +152,7 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 }
 
 // applyResult updates health fields on a service, preserving non-health fields.
-func (c *Checker) applyResult(svc state.Service, res probeResult) state.Service {
+func (c *Checker) applyResult(svc *state.Service, res probeResult) {
 	previousStatus := svc.Status
 
 	svc.Status = res.status
@@ -190,8 +183,6 @@ func (c *Checker) applyResult(svc state.Service, res probeResult) state.Service 
 		logArgs = append(logArgs, "httpCode", *res.httpCode)
 	}
 	c.logger.Debug("health check completed", logArgs...)
-
-	return svc
 }
 
 // classifyStatus maps an HTTP status code to a HealthStatus.

@@ -57,19 +57,19 @@ func TestCheckService_Healthy(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.Status != state.StatusHealthy {
-		t.Errorf("expected status %q, got %q", state.StatusHealthy, result.Status)
+	if svc.Status != state.StatusHealthy {
+		t.Errorf("expected status %q, got %q", state.StatusHealthy, svc.Status)
 	}
-	if result.HTTPCode == nil || *result.HTTPCode != 200 {
-		t.Errorf("expected HTTPCode 200, got %v", result.HTTPCode)
+	if svc.HTTPCode == nil || *svc.HTTPCode != 200 {
+		t.Errorf("expected HTTPCode 200, got %v", svc.HTTPCode)
 	}
-	if result.ResponseTimeMs == nil || *result.ResponseTimeMs < 0 {
-		t.Errorf("expected non-negative ResponseTimeMs, got %v", result.ResponseTimeMs)
+	if svc.ResponseTimeMs == nil || *svc.ResponseTimeMs < 0 {
+		t.Errorf("expected non-negative ResponseTimeMs, got %v", svc.ResponseTimeMs)
 	}
-	if result.ErrorSnippet != nil {
-		t.Errorf("expected nil ErrorSnippet for healthy service, got %q", *result.ErrorSnippet)
+	if svc.ErrorSnippet != nil {
+		t.Errorf("expected nil ErrorSnippet for healthy service, got %q", *svc.ErrorSnippet)
 	}
 }
 
@@ -88,13 +88,13 @@ func TestCheckService_AuthBlocked401(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.Status != state.StatusAuthBlocked {
-		t.Errorf("expected status %q, got %q", state.StatusAuthBlocked, result.Status)
+	if svc.Status != state.StatusAuthBlocked {
+		t.Errorf("expected status %q, got %q", state.StatusAuthBlocked, svc.Status)
 	}
-	if result.HTTPCode == nil || *result.HTTPCode != 401 {
-		t.Errorf("expected HTTPCode 401, got %v", result.HTTPCode)
+	if svc.HTTPCode == nil || *svc.HTTPCode != 401 {
+		t.Errorf("expected HTTPCode 401, got %v", svc.HTTPCode)
 	}
 }
 
@@ -113,13 +113,13 @@ func TestCheckService_AuthBlocked403(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.Status != state.StatusAuthBlocked {
-		t.Errorf("expected status %q, got %q", state.StatusAuthBlocked, result.Status)
+	if svc.Status != state.StatusAuthBlocked {
+		t.Errorf("expected status %q, got %q", state.StatusAuthBlocked, svc.Status)
 	}
-	if result.HTTPCode == nil || *result.HTTPCode != 403 {
-		t.Errorf("expected HTTPCode 403, got %v", result.HTTPCode)
+	if svc.HTTPCode == nil || *svc.HTTPCode != 403 {
+		t.Errorf("expected HTTPCode 403, got %v", svc.HTTPCode)
 	}
 }
 
@@ -138,19 +138,19 @@ func TestCheckService_Unhealthy500(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.Status != state.StatusUnhealthy {
-		t.Errorf("expected status %q, got %q", state.StatusUnhealthy, result.Status)
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected status %q, got %q", state.StatusUnhealthy, svc.Status)
 	}
-	if result.HTTPCode == nil || *result.HTTPCode != 500 {
-		t.Errorf("expected HTTPCode 500, got %v", result.HTTPCode)
+	if svc.HTTPCode == nil || *svc.HTTPCode != 500 {
+		t.Errorf("expected HTTPCode 500, got %v", svc.HTTPCode)
 	}
-	if result.ErrorSnippet == nil {
+	if svc.ErrorSnippet == nil {
 		t.Fatal("expected non-nil ErrorSnippet for unhealthy service")
 	}
-	if *result.ErrorSnippet != "Internal Server Error" {
-		t.Errorf("expected ErrorSnippet %q, got %q", "Internal Server Error", *result.ErrorSnippet)
+	if *svc.ErrorSnippet != "Internal Server Error" {
+		t.Errorf("expected ErrorSnippet %q, got %q", "Internal Server Error", *svc.ErrorSnippet)
 	}
 }
 
@@ -169,19 +169,19 @@ func TestCheckService_ConnectionError(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.Status != state.StatusUnhealthy {
-		t.Errorf("expected status %q, got %q", state.StatusUnhealthy, result.Status)
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected status %q, got %q", state.StatusUnhealthy, svc.Status)
 	}
-	if result.HTTPCode != nil {
-		t.Errorf("expected nil HTTPCode for connection error, got %d", *result.HTTPCode)
+	if svc.HTTPCode != nil {
+		t.Errorf("expected nil HTTPCode for connection error, got %d", *svc.HTTPCode)
 	}
-	if result.ErrorSnippet == nil {
+	if svc.ErrorSnippet == nil {
 		t.Fatal("expected non-nil ErrorSnippet for connection error")
 	}
-	if !strings.Contains(*result.ErrorSnippet, "connection refused") {
-		t.Errorf("expected ErrorSnippet to contain 'connection refused', got %q", *result.ErrorSnippet)
+	if !strings.Contains(*svc.ErrorSnippet, "connection refused") {
+		t.Errorf("expected ErrorSnippet to contain 'connection refused', got %q", *svc.ErrorSnippet)
 	}
 }
 
@@ -202,15 +202,15 @@ func TestCheckService_StateTransitionUpdatesLastStateChange(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.Status != state.StatusUnhealthy {
-		t.Errorf("expected status %q, got %q", state.StatusUnhealthy, result.Status)
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected status %q, got %q", state.StatusUnhealthy, svc.Status)
 	}
-	if result.LastStateChange == nil {
+	if svc.LastStateChange == nil {
 		t.Fatal("expected LastStateChange to be set")
 	}
-	if !result.LastStateChange.After(oldTime) {
+	if !svc.LastStateChange.After(oldTime) {
 		t.Error("expected LastStateChange to be updated to a newer time")
 	}
 }
@@ -232,16 +232,16 @@ func TestCheckService_SameStatePreservesLastStateChange(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.Status != state.StatusHealthy {
-		t.Errorf("expected status %q, got %q", state.StatusHealthy, result.Status)
+	if svc.Status != state.StatusHealthy {
+		t.Errorf("expected status %q, got %q", state.StatusHealthy, svc.Status)
 	}
-	if result.LastStateChange == nil {
+	if svc.LastStateChange == nil {
 		t.Fatal("expected LastStateChange to be preserved")
 	}
-	if !result.LastStateChange.Equal(oldTime) {
-		t.Errorf("expected LastStateChange to be preserved as %v, got %v", oldTime, *result.LastStateChange)
+	if !svc.LastStateChange.Equal(oldTime) {
+		t.Errorf("expected LastStateChange to be preserved as %v, got %v", oldTime, *svc.LastStateChange)
 	}
 }
 
@@ -261,12 +261,12 @@ func TestCheckService_LastCheckedAlwaysUpdated(t *testing.T) {
 	before := time.Now()
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.LastChecked == nil {
+	if svc.LastChecked == nil {
 		t.Fatal("expected LastChecked to be set")
 	}
-	if result.LastChecked.Before(before) {
+	if svc.LastChecked.Before(before) {
 		t.Error("expected LastChecked to be at or after test start time")
 	}
 }
@@ -345,13 +345,13 @@ func TestCheckService_ErrorSnippetTruncation(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.ErrorSnippet == nil {
+	if svc.ErrorSnippet == nil {
 		t.Fatal("expected non-nil ErrorSnippet")
 	}
-	if len(*result.ErrorSnippet) > 256 {
-		t.Errorf("expected ErrorSnippet <= 256 chars, got %d", len(*result.ErrorSnippet))
+	if len(*svc.ErrorSnippet) > 256 {
+		t.Errorf("expected ErrorSnippet <= 256 chars, got %d", len(*svc.ErrorSnippet))
 	}
 }
 
@@ -371,13 +371,13 @@ func TestCheckService_ErrorSnippetFirstLine(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.ErrorSnippet == nil {
+	if svc.ErrorSnippet == nil {
 		t.Fatal("expected non-nil ErrorSnippet")
 	}
-	if *result.ErrorSnippet != "First line of error" {
-		t.Errorf("expected ErrorSnippet %q, got %q", "First line of error", *result.ErrorSnippet)
+	if *svc.ErrorSnippet != "First line of error" {
+		t.Errorf("expected ErrorSnippet %q, got %q", "First line of error", *svc.ErrorSnippet)
 	}
 }
 
@@ -399,19 +399,19 @@ func TestCheckService_PreservesNonHealthFields(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.Name != "svc1" {
-		t.Errorf("expected Name %q, got %q", "svc1", result.Name)
+	if svc.Name != "svc1" {
+		t.Errorf("expected Name %q, got %q", "svc1", svc.Name)
 	}
-	if result.DisplayName != "My Service" {
-		t.Errorf("expected DisplayName %q, got %q", "My Service", result.DisplayName)
+	if svc.DisplayName != "My Service" {
+		t.Errorf("expected DisplayName %q, got %q", "My Service", svc.DisplayName)
 	}
-	if result.Namespace != "ns1" {
-		t.Errorf("expected Namespace %q, got %q", "ns1", result.Namespace)
+	if svc.Namespace != "ns1" {
+		t.Errorf("expected Namespace %q, got %q", "ns1", svc.Namespace)
 	}
-	if result.URL != "https://svc1.example.com" {
-		t.Errorf("expected URL %q, got %q", "https://svc1.example.com", result.URL)
+	if svc.URL != "https://svc1.example.com" {
+		t.Errorf("expected URL %q, got %q", "https://svc1.example.com", svc.URL)
 	}
 }
 
@@ -474,10 +474,10 @@ func TestCheckService_AuthBlockedNoErrorSnippet(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.ErrorSnippet != nil {
-		t.Errorf("expected nil ErrorSnippet for authBlocked service, got %q", *result.ErrorSnippet)
+	if svc.ErrorSnippet != nil {
+		t.Errorf("expected nil ErrorSnippet for authBlocked service, got %q", *svc.ErrorSnippet)
 	}
 }
 
@@ -496,10 +496,10 @@ func TestCheckService_HealthyNoErrorSnippet(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, nil)
 	svc, _ := store.Get("ns1", "svc1")
-	result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if result.ErrorSnippet != nil {
-		t.Errorf("expected nil ErrorSnippet for healthy service, got %q", *result.ErrorSnippet)
+	if svc.ErrorSnippet != nil {
+		t.Errorf("expected nil ErrorSnippet for healthy service, got %q", *svc.ErrorSnippet)
 	}
 }
 
@@ -560,10 +560,10 @@ func TestCheckService_200Range(t *testing.T) {
 
 			checker := NewChecker(store, store, client, time.Hour, nil)
 			svc, _ := store.Get("ns1", "svc1")
-			result := checker.applyResult(svc, checker.probeService(context.Background(), svc.URL))
+			checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-			if result.Status != tt.want {
-				t.Errorf("code %d: expected status %q, got %q", tt.code, tt.want, result.Status)
+			if svc.Status != tt.want {
+				t.Errorf("code %d: expected status %q, got %q", tt.code, tt.want, svc.Status)
 			}
 		})
 	}

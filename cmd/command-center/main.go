@@ -84,8 +84,8 @@ func loadConfig(args []string) (config, error) {
 	if err != nil {
 		return config{}, fmt.Errorf("invalid health interval %q: %w", healthIntervalStr, err)
 	}
-	if interval <= 0 {
-		return config{}, fmt.Errorf("health interval must be greater than zero, got %q", healthIntervalStr)
+	if interval < time.Second {
+		return config{}, fmt.Errorf("health interval must be at least 1s, got %q", healthIntervalStr)
 	}
 	cfg.HealthInterval = interval
 
