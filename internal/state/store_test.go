@@ -471,6 +471,104 @@ func TestSubscribeEventOrder(t *testing.T) {
 	}
 }
 
+func TestEventK8sStatusConstant(t *testing.T) {
+	// Verify EventK8sStatus is distinct from other event types
+	if EventK8sStatus == EventDiscovered || EventK8sStatus == EventRemoved || EventK8sStatus == EventUpdated {
+		t.Error("EventK8sStatus must be a unique event type")
+	}
+}
+
+func TestNewStoreK8sConnectedDefault(t *testing.T) {
+	store := NewStore()
+	if store.K8sConnected() {
+		t.Error("new store should have k8sConnected = false")
+	}
+	if !store.LastK8sEvent().IsZero() {
+		t.Error("new store should have zero-value lastK8sEvent")
+	}
+}
+
+func TestSetK8sConnectedTrue(t *testing.T) {
+	store := NewStore()
+	store.SetK8sConnected(true)
+	if !store.K8sConnected() {
+		t.Error("expected k8sConnected = true after SetK8sConnected(true)")
+	}
+	if store.LastK8sEvent().IsZero() {
+		t.Error("expected lastK8sEvent to be set after SetK8sConnected")
+	}
+}
+
+func TestSetK8sConnectedFalse(t *testing.T) {
+	store := NewStore()
+	store.SetK8sConnected(true)
+	store.SetK8sConnected(false)
+	if store.K8sConnected() {
+		t.Error("expected k8sConnected = false after SetK8sConnected(false)")
+	}
+}
+
+func TestSetK8sConnectedFiresEvent(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	store.SetK8sConnected(true)
+
+	select {
+	case evt := <-events:
+		if evt.Type != EventK8sStatus {
+			t.Errorf("expected EventK8sStatus, got %v", evt.Type)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for EventK8sStatus event")
+	}
+}
+
+func TestSetK8sConnectedNonBlocking(t *testing.T) {
+	store := NewStore()
+	// Subscribe but don't read — should not block
+	_ = store.Subscribe()
+
+	done := make(chan struct{})
+	go func() {
+		for range 200 {
+			store.SetK8sConnected(true)
+			store.SetK8sConnected(false)
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SetK8sConnected blocked due to full event channel")
+	}
+}
+
+func TestK8sConnectedGettersConcurrent(t *testing.T) {
+	store := NewStore()
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for range 1000 {
+			store.SetK8sConnected(true)
+			store.SetK8sConnected(false)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for range 1000 {
+			_ = store.K8sConnected()
+			_ = store.LastK8sEvent()
+		}
+	}()
+
+	wg.Wait()
+}
+
 func TestStoreConcurrentAccess(t *testing.T) {
 	store := NewStore()
 	const goroutines = 100

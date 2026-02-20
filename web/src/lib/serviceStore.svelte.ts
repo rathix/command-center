@@ -19,6 +19,8 @@ let lastUpdated = $state<Date | null>(null);
 let appVersion = $state<string>('');
 let sortOrder = $state<string[]>([]);
 let initialNeedsAttentionKeys = $state(new Set<string>());
+let k8sConnected = $state<boolean>(false);
+let k8sLastEvent = $state<Date | null>(null);
 
 function computeSortOrder(svcMap: Map<string, Service>): string[] {
 	return [...svcMap.values()]
@@ -106,6 +108,12 @@ export function getGroupedServices(): GroupedServices {
 export function getAppVersion(): string {
 	return appVersion;
 }
+export function getK8sConnected(): boolean {
+	return k8sConnected;
+}
+export function getK8sLastEvent(): Date | null {
+	return k8sLastEvent;
+}
 
 // Mutation functions (called by sseClient only)
 export function replaceAll(newServices: Service[], newAppVersion: string): void {
@@ -146,12 +154,19 @@ export function setConnectionStatus(status: ConnectionStatus): void {
 	connectionStatus = status;
 }
 
+export function setK8sStatus(connected: boolean, lastEvent: string | null): void {
+	k8sConnected = connected;
+	k8sLastEvent = lastEvent ? new Date(lastEvent) : null;
+}
+
 // Test helper — resets all state to initial values
 export function _resetForTesting(): void {
 	services = new Map();
 	connectionStatus = 'connecting';
 	lastUpdated = null;
+	appVersion = '';
 	sortOrder = [];
 	initialNeedsAttentionKeys = new Set();
-	appVersion = '';
+	k8sConnected = false;
+	k8sLastEvent = null;
 }

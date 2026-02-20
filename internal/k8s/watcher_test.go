@@ -16,10 +16,12 @@ import (
 
 // fakeStateUpdater records calls to AddOrUpdate and Remove for testing.
 type fakeStateUpdater struct {
-	mu       sync.Mutex
-	added    []state.Service
-	removed  []string // "namespace/name"
-	current  map[string]state.Service
+	mu           sync.Mutex
+	added        []state.Service
+	removed      []string // "namespace/name"
+	current      map[string]state.Service
+	k8sConnected bool
+	k8sCalls     []bool // history of SetK8sConnected calls
 }
 
 func (f *fakeStateUpdater) Get(namespace, name string) (state.Service, bool) {
@@ -65,6 +67,21 @@ func (f *fakeStateUpdater) getRemoved() []string {
 	return result
 }
 
+func (f *fakeStateUpdater) SetK8sConnected(connected bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.k8sConnected = connected
+	f.k8sCalls = append(f.k8sCalls, connected)
+}
+
+func (f *fakeStateUpdater) getK8sCalls() []bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	result := make([]bool, len(f.k8sCalls))
+	copy(result, f.k8sCalls)
+	return result
+}
+
 func newTestIngress(name, namespace, host string, tls bool) *networkingv1.Ingress {
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -88,8 +105,15 @@ func newTestIngress(name, namespace, host string, tls bool) *networkingv1.Ingres
 }
 
 func TestStateUpdaterInterface(t *testing.T) {
-	// Verify state.Store satisfies StateUpdater interface
+	// Verify state.Store satisfies StateUpdater interface (includes SetK8sConnected)
 	var _ StateUpdater = &state.Store{}
+}
+
+func TestStateUpdaterInterfaceHasSetK8sConnected(t *testing.T) {
+	// Compile-time check: StateUpdater requires SetK8sConnected
+	var u StateUpdater = &fakeStateUpdater{}
+	u.SetK8sConnected(true)
+	_ = u
 }
 
 func TestNewWatcherWithFakeClient(t *testing.T) {
@@ -515,6 +539,45 @@ func TestExtractServiceURL(t *testing.T) {
 				t.Errorf("extractServiceURL() host = %q, want %q", gotHost, tt.wantHost)
 			}
 		})
+	}
+}
+
+func TestWatcherSetsK8sConnectedOnDiscovery(t *testing.T) {
+	ingress := newTestIngress("k8s-test", "default", "k8s-test.example.com", true)
+	clientset := fake.NewSimpleClientset(ingress)
+	updater := &fakeStateUpdater{}
+	logger := slog.Default()
+
+	w := NewWatcherWithClient(clientset, updater, logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go w.Run(ctx)
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for k8s connected call")
+		default:
+			calls := updater.getK8sCalls()
+			if len(calls) >= 1 {
+				// Should have at least one SetK8sConnected(true) call
+				foundTrue := false
+				for _, c := range calls {
+					if c {
+						foundTrue = true
+						break
+					}
+				}
+				if !foundTrue {
+					t.Error("expected SetK8sConnected(true) to be called")
+				}
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 }
 

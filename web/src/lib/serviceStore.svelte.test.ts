@@ -7,10 +7,13 @@ import {
 	getConnectionStatus,
 	getLastUpdated,
 	getAppVersion,
+	getK8sConnected,
+	getK8sLastEvent,
 	replaceAll,
 	addOrUpdate,
 	remove,
 	setConnectionStatus,
+	setK8sStatus,
 	_resetForTesting
 } from './serviceStore.svelte';
 import type { Service } from './types';
@@ -345,6 +348,43 @@ describe('serviceStore', () => {
 			// New service via addOrUpdate — triggers sort recalc since key is new
 			addOrUpdate(makeService({ name: 'alpha', status: 'healthy' }));
 			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['alpha', 'bravo']);
+		});
+	});
+
+	describe('k8sStatus', () => {
+		it('defaults to disconnected with null lastEvent', () => {
+			expect(getK8sConnected()).toBe(false);
+			expect(getK8sLastEvent()).toBeNull();
+		});
+
+		it('setK8sStatus(true) updates k8sConnected', () => {
+			setK8sStatus(true, '2026-02-20T14:30:00Z');
+			expect(getK8sConnected()).toBe(true);
+		});
+
+		it('setK8sStatus(false) updates k8sConnected', () => {
+			setK8sStatus(true, '2026-02-20T14:30:00Z');
+			setK8sStatus(false, '2026-02-20T14:31:00Z');
+			expect(getK8sConnected()).toBe(false);
+		});
+
+		it('parses lastEvent as Date', () => {
+			setK8sStatus(true, '2026-02-20T14:30:00Z');
+			const lastEvent = getK8sLastEvent();
+			expect(lastEvent).toBeInstanceOf(Date);
+			expect(lastEvent!.toISOString()).toBe('2026-02-20T14:30:00.000Z');
+		});
+
+		it('handles null lastEvent', () => {
+			setK8sStatus(true, null);
+			expect(getK8sLastEvent()).toBeNull();
+		});
+
+		it('is reset by _resetForTesting', () => {
+			setK8sStatus(true, '2026-02-20T14:30:00Z');
+			_resetForTesting();
+			expect(getK8sConnected()).toBe(false);
+			expect(getK8sLastEvent()).toBeNull();
 		});
 	});
 

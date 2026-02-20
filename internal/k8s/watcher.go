@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 
 	"github.com/rathix/command-center/internal/state"
 
@@ -23,6 +24,7 @@ type StateUpdater interface {
 	Get(namespace, name string) (state.Service, bool)
 	AddOrUpdate(svc state.Service)
 	Remove(namespace, name string)
+	SetK8sConnected(connected bool)
 }
 
 // IngressLister defines the subset of the Kubernetes Ingress lister
@@ -34,10 +36,11 @@ type IngressLister interface {
 
 // Watcher watches Kubernetes Ingress resources and updates the state store.
 type Watcher struct {
-	factory informers.SharedInformerFactory
-	lister  IngressLister
-	updater StateUpdater
-	logger  *slog.Logger
+	factory      informers.SharedInformerFactory
+	lister       IngressLister
+	updater      StateUpdater
+	logger       *slog.Logger
+	k8sConnected atomic.Bool
 }
 
 // NewWatcher creates a Watcher from a kubeconfig path. Supports both
@@ -69,6 +72,13 @@ func NewWatcherWithClient(clientset kubernetes.Interface, updater StateUpdater, 
 		logger:  logger,
 	}
 
+	_ = ingressInformer.Informer().SetWatchErrorHandler(func(r *cache.Reflector, err error) {
+		w.logger.Warn("k8s API watch error", "error", err)
+		if w.k8sConnected.CompareAndSwap(true, false) {
+			w.updater.SetK8sConnected(false)
+		}
+	})
+
 	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    w.onAdd,
 		UpdateFunc: w.onUpdate,
@@ -83,12 +93,23 @@ func (w *Watcher) Run(ctx context.Context) {
 	w.logger.Info("Starting Kubernetes Ingress watcher")
 	w.factory.Start(ctx.Done())
 	w.factory.WaitForCacheSync(ctx.Done())
+	w.markK8sConnected()
+	w.logger.Info("Kubernetes Ingress watcher synced")
 	<-ctx.Done()
 	w.factory.Shutdown()
 	w.logger.Info("Kubernetes Ingress watcher stopped")
 }
 
+func (w *Watcher) markK8sConnected() {
+	if w.k8sConnected.CompareAndSwap(false, true) {
+		w.updater.SetK8sConnected(true)
+		w.logger.Info("k8s API connection recovered")
+	}
+}
+
 func (w *Watcher) onAdd(obj interface{}) {
+	w.markK8sConnected()
+
 	ingress, ok := obj.(*networkingv1.Ingress)
 	if !ok {
 		return
@@ -117,6 +138,8 @@ func (w *Watcher) onAdd(obj interface{}) {
 }
 
 func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
+	w.markK8sConnected()
+
 	ingress, ok := newObj.(*networkingv1.Ingress)
 	if !ok {
 		return
@@ -151,6 +174,8 @@ func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 }
 
 func (w *Watcher) onDelete(obj interface{}) {
+	w.markK8sConnected()
+
 	ingress, ok := obj.(*networkingv1.Ingress)
 	if !ok {
 		// Handle DeletedFinalStateUnknown

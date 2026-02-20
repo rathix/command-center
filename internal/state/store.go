@@ -36,6 +36,7 @@ const (
 	EventDiscovered EventType = iota
 	EventRemoved
 	EventUpdated
+	EventK8sStatus
 )
 
 // Event represents a state mutation notification.
@@ -49,9 +50,11 @@ type Event struct {
 // Store is a concurrency-safe in-memory store for discovered services.
 // Services are keyed by "namespace/name".
 type Store struct {
-	mu       sync.RWMutex
-	services map[string]Service
-	subs     map[chan Event]struct{}
+	mu           sync.RWMutex
+	services     map[string]Service
+	subs         map[chan Event]struct{}
+	k8sConnected bool
+	lastK8sEvent time.Time
 }
 
 // NewStore creates a new empty Store.
@@ -186,6 +189,35 @@ func (s *Store) Update(namespace, name string, fn func(*Service)) {
 		default:
 		}
 	}
+}
+
+// SetK8sConnected updates the K8s connectivity status and notifies subscribers.
+func (s *Store) SetK8sConnected(connected bool) {
+	s.mu.Lock()
+	s.k8sConnected = connected
+	s.lastK8sEvent = time.Now()
+	event := Event{Type: EventK8sStatus}
+	for ch := range s.subs {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
+	s.mu.Unlock()
+}
+
+// K8sConnected returns whether the K8s API is currently reachable.
+func (s *Store) K8sConnected() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.k8sConnected
+}
+
+// LastK8sEvent returns the time of the last K8s connectivity status change.
+func (s *Store) LastK8sEvent() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastK8sEvent
 }
 
 // DeepCopy creates a complete copy of the Service, including pointer fields.

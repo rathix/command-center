@@ -15,6 +15,8 @@ import (
 type StateSource interface {
 	All() []state.Service
 	Subscribe() <-chan state.Event
+	K8sConnected() bool
+	LastK8sEvent() time.Time
 }
 
 const defaultKeepaliveInterval = 15 * time.Second
@@ -83,6 +85,12 @@ func (b *Broker) Run(ctx context.Context) {
 				data, err = formatSSEEvent("removed", RemovedEventPayload{
 					Name:      evt.Name,
 					Namespace: evt.Namespace,
+				})
+			case state.EventK8sStatus:
+				k8sLastEvent := b.source.LastK8sEvent().UTC().Format(time.RFC3339)
+				data, err = formatSSEEvent("k8sStatus", K8sStatusPayload{
+					K8sConnected: b.source.K8sConnected(),
+					K8sLastEvent: k8sLastEvent,
 				})
 			default:
 				b.logger.Debug("unknown state event type", "type", evt.Type)
@@ -157,9 +165,15 @@ func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Send initial state event with all current services.
 	services := b.source.All()
+	var k8sLastEvent *time.Time
+	if t := b.source.LastK8sEvent(); !t.IsZero() {
+		k8sLastEvent = &t
+	}
 	initialData, err := formatSSEEvent("state", StateEventPayload{
-		AppVersion: b.appVersion,
-		Services:   services,
+		AppVersion:   b.appVersion,
+		Services:     services,
+		K8sConnected: b.source.K8sConnected(),
+		K8sLastEvent: k8sLastEvent,
 	})
 	if err != nil {
 		b.logger.Debug("failed to format initial state event", "error", err)

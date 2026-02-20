@@ -36,4 +36,4 @@ After pushing a story or epic commit, create an annotated tag and push it:
 git tag -a vX.Y.Z -m "description" && git push origin vX.Y.Z
 ```
 
-Current: v0.3.1 (SSE Connection Resilience story complete). Next story tag: v0.3.2.
+Current: v0.3.2 (K8s API Connectivity Monitoring story complete). Next story tag: v0.3.3.

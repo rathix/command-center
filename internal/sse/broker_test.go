@@ -19,8 +19,10 @@ import (
 
 // mockStateSource implements StateSource for testing.
 type mockStateSource struct {
-	services []state.Service
-	eventCh  chan state.Event
+	services     []state.Service
+	eventCh      chan state.Event
+	k8sConnected bool
+	lastK8sEvent time.Time
 }
 
 func newMockSource(services []state.Service) *mockStateSource {
@@ -36,6 +38,14 @@ func (m *mockStateSource) All() []state.Service {
 
 func (m *mockStateSource) Subscribe() <-chan state.Event {
 	return m.eventCh
+}
+
+func (m *mockStateSource) K8sConnected() bool {
+	return m.k8sConnected
+}
+
+func (m *mockStateSource) LastK8sEvent() time.Time {
+	return m.lastK8sEvent
 }
 
 // parseSSEEvents reads SSE events from a response body string.
@@ -622,6 +632,156 @@ func TestDiscoveredEventPayloadCamelCaseJSON(t *testing.T) {
 		if !strings.Contains(jsonStr, `"`+field+`"`) {
 			t.Errorf("expected camelCase field %q in JSON, got: %s", field, jsonStr)
 		}
+	}
+}
+
+func TestBrokerInitialStateIncludesK8sMetadata(t *testing.T) {
+	source := newMockSource(nil)
+	source.k8sConnected = true
+	source.lastK8sEvent = time.Date(2026, 2, 20, 14, 30, 0, 0, time.UTC)
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "state" {
+		t.Errorf("expected event type 'state', got %q", eventType)
+	}
+
+	var payload StateEventPayload
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if !payload.K8sConnected {
+		t.Error("expected k8sConnected = true in initial state event")
+	}
+	if payload.K8sLastEvent == nil {
+		t.Fatal("expected k8sLastEvent to be set in initial state event")
+	}
+}
+
+func TestBrokerK8sStatusEventBroadcast(t *testing.T) {
+	source := newMockSource(nil)
+	source.k8sConnected = true
+	source.lastK8sEvent = time.Date(2026, 2, 20, 14, 30, 0, 0, time.UTC)
+	broker := NewBroker(source, discardLogger(), "v1.0.0")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Drain initial state event
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			break
+		}
+	}
+
+	// Send a K8s status event
+	source.eventCh <- state.Event{Type: state.EventK8sStatus}
+
+	// Read the k8sStatus event
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "k8sStatus" {
+		t.Errorf("expected event type 'k8sStatus', got %q", eventType)
+	}
+
+	var payload K8sStatusPayload
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		t.Fatalf("failed to unmarshal k8sStatus: %v", err)
+	}
+	if !payload.K8sConnected {
+		t.Error("expected k8sConnected = true in k8sStatus event")
+	}
+	if payload.K8sLastEvent == "" {
+		t.Error("expected k8sLastEvent to be set in k8sStatus event")
+	}
+}
+
+func TestK8sStatusPayloadCamelCaseJSON(t *testing.T) {
+	payload := K8sStatusPayload{
+		K8sConnected: true,
+		K8sLastEvent: "2026-02-20T14:30:00Z",
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	if !strings.Contains(jsonStr, `"k8sConnected"`) {
+		t.Errorf("expected 'k8sConnected' field in JSON: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"k8sLastEvent"`) {
+		t.Errorf("expected 'k8sLastEvent' field in JSON: %s", jsonStr)
+	}
+}
+
+func TestStateEventPayloadK8sFieldsCamelCaseJSON(t *testing.T) {
+	now := time.Now()
+	payload := StateEventPayload{
+		AppVersion:   "v1.0.0",
+		Services:     nil,
+		K8sConnected: true,
+		K8sLastEvent: &now,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	if !strings.Contains(jsonStr, `"k8sConnected"`) {
+		t.Errorf("expected 'k8sConnected' field in JSON: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"k8sLastEvent"`) {
+		t.Errorf("expected 'k8sLastEvent' field in JSON: %s", jsonStr)
 	}
 }
 
