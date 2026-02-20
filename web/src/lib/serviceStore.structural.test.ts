@@ -5,12 +5,12 @@ describe('serviceStore structural integrity', () => {
 	it('_resetForTesting resets all state reachable via getters', () => {
 		// 1. Capture initial values (defaults)
 		const getters = Object.keys(store).filter(key => 
-			key.startsWith('get') && typeof (store as any)[key] === 'function'
+			key.startsWith('get') && typeof (store as Record<string, unknown>)[key] === 'function'
 		);
-		const defaults = new Map<string, any>();
+		const defaults = new Map<string, unknown>();
 		
 		getters.forEach(key => {
-			const getter = (store as any)[key];
+			const getter = (store as Record<string, () => unknown>)[key];
 			defaults.set(key, getter());
 		});
 
@@ -55,7 +55,7 @@ describe('serviceStore structural integrity', () => {
 
 		// 4. Assert all getters return original defaults
 		getters.forEach(key => {
-			const getter = (store as any)[key];
+			const getter = (store as Record<string, () => unknown>)[key];
 			expect(getter(), `Getter ${key} should be reset to its default value`).toEqual(defaults.get(key));
 		});
 	});

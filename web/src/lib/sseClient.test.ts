@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { Service } from './types';
+import type { Service, HealthStatus } from './types';
 
 // Mock the serviceStore module before importing sseClient
 vi.mock('./serviceStore.svelte', () => ({
@@ -309,13 +309,13 @@ describe('sseClient', () => {
 			es.emit('discovered', JSON.stringify({ name: 'partial' }));
 			expect(addOrUpdate).not.toHaveBeenCalled();
 
-			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-code', httpCode: '200' as any })));
+			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-code', httpCode: '200' as unknown as number })));
 			expect(addOrUpdate).not.toHaveBeenCalled();
 
-			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-status', status: 'invalid' as any })));
+			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-status', status: 'invalid' as unknown as HealthStatus })));
 			expect(addOrUpdate).not.toHaveBeenCalled();
 
-			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-time', responseTimeMs: {} as any })));
+			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-time', responseTimeMs: {} as unknown as number })));
 			expect(addOrUpdate).not.toHaveBeenCalled();
 		});
 	});
