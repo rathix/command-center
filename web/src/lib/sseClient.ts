@@ -7,7 +7,6 @@ import {
 	getK8sConnected
 } from './serviceStore.svelte';
 import type { HealthStatus, Service, K8sStatusPayload } from './types';
-import { DEFAULT_HEALTH_CHECK_INTERVAL_MS } from './types';
 
 let eventSource: EventSource | null = null;
 type StatePayload = {

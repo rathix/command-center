@@ -63,7 +63,6 @@
 	                }
 	        });
 	
-	        const connectionStatus = $derived(getConnectionStatus());
 	        const timestampText = $derived.by(() => {
 	                if (!lastUpdatedLabel) return null;
 	                return `Last updated ${lastUpdatedLabel}`;
