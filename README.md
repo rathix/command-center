@@ -2,7 +2,7 @@
 
 A Kubernetes service dashboard for homelab operators. Single Go binary serving a SvelteKit SPA with mTLS security and a Catppuccin Mocha terminal aesthetic.
 
-> **Status:** Deployable shell complete (Epic 1). Service discovery, health monitoring, and real-time updates are in progress.
+> **Status:** v0.2.0 — Epics 1–4 complete (project scaffold, service discovery, health monitoring, resilience).
 
 ## Quick Start
 
@@ -134,12 +134,20 @@ This starts the Vite dev server (port 5173) for frontend hot-reload and the Go s
 ```
 cmd/command-center/     Go entrypoint, config, server lifecycle
 internal/certs/         TLS certificate generation and management
+internal/health/        HTTP health checker for discovered services
+internal/k8s/           Kubernetes Ingress watcher (informer-based)
 internal/server/        HTTP handlers, SPA serving, dev proxy
+internal/sse/           Server-Sent Events broker and event types
+internal/state/         Thread-safe service state store
 web/src/                SvelteKit frontend (Svelte 5, TypeScript, Tailwind v4)
 embed.go                //go:embed directive for web/build
 Dockerfile              Multi-stage build: Node → Go → distroless
 Makefile                Build, test, dev, docker targets
 ```
+
+## Documentation
+
+Full project documentation is available in [`docs/`](./docs/index.md), including architecture docs for both the Go backend and SvelteKit frontend, API contracts, data models, and development/deployment guides.
 
 ## License
 

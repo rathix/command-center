@@ -1,0 +1,49 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-02-21T00:00:00Z",
+    "last_updated": "2026-02-21T00:12:00Z",
+    "completed": "2026-02-21T00:12:00Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "quick",
+  "project_root": "/Users/kenny/Repositories/command-center",
+  "project_knowledge": "/Users/kenny/Repositories/command-center/docs",
+  "completed_steps": [
+    {"step": "step_1", "status": "completed", "timestamp": "2026-02-21T00:01:00Z", "summary": "Classified as multi-part with 2 parts"},
+    {"step": "step_2", "status": "completed", "timestamp": "2026-02-21T00:02:00Z", "summary": "Found 33 existing docs"},
+    {"step": "step_3", "status": "completed", "timestamp": "2026-02-21T00:03:00Z", "summary": "Tech stack analyzed"},
+    {"step": "step_4", "status": "completed", "timestamp": "2026-02-21T00:04:00Z", "summary": "Conditional analysis: APIs, models, components, auth"},
+    {"step": "step_5", "status": "completed", "timestamp": "2026-02-21T00:05:00Z", "summary": "Source tree documented"},
+    {"step": "step_6", "status": "completed", "timestamp": "2026-02-21T00:06:00Z", "summary": "Dev/deployment info extracted"},
+    {"step": "step_7", "status": "completed", "timestamp": "2026-02-21T00:07:00Z", "summary": "Integration architecture documented"},
+    {"step": "step_8", "status": "completed", "timestamp": "2026-02-21T00:08:00Z", "summary": "Architecture docs for server and web parts"},
+    {"step": "step_9", "status": "completed", "timestamp": "2026-02-21T00:09:00Z", "summary": "Supporting docs: overview, components, dev guide, API, data models, deployment"},
+    {"step": "step_10", "status": "completed", "timestamp": "2026-02-21T00:10:00Z", "summary": "Master index generated with all links valid"},
+    {"step": "step_11", "status": "completed", "timestamp": "2026-02-21T00:11:00Z", "summary": "Validation complete, 0 incomplete markers found"},
+    {"step": "step_12", "status": "completed", "timestamp": "2026-02-21T00:12:00Z", "summary": "Workflow complete"}
+  ],
+  "current_step": "completed",
+  "findings": {
+    "project_classification": {"repository_type": "multi-part", "parts_count": 2, "primary_tech": "Go 1.26 + SvelteKit/Svelte 5"}
+  },
+  "project_types": [
+    {"part_id": "server", "project_type_id": "backend", "display_name": "Go Backend", "root_path": "/"},
+    {"part_id": "web", "project_type_id": "web", "display_name": "SvelteKit Frontend", "root_path": "/web"}
+  ],
+  "outputs_generated": [
+    "project-scan-report.json",
+    "index.md",
+    "project-overview.md",
+    "architecture-server.md",
+    "architecture-web.md",
+    "integration-architecture.md",
+    "source-tree-analysis.md",
+    "component-inventory.md",
+    "development-guide.md",
+    "deployment-guide.md",
+    "api-contracts.md",
+    "data-models.md"
+  ],
+  "resume_instructions": "Workflow complete"
+}
