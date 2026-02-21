@@ -65,6 +65,14 @@ func Load(path string) (*Config, []error) {
                         valid = false
                 }
                 if valid {
+                        // Validate optional healthUrl if provided
+                        if rawHealth := strings.TrimSpace(svc.HealthURL); rawHealth != "" {
+                                parsed, err := url.Parse(rawHealth)
+                                if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+                                        validationErrors = append(validationErrors, fmt.Errorf("services[%d].healthUrl: invalid URL %q", i, rawHealth))
+                                        svc.HealthURL = ""
+                                }
+                        }
                         seenServiceNames[name] = struct{}{}
                         validServices = append(validServices, svc)
                 }
@@ -82,6 +90,14 @@ func Load(path string) (*Config, []error) {
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 			validationErrors = append(validationErrors, fmt.Errorf("overrides[%d].match: must be in namespace/name format, got %q", i, ovr.Match))
 			continue
+		}
+		// Validate optional healthUrl if provided
+		if rawHealth := strings.TrimSpace(ovr.HealthURL); rawHealth != "" {
+			parsed, err := url.Parse(rawHealth)
+			if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+				validationErrors = append(validationErrors, fmt.Errorf("overrides[%d].healthUrl: invalid URL %q", i, rawHealth))
+				ovr.HealthURL = ""
+			}
 		}
 		validOverrides = append(validOverrides, ovr)
 	}

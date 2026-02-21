@@ -569,19 +569,19 @@ func TestCheckService_200Range(t *testing.T) {
 	}
 }
 
-func TestCheckAll_HealthEndpointOverride(t *testing.T) {
+func TestCheckAll_HealthURLOverride(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
-		Name:           "truenas",
-		Namespace:      "custom",
-		URL:            "https://truenas.local",
-		HealthEndpoint: "https://truenas.local/api/v2.0/system/state",
-		Status:         state.StatusUnknown,
+		Name:      "truenas",
+		Namespace: "custom",
+		URL:       "https://truenas.local",
+		HealthURL: "https://truenas.local/api/v2.0/system/state",
+		Status:    state.StatusUnknown,
 	})
 
 	client := &mockHTTPProber{
 		responses: map[string]mockResponse{
-			// Only the health endpoint responds, NOT the base URL
+			// Only the healthUrl responds, NOT the base URL
 			"https://truenas.local/api/v2.0/system/state": {statusCode: 200, body: "OK"},
 		},
 	}
@@ -591,7 +591,7 @@ func TestCheckAll_HealthEndpointOverride(t *testing.T) {
 
 	svc, _ := store.Get("custom", "truenas")
 	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q (probed health endpoint), got %q", state.StatusHealthy, svc.Status)
+		t.Errorf("expected %q (probed healthUrl), got %q", state.StatusHealthy, svc.Status)
 	}
 }
 
@@ -642,5 +642,31 @@ func TestCheckAll_ExpectedStatusCodesNotInList(t *testing.T) {
 	svc, _ := store.Get("custom", "svc")
 	if svc.Status != state.StatusAuthBlocked {
 		t.Errorf("expected %q (401 not in expected [200]), got %q", state.StatusAuthBlocked, svc.Status)
+	}
+}
+
+func TestCheckAll_HealthURLDifferentHost(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name:      "svc",
+		Namespace: "custom",
+		URL:       "https://site.local",
+		HealthURL: "https://monitor.other.local/status",
+		Status:    state.StatusUnknown,
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			// Only the healthUrl responds — base URL would fail
+			"https://monitor.other.local/status": {statusCode: 200, body: "OK"},
+		},
+	}
+
+	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker.checkAll(context.Background())
+
+	svc, _ := store.Get("custom", "svc")
+	if svc.Status != state.StatusHealthy {
+		t.Errorf("expected %q (probed healthUrl on different host), got %q", state.StatusHealthy, svc.Status)
 	}
 }

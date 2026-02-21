@@ -76,7 +76,7 @@ services:
     group: storage
     displayName: TrueNAS
     icon: server
-    healthEndpoint: /api/v2.0/system/state
+    healthUrl: https://truenas.local/api/v2.0/system/state
     expectedStatusCodes: [200]
 
   - name: pihole
@@ -91,7 +91,7 @@ overrides:
   - match: default/grafana
     displayName: Grafana Monitoring
     icon: chart-line
-    healthEndpoint: /api/health
+    healthUrl: https://grafana.local/api/health
 
   - match: media/jellyfin
     displayName: Jellyfin
@@ -126,7 +126,7 @@ Each custom service requires `name`, `url`, and `group`. Optional fields:
 |-|-|
 | `displayName` | Label shown in the dashboard (defaults to `name`) |
 | `icon` | Icon identifier for the UI |
-| `healthEndpoint` | Path appended to `url` for health probes |
+| `healthUrl` | Full URL to probe for health checks instead of `url` |
 | `expectedStatusCodes` | HTTP status codes treated as healthy (default: 200) |
 
 Service names must be unique. Duplicates are stripped with a validation warning.

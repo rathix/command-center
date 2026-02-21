@@ -85,10 +85,10 @@ func (c *Checker) checkAll(ctx context.Context) {
 		go func(s state.Service) {
 			defer wg.Done()
 
-			// Determine probe URL: HealthEndpoint overrides base URL
+			// Determine probe URL: HealthURL overrides base URL
 			probeURL := s.URL
-			if s.HealthEndpoint != "" {
-				probeURL = s.HealthEndpoint
+			if s.HealthURL != "" {
+				probeURL = s.HealthURL
 			}
 
 			// Perform the probe

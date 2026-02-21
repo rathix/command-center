@@ -16,7 +16,7 @@ type CustomService struct {
 	URL                 string `yaml:"url"                 json:"url"`
 	Group               string `yaml:"group"               json:"group"`
 	DisplayName         string `yaml:"displayName"         json:"displayName"`
-	HealthEndpoint      string `yaml:"healthEndpoint"      json:"healthEndpoint"`
+	HealthURL           string `yaml:"healthUrl"           json:"healthUrl"`
 	ExpectedStatusCodes []int  `yaml:"expectedStatusCodes" json:"expectedStatusCodes"`
 	Icon                string `yaml:"icon"                json:"icon"`
 }
@@ -25,7 +25,7 @@ type CustomService struct {
 type ServiceOverride struct {
 	Match               string `yaml:"match"               json:"match"`
 	DisplayName         string `yaml:"displayName"         json:"displayName"`
-	HealthEndpoint      string `yaml:"healthEndpoint"      json:"healthEndpoint"`
+	HealthURL           string `yaml:"healthUrl"           json:"healthUrl"`
 	ExpectedStatusCodes []int  `yaml:"expectedStatusCodes" json:"expectedStatusCodes"`
 	Icon                string `yaml:"icon"                json:"icon"`
 }

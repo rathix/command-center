@@ -32,6 +32,7 @@ export interface Service {
 	lastChecked: string | null;
 	lastStateChange: string | null;
 	errorSnippet: string | null;
+	healthUrl?: string | null;
 }
 
 export interface ServiceGroup {

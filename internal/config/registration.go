@@ -62,7 +62,7 @@ func restoreOriginals(svc *state.Service) {
         }
         svc.DisplayName = svc.OriginalDisplayName
         svc.Icon = ""
-        svc.HealthEndpoint = ""
+        svc.HealthURL = ""
         svc.ExpectedStatusCodes = nil
 }
 
@@ -115,7 +115,7 @@ func ReconcileOnReload(store StateUpdater, oldCfg, newCfg *Config) (added, remov
                                 }
                                 svc.Group = newCS.Group
                                 svc.URL = newCS.URL
-                                svc.HealthEndpoint = newCS.HealthEndpoint
+                                svc.HealthURL = newCS.HealthURL
                                 svc.ExpectedStatusCodes = newCS.ExpectedStatusCodes
                                 svc.Icon = newCS.Icon
                         })
@@ -143,7 +143,7 @@ func customServiceToState(cs CustomService) state.Service {
                 URL:                 cs.URL,
                 Source:              state.SourceConfig,
                 Status:              state.StatusUnknown,
-                HealthEndpoint:      cs.HealthEndpoint,
+                HealthURL:      cs.HealthURL,
                 ExpectedStatusCodes: cs.ExpectedStatusCodes,
                 Icon:                cs.Icon,
         }
@@ -155,7 +155,7 @@ func applyOverride(svc *state.Service, ovr ServiceOverride) {
         } else {
                 svc.DisplayName = svc.OriginalDisplayName
         }
-        svc.HealthEndpoint = ovr.HealthEndpoint
+        svc.HealthURL = ovr.HealthURL
         svc.ExpectedStatusCodes = ovr.ExpectedStatusCodes
         svc.Icon = ovr.Icon
 }
@@ -171,7 +171,7 @@ func customServiceEqual(a, b CustomService) bool {
 	return a.URL == b.URL &&
 		a.Group == b.Group &&
 		a.DisplayName == b.DisplayName &&
-		a.HealthEndpoint == b.HealthEndpoint &&
+		a.HealthURL == b.HealthURL &&
 		a.Icon == b.Icon &&
 		intSliceEqual(a.ExpectedStatusCodes, b.ExpectedStatusCodes)
 }

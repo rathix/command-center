@@ -295,7 +295,7 @@ func TestApplyOverrides_NonExistentService(t *testing.T) {
 	}
 }
 
-func TestApplyOverrides_HealthEndpointAndExpectedStatusCodes(t *testing.T) {
+func TestApplyOverrides_HealthURLAndExpectedStatusCodes(t *testing.T) {
 	store := newFakeStore()
 	store.AddOrUpdate(state.Service{
 		Name: "svc", Namespace: "default", Source: state.SourceKubernetes,
@@ -305,7 +305,7 @@ func TestApplyOverrides_HealthEndpointAndExpectedStatusCodes(t *testing.T) {
 		Overrides: []ServiceOverride{
 			{
 				Match:               "default/svc",
-				HealthEndpoint:      "https://svc.local/health",
+				HealthURL:      "https://svc.local/health",
 				ExpectedStatusCodes: []int{200, 401},
 				Icon:                "radarr",
 			},
@@ -315,8 +315,8 @@ func TestApplyOverrides_HealthEndpointAndExpectedStatusCodes(t *testing.T) {
 	ApplyOverrides(store, cfg)
 
 	svc, _ := store.Get("default", "svc")
-	if svc.HealthEndpoint != "https://svc.local/health" {
-		t.Errorf("expected healthEndpoint %q, got %q", "https://svc.local/health", svc.HealthEndpoint)
+	if svc.HealthURL != "https://svc.local/health" {
+		t.Errorf("expected healthUrl %q, got %q", "https://svc.local/health", svc.HealthURL)
 	}
 	if len(svc.ExpectedStatusCodes) != 2 || svc.ExpectedStatusCodes[0] != 200 || svc.ExpectedStatusCodes[1] != 401 {
 		t.Errorf("expected expectedStatusCodes [200, 401], got %v", svc.ExpectedStatusCodes)

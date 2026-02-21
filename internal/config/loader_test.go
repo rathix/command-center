@@ -25,14 +25,14 @@ services:
     url: "https://nas.local"
     group: "infrastructure"
     displayName: "TrueNAS"
-    healthEndpoint: "/api/v2.0/system/state"
+    healthUrl: "https://nas.local/api/v2.0/system/state"
     expectedStatusCodes: [200, 204]
     icon: "truenas"
 
 overrides:
   - match: "default/radarr"
     displayName: "Radarr HD"
-    healthEndpoint: "/ping"
+    healthUrl: "https://radarr.local/ping"
     expectedStatusCodes: [200]
     icon: "radarr"
 
@@ -81,8 +81,8 @@ oidc:
 	if svc.DisplayName != "TrueNAS" {
 		t.Errorf("service displayName = %q, want %q", svc.DisplayName, "TrueNAS")
 	}
-	if svc.HealthEndpoint != "/api/v2.0/system/state" {
-		t.Errorf("service healthEndpoint = %q, want %q", svc.HealthEndpoint, "/api/v2.0/system/state")
+	if svc.HealthURL != "https://nas.local/api/v2.0/system/state" {
+		t.Errorf("service healthUrl = %q, want %q", svc.HealthURL, "https://nas.local/api/v2.0/system/state")
 	}
 	if len(svc.ExpectedStatusCodes) != 2 || svc.ExpectedStatusCodes[0] != 200 || svc.ExpectedStatusCodes[1] != 204 {
 		t.Errorf("service expectedStatusCodes = %v, want [200 204]", svc.ExpectedStatusCodes)
@@ -102,8 +102,8 @@ oidc:
 	if ovr.DisplayName != "Radarr HD" {
 		t.Errorf("override displayName = %q, want %q", ovr.DisplayName, "Radarr HD")
 	}
-	if ovr.HealthEndpoint != "/ping" {
-		t.Errorf("override healthEndpoint = %q, want %q", ovr.HealthEndpoint, "/ping")
+	if ovr.HealthURL != "https://radarr.local/ping" {
+		t.Errorf("override healthUrl = %q, want %q", ovr.HealthURL, "https://radarr.local/ping")
 	}
 
 	// Groups
@@ -172,8 +172,8 @@ overrides:
 	if cfg.Services[0].DisplayName != "" {
 		t.Errorf("expected empty displayName, got %q", cfg.Services[0].DisplayName)
 	}
-	if cfg.Services[0].HealthEndpoint != "" {
-		t.Errorf("expected empty healthEndpoint, got %q", cfg.Services[0].HealthEndpoint)
+	if cfg.Services[0].HealthURL != "" {
+		t.Errorf("expected empty healthUrl, got %q", cfg.Services[0].HealthURL)
 	}
 	if len(cfg.Services[0].ExpectedStatusCodes) != 0 {
 		t.Errorf("expected empty expectedStatusCodes, got %v", cfg.Services[0].ExpectedStatusCodes)
@@ -456,6 +456,61 @@ services:
 	        }
 	}
 	
+func TestLoad_HealthURLValidation(t *testing.T) {
+	tests := []struct {
+		name     string
+		healthUrl string
+		valid    bool
+	}{
+		{"valid absolute URL", "https://monitor.local/health", true},
+		{"valid http", "http://monitor.local/status", true},
+		{"empty is fine", "", true},
+		{"invalid no scheme", "monitor.local/health", false},
+		{"invalid no host", "https://", false},
+		{"invalid path only", "/api/health", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			healthLine := ""
+			if tt.healthUrl != "" {
+				healthLine = `    healthUrl: "` + tt.healthUrl + `"`
+			}
+			yaml := `
+services:
+  - name: "test"
+    url: "https://site.local"
+    group: "infra"
+` + healthLine + `
+`
+			path := writeTempConfig(t, yaml)
+			cfg, errs := Load(path)
+			if cfg == nil {
+				t.Fatal("expected non-nil config")
+			}
+			// Service should always be kept (healthUrl is optional)
+			if len(cfg.Services) != 1 {
+				t.Fatalf("expected 1 service, got %d", len(cfg.Services))
+			}
+			if tt.valid {
+				if len(errs) != 0 {
+					t.Errorf("expected no errors for %q, got %v", tt.healthUrl, errs)
+				}
+				if cfg.Services[0].HealthURL != tt.healthUrl {
+					t.Errorf("expected healthUrl %q, got %q", tt.healthUrl, cfg.Services[0].HealthURL)
+				}
+			} else {
+				if len(errs) == 0 {
+					t.Errorf("expected validation warning for invalid healthUrl %q", tt.healthUrl)
+				}
+				// Invalid healthUrl should be cleared
+				if cfg.Services[0].HealthURL != "" {
+					t.Errorf("expected healthUrl cleared for invalid %q, got %q", tt.healthUrl, cfg.Services[0].HealthURL)
+				}
+			}
+		})
+	}
+}
+
 func TestLoad_URLValidation(t *testing.T) {
 	tests := []struct {
 		name  string
