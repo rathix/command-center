@@ -106,6 +106,48 @@ describe('ServiceRow', () => {
 		expect(screen.getByText(/javascript:alert\(1\) \(invalid\)/)).toBeInTheDocument();
 	});
 
+	it('uses service icon override for icon src in link branch', () => {
+		const { container } = render(ServiceRow, {
+			props: {
+				service: makeService({ icon: 'immich' }),
+				odd: false
+			}
+		});
+		const iconImg = container.querySelector('img[loading="lazy"]');
+		expect(iconImg).toHaveAttribute(
+			'src',
+			'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/immich.svg'
+		);
+	});
+
+	it('uses service name as icon fallback when icon override is empty', () => {
+		const { container } = render(ServiceRow, {
+			props: {
+				service: makeService({ name: 'grafana', icon: '  ' }),
+				odd: false
+			}
+		});
+		const iconImg = container.querySelector('img[loading="lazy"]');
+		expect(iconImg).toHaveAttribute(
+			'src',
+			'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/grafana.svg'
+		);
+	});
+
+	it('uses service icon override for icon src in invalid URL branch', () => {
+		const { container } = render(ServiceRow, {
+			props: {
+				service: makeService({ url: 'javascript:alert(1)', icon: 'vaultwarden' }),
+				odd: false
+			}
+		});
+		const iconImg = container.querySelector('img[loading="lazy"]');
+		expect(iconImg).toHaveAttribute(
+			'src',
+			'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/vaultwarden.svg'
+		);
+	});
+
 	describe('health response details', () => {
 		it('shows response code and time for healthy service in muted text', () => {
 			render(ServiceRow, {

@@ -8,11 +8,6 @@ const statusPriority: Record<HealthStatus, number> = {
 	healthy: 3
 };
 
-export interface GroupedServices {
-	needsAttention: Service[];
-	healthy: Service[];
-}
-
 // Internal reactive state
 let services = $state(new Map<string, Service>());
 let connectionStatus = $state<ConnectionStatus>('connecting');
@@ -72,21 +67,6 @@ const sortedServices = $derived.by(() => {
 		if (pri !== 0) return pri;
 		return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
 	});
-});
-
-const groupedServices = $derived.by<GroupedServices>(() => {
-	const needsAttention: Service[] = [];
-	const healthy: Service[] = [];
-
-	for (const s of sortedServices) {
-		if (s.status === 'unhealthy' || s.status === 'authBlocked' || s.status === 'unknown') {
-			needsAttention.push(s);
-		} else {
-			healthy.push(s);
-		}
-	}
-
-	return { needsAttention, healthy };
 });
 
 const serviceGroups = $derived.by<ServiceGroup[]>(() => {
@@ -168,9 +148,6 @@ export function getConnectionStatus(): ConnectionStatus {
 }
 export function getLastUpdated(): Date | null {
 	return lastUpdated;
-}
-export function getGroupedServices(): GroupedServices {
-	return groupedServices;
 }
 export function getServiceGroups(): ServiceGroup[] {
 	return serviceGroups;

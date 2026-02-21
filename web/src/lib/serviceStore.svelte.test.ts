@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
 	getSortedServices,
-	getGroupedServices,
 	getServiceGroups,
 	getCounts,
 	getHasProblems,
@@ -248,122 +247,6 @@ describe('serviceStore', () => {
 			expect(getConnectionStatus()).toBe('connected');
 			setConnectionStatus('disconnected');
 			expect(getConnectionStatus()).toBe('disconnected');
-		});
-	});
-
-	describe('groupedServices', () => {
-		it('groups mixed health states correctly — unhealthy and authBlocked in needsAttention, healthy in healthy', () => {
-			replaceAll([
-				makeService({ name: 'good-svc', status: 'healthy' }),
-				makeService({ name: 'bad-svc', status: 'unhealthy' }),
-				makeService({ name: 'blocked-svc', status: 'authBlocked' })
-			], 'v1.0.0');
-			const groups = getGroupedServices();
-			expect(groups.needsAttention.map((s) => s.name)).toEqual(['bad-svc', 'blocked-svc']);
-			expect(groups.healthy.map((s) => s.name)).toEqual(['good-svc']);
-		});
-
-		it('sorts alphabetically within each group by displayName', () => {
-			replaceAll([
-				makeService({ name: 'zebra', status: 'healthy' }),
-				makeService({ name: 'alpha', status: 'healthy' }),
-				makeService({ name: 'delta', status: 'unhealthy' }),
-				makeService({ name: 'bravo', status: 'unhealthy' })
-			], 'v1.0.0');
-			const groups = getGroupedServices();
-			expect(groups.needsAttention.map((s) => s.name)).toEqual(['bravo', 'delta']);
-			expect(groups.healthy.map((s) => s.name)).toEqual(['alpha', 'zebra']);
-		});
-
-		it('returns empty needsAttention when all services are healthy', () => {
-			replaceAll([
-				makeService({ name: 'alpha', status: 'healthy' }),
-				makeService({ name: 'bravo', status: 'healthy' })
-			], 'v1.0.0');
-			const groups = getGroupedServices();
-			expect(groups.needsAttention).toEqual([]);
-			expect(groups.healthy.map((s) => s.name)).toEqual(['alpha', 'bravo']);
-		});
-
-		it('returns empty healthy when all services are unhealthy', () => {
-			replaceAll([
-				makeService({ name: 'bad-a', status: 'unhealthy' }),
-				makeService({ name: 'bad-b', status: 'authBlocked' })
-			], 'v1.0.0');
-			const groups = getGroupedServices();
-			expect(groups.needsAttention.map((s) => s.name)).toEqual(['bad-a', 'bad-b']);
-			expect(groups.healthy).toEqual([]);
-		});
-
-		it('places unknown status services in needsAttention group', () => {
-			replaceAll([
-				makeService({ name: 'new-svc', status: 'unknown' }),
-				makeService({ name: 'good-svc', status: 'healthy' })
-			], 'v1.0.0');
-			const groups = getGroupedServices();
-			expect(groups.needsAttention.map((s) => s.name)).toEqual(['new-svc']);
-			expect(groups.healthy.map((s) => s.name)).toEqual(['good-svc']);
-		});
-	});
-
-	describe('groupedServices live sort order', () => {
-		it('moves a service between sections when status changes via addOrUpdate', () => {
-			replaceAll([
-				makeService({ name: 'alpha', status: 'healthy' }),
-				makeService({ name: 'bravo', status: 'healthy' }),
-				makeService({ name: 'charlie', status: 'unhealthy' })
-			], 'v1.0.0');
-			const initialGroups = getGroupedServices();
-			expect(initialGroups.needsAttention.map((s) => s.name)).toEqual(['charlie']);
-			expect(initialGroups.healthy.map((s) => s.name)).toEqual(['alpha', 'bravo']);
-
-			// alpha transitions to unhealthy via SSE update — should move to needsAttention
-			addOrUpdate(makeService({ name: 'alpha', status: 'unhealthy' }));
-			const updatedGroups = getGroupedServices();
-			expect(updatedGroups.needsAttention.map((s) => s.name)).toEqual(['alpha', 'charlie']);
-			expect(updatedGroups.healthy.map((s) => s.name)).toEqual(['bravo']);
-		});
-
-		it('moves a service from needsAttention to healthy when it recovers', () => {
-			replaceAll([
-				makeService({ name: 'alpha', status: 'unhealthy' }),
-				makeService({ name: 'bravo', status: 'healthy' })
-			], 'v1.0.0');
-			expect(getGroupedServices().needsAttention.map((s) => s.name)).toEqual(['alpha']);
-			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['bravo']);
-
-			// alpha recovers
-			addOrUpdate(makeService({ name: 'alpha', status: 'healthy' }));
-			expect(getGroupedServices().needsAttention).toEqual([]);
-			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['alpha', 'bravo']);
-		});
-
-		it('recalculates sort order and grouping on replaceAll (SSE reconnect)', () => {
-			replaceAll([
-				makeService({ name: 'alpha', status: 'healthy' }),
-				makeService({ name: 'bravo', status: 'unhealthy' })
-			], 'v1.0.0');
-			// bravo first (unhealthy), then alpha (healthy)
-			expect(getGroupedServices().needsAttention.map((s) => s.name)).toEqual(['bravo']);
-			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['alpha']);
-
-			// SSE reconnect — replaceAll with alpha now unhealthy
-			replaceAll([
-				makeService({ name: 'alpha', status: 'unhealthy' }),
-				makeService({ name: 'bravo', status: 'healthy' })
-			], 'v2.0.0');
-			// Sort order recalculated: alpha (unhealthy) first, then bravo (healthy)
-			expect(getGroupedServices().needsAttention.map((s) => s.name)).toEqual(['alpha']);
-			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['bravo']);
-		});
-
-		it('recalculates sort order when a new service appears via addOrUpdate', () => {
-			replaceAll([makeService({ name: 'bravo', status: 'healthy' })], 'v1.0.0');
-			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['bravo']);
-
-			// New service via addOrUpdate — triggers sort recalc since key is new
-			addOrUpdate(makeService({ name: 'alpha', status: 'healthy' }));
-			expect(getGroupedServices().healthy.map((s) => s.name)).toEqual(['alpha', 'bravo']);
 		});
 	});
 

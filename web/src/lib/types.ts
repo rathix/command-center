@@ -20,6 +20,7 @@ export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 30_000;
 
 export interface Service {
 	name: string;
+	icon?: string | null;
 	displayName: string;
 	namespace: string;
 	group: string;

@@ -3,6 +3,7 @@
 	import type { Service, HealthStatus } from '$lib/types';
 	import TuiDot from './tui/TuiDot.svelte';
 	import HoverTooltip from './HoverTooltip.svelte';
+	import ServiceIcon from './ServiceIcon.svelte';
 
 	let { service, odd }: { service: Service; odd: boolean } = $props();
 
@@ -20,6 +21,10 @@
 	}
 
 	const safeHref = $derived.by(() => sanitizeServiceUrl(service.url));
+	const iconName = $derived.by(() => {
+		const icon = service.icon?.trim();
+		return icon ? icon : service.name;
+	});
 
 	const responseTextColorMap: Record<HealthStatus, string> = {
 		healthy: 'text-subtext-0',
@@ -128,6 +133,7 @@
 				focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-lavender"
 		>
 			<TuiDot status={service.status} />
+			<ServiceIcon name={iconName} />
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url}</span>
 			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
@@ -139,6 +145,7 @@
 			title="Invalid URL"
 		>
 			<TuiDot status={service.status} />
+			<ServiceIcon name={iconName} />
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url} (invalid)</span>
 			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
