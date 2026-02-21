@@ -152,82 +152,62 @@ func (w *Watcher) onAdd(obj interface{}) {
 		return
 	}
 
-	svc := state.Service{
-		Name:        ingress.Name,
-		DisplayName: displayName(host),
-		Namespace:   ingress.Namespace,
-		Group:       ingress.Namespace,
-		URL:         url,
-		Source:      state.SourceKubernetes,
-		Status:      state.StatusUnknown,
+	        svc := state.Service{
+	                Name:                ingress.Name,
+	                DisplayName:         displayName(host),
+	                OriginalDisplayName: displayName(host),
+	                Namespace:           ingress.Namespace,
+	                Group:               ingress.Namespace,
+	                URL:                 url,
+	                Source:              state.SourceKubernetes,
+	                Status:              state.StatusUnknown,
+	        }
+	        w.updater.AddOrUpdate(svc)
+	        w.logger.Info("service discovered",
+	                "namespace", ingress.Namespace,
+	                "name", ingress.Name,
+	                "url", url)
 	}
-	w.updater.AddOrUpdate(svc)
-	w.logger.Info("service discovered",
-		"namespace", ingress.Namespace,
-		"name", ingress.Name,
-		"url", url)
-}
-
-func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
-	w.markK8sConnected()
-
-	ingress, ok := newObj.(*networkingv1.Ingress)
-	if !ok {
-		return
+	
+	func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
+	        w.markK8sConnected()
+	
+	        ingress, ok := newObj.(*networkingv1.Ingress)
+	        if !ok {
+	                return
+	        }
+	
+	        url, host, ok := extractServiceURL(ingress)
+	        if !ok {
+	                w.logger.Warn("skipping Ingress with no valid host after update",
+	                        "namespace", ingress.Namespace,
+	                        "name", ingress.Name)
+	                return
+	        }
+	
+	        // Preserve health status if service already exists
+	        status := state.StatusUnknown
+	        if existing, ok := w.updater.Get(ingress.Namespace, ingress.Name); ok {
+	                status = existing.Status
+	        }
+	
+	        svc := state.Service{
+	                Name:                ingress.Name,
+	                DisplayName:         displayName(host),
+	                OriginalDisplayName: displayName(host),
+	                Namespace:           ingress.Namespace,
+	                Group:               ingress.Namespace,
+	                URL:                 url,
+	                Source:              state.SourceKubernetes,
+	                Status:              status,
+	        }
+	        w.updater.AddOrUpdate(svc)
+	        w.logger.Info("service updated",
+	                "namespace", ingress.Namespace,
+	                "name", ingress.Name,
+	                "url", url)
 	}
-
-	url, host, ok := extractServiceURL(ingress)
-	if !ok {
-		w.logger.Warn("skipping Ingress with no valid host after update",
-			"namespace", ingress.Namespace,
-			"name", ingress.Name)
-		return
-	}
-
-	oldDefaultDisplayName := ""
-	if oldIngress, ok := oldObj.(*networkingv1.Ingress); ok {
-		if _, oldHost, ok := extractServiceURL(oldIngress); ok {
-			oldDefaultDisplayName = displayName(oldHost)
-		}
-	}
-
-	// Preserve health status if service already exists
-	status := state.StatusUnknown
-	display := displayName(host)
-	healthEndpoint := ""
-	var expectedCodes []int
-	icon := ""
-	if existing, ok := w.updater.Get(ingress.Namespace, ingress.Name); ok {
-		status = existing.Status
-		// If the display name no longer matches the old computed default, treat it as an override.
-		if existing.DisplayName != "" && existing.DisplayName != oldDefaultDisplayName {
-			display = existing.DisplayName
-		}
-		healthEndpoint = existing.HealthEndpoint
-		expectedCodes = existing.ExpectedStatusCodes
-		icon = existing.Icon
-	}
-
-	svc := state.Service{
-		Name:                ingress.Name,
-		DisplayName:         display,
-		Namespace:           ingress.Namespace,
-		Group:               ingress.Namespace,
-		URL:                 url,
-		Icon:                icon,
-		Source:              state.SourceKubernetes,
-		Status:              status,
-		HealthEndpoint:      healthEndpoint,
-		ExpectedStatusCodes: expectedCodes,
-	}
-	w.updater.AddOrUpdate(svc)
-	w.logger.Info("service updated",
-		"namespace", ingress.Namespace,
-		"name", ingress.Name,
-		"url", url)
-}
-
-func (w *Watcher) onDelete(obj interface{}) {
+	func (w *Watcher) onDelete(obj interface{}) {
 	w.markK8sConnected()
 
 	ingress, ok := obj.(*networkingv1.Ingress)

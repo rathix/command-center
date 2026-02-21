@@ -44,12 +44,49 @@ func (f *fakeStore) Update(namespace, name string, fn func(*state.Service)) {
 }
 
 func (f *fakeStore) Get(namespace, name string) (state.Service, bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	svc, ok := f.services[namespace+"/"+name]
-	return svc, ok
+        f.mu.Lock()
+        defer f.mu.Unlock()
+        svc, ok := f.services[namespace+"/"+name]
+        return svc, ok
 }
 
+func (f *fakeStore) All() []state.Service {
+        f.mu.Lock()
+        defer f.mu.Unlock()
+        res := make([]state.Service, 0, len(f.services))
+        for _, s := range f.services {
+                res = append(res, s)
+        }
+        return res
+}
+
+func TestApplyOverrides_RestoreOriginalValues(t *testing.T) {
+        store := newFakeStore()
+        // Pre-populate a K8s service with original value
+        store.AddOrUpdate(state.Service{
+                Name:                "pihole",
+                Namespace:           "default",
+                DisplayName:         "overridden",
+                OriginalDisplayName: "pihole",
+                Source:              state.SourceKubernetes,
+                Icon:                "old-icon",
+        })
+
+        // Config with NO overrides for pihole
+        cfg := &Config{
+                Overrides: []ServiceOverride{},
+        }
+
+        ApplyOverrides(store, cfg)
+
+        svc, _ := store.Get("default", "pihole")
+        if svc.DisplayName != "pihole" {
+                t.Errorf("expected displayName restored to %q, got %q", "pihole", svc.DisplayName)
+        }
+        if svc.Icon != "" {
+                t.Errorf("expected icon cleared, got %q", svc.Icon)
+        }
+}
 func TestRegisterServices_CustomServicesAppearInStore(t *testing.T) {
 	store := newFakeStore()
 	cfg := &Config{

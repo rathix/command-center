@@ -23,23 +23,23 @@ const (
 
 // Service represents a discovered service with health information.
 type Service struct {
-	Name                string       `json:"name"`
-	DisplayName         string       `json:"displayName"`
-	Namespace           string       `json:"namespace"`
-	Group               string       `json:"group"`
-	URL                 string       `json:"url"`
-	Icon                string       `json:"icon,omitempty"`
-	Source              string       `json:"source"`
-	Status              HealthStatus `json:"status"`
-	HTTPCode            *int         `json:"httpCode"`
-	ResponseTimeMs      *int64       `json:"responseTimeMs"`
-	LastChecked         *time.Time   `json:"lastChecked"`
-	LastStateChange     *time.Time   `json:"lastStateChange"`
-	ErrorSnippet        *string      `json:"errorSnippet"`
-	HealthEndpoint      string       `json:"healthEndpoint,omitempty"`
-	ExpectedStatusCodes []int        `json:"expectedStatusCodes,omitempty"`
+        Name                string       `json:"name"`
+        DisplayName         string       `json:"displayName"`
+        OriginalDisplayName string       `json:"originalDisplayName,omitempty"`
+        Namespace           string       `json:"namespace"`
+        Group               string       `json:"group"`
+        URL                 string       `json:"url"`
+        Icon                string       `json:"icon,omitempty"`
+        Source              string       `json:"source"`
+        Status              HealthStatus `json:"status"`
+        HTTPCode            *int         `json:"httpCode"`
+        ResponseTimeMs      *int64       `json:"responseTimeMs"`
+        LastChecked         *time.Time   `json:"lastChecked"`
+        LastStateChange     *time.Time   `json:"lastStateChange"`
+        ErrorSnippet        *string      `json:"errorSnippet"`
+        HealthEndpoint      string       `json:"healthEndpoint,omitempty"`
+        ExpectedStatusCodes []int        `json:"expectedStatusCodes,omitempty"`
 }
-
 // EventType identifies the kind of state mutation.
 type EventType int
 

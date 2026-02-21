@@ -451,7 +451,52 @@ services:
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 duplicate-name validation error, got %d: %v", len(errs), errs)
 	}
-	if !strings.Contains(errs[0].Error(), "duplicate service name") {
-		t.Fatalf("expected duplicate-name error, got: %v", errs[0])
+	        if !strings.Contains(errs[0].Error(), "duplicate service name") {
+	                t.Fatalf("expected duplicate-name error, got: %v", errs[0])
+	        }
+	}
+	
+func TestLoad_URLValidation(t *testing.T) {
+	tests := []struct {
+		name  string
+		url   string
+		valid bool
+	}{
+		{"valid absolute URL", "https://nas.local", true},
+		{"valid http", "http://router.local", true},
+		{"invalid scheme", "nas.local", false},
+		{"empty host", "https://", false},
+		{"malformed", "://bad", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yaml := `
+services:
+  - name: "test"
+    url: "` + tt.url + `"
+    group: "infra"
+`
+			path := writeTempConfig(t, yaml)
+			cfg, errs := Load(path)
+			if cfg == nil {
+				t.Fatal("expected non-nil config")
+			}
+			if tt.valid {
+				if len(errs) != 0 {
+					t.Errorf("expected no errors for %q, got %v", tt.url, errs)
+				}
+				if len(cfg.Services) != 1 {
+					t.Errorf("expected 1 service, got %d", len(cfg.Services))
+				}
+			} else {
+				if len(cfg.Services) != 0 {
+					t.Errorf("expected 0 services for invalid URL %q, got %d", tt.url, len(cfg.Services))
+				}
+				if len(errs) == 0 {
+					t.Errorf("expected validation error for invalid URL %q", tt.url)
+				}
+			}
+		})
 	}
 }
+	
