@@ -37,6 +37,7 @@ type Service struct {
         LastChecked         *time.Time   `json:"lastChecked"`
         LastStateChange     *time.Time   `json:"lastStateChange"`
         ErrorSnippet        *string      `json:"errorSnippet"`
+        AuthMethod          string       `json:"authMethod,omitempty"`
         HealthURL           string       `json:"healthUrl,omitempty"`
         ExpectedStatusCodes []int        `json:"expectedStatusCodes,omitempty"`
 }
