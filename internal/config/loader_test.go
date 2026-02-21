@@ -50,9 +50,10 @@ history:
   retentionDays: 30
 
 oidc:
-  provider: "https://auth.example.com"
-  clientId: "my-client"
-  clientSecret: "my-secret"
+  issuerUrl: "https://auth.example.com"
+  scopes:
+    - "openid"
+    - "profile"
 `
 	path := writeTempConfig(t, yaml)
 	cfg, errs := Load(path)
@@ -138,11 +139,11 @@ oidc:
 	}
 
 	// OIDC
-	if cfg.OIDC.Provider != "https://auth.example.com" {
-		t.Errorf("oidc provider = %q, want %q", cfg.OIDC.Provider, "https://auth.example.com")
+	if cfg.OIDC.IssuerURL != "https://auth.example.com" {
+		t.Errorf("oidc issuerUrl = %q, want %q", cfg.OIDC.IssuerURL, "https://auth.example.com")
 	}
-	if cfg.OIDC.ClientID != "my-client" {
-		t.Errorf("oidc clientId = %q, want %q", cfg.OIDC.ClientID, "my-client")
+	if len(cfg.OIDC.Scopes) != 2 || cfg.OIDC.Scopes[0] != "openid" || cfg.OIDC.Scopes[1] != "profile" {
+		t.Errorf("oidc scopes = %v, want [openid profile]", cfg.OIDC.Scopes)
 	}
 }
 
@@ -373,7 +374,7 @@ history:
 `},
 		{"only oidc", `
 oidc:
-  provider: "https://auth.example.com"
+  issuerUrl: "https://auth.example.com"
 `},
 		{"completely empty sections", `{}`},
 	}
