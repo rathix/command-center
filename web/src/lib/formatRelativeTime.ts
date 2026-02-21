@@ -31,5 +31,9 @@ export function formatRelativeTime(
 	const diffMin = Math.floor(diffSec / 60);
 	if (diffMin < 60) return `${diffMin}m${suffix}`;
 	const diffHour = Math.floor(diffMin / 60);
-	return `${diffHour}h${suffix}`;
+	if (diffHour < 24) return `${diffHour}h${suffix}`;
+	const diffDay = Math.floor(diffHour / 24);
+	if (diffDay < 7) return `${diffDay}d${suffix}`;
+	const diffWeek = Math.floor(diffDay / 7);
+	return `${diffWeek}w${suffix}`;
 }

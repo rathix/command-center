@@ -204,6 +204,42 @@ describe('HoverTooltip', () => {
 		expect(screen.queryByText(/Source:/)).not.toBeInTheDocument();
 	});
 
+	it('shows correct duration from lastStateChange when lastChecked is null (pre-populated startup state)', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'healthy',
+					lastChecked: null,
+					lastStateChange: '2026-02-20T08:00:00Z'
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		const durationEl = screen.getByText(/healthy for 2h/);
+		expect(durationEl).toBeInTheDocument();
+		expect(durationEl).toHaveClass('text-health-ok');
+	});
+
+	it('shows day-scale duration for lastStateChange days ago with null lastChecked', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'healthy',
+					lastChecked: null,
+					lastStateChange: '2026-02-18T10:00:00Z'
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText(/healthy for 2d/)).toBeInTheDocument();
+	});
+
 	it('renders with graceful defaults when lastStateChange is null', () => {
 		render(HoverTooltip, {
 			props: {
