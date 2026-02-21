@@ -427,6 +427,79 @@ func TestRunWithInvalidKubeconfigContinuesServing(t *testing.T) {
 			t.Errorf("run() returned error: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("run() did not shut down within 5 seconds")
+		t.Fatal("run() did not shut down within 5 seconds after cancel")
+	}
+}
+
+// === Session Duration Config Tests ===
+
+func TestConfigSessionDurationDefault(t *testing.T) {
+	cfg, err := loadConfig([]string{})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	if cfg.SessionDuration != 24*time.Hour {
+		t.Errorf("SessionDuration = %v, want 24h", cfg.SessionDuration)
+	}
+}
+
+func TestConfigSessionDurationFlag(t *testing.T) {
+	cfg, err := loadConfig([]string{"--session-duration", "12h"})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	if cfg.SessionDuration != 12*time.Hour {
+		t.Errorf("SessionDuration = %v, want 12h", cfg.SessionDuration)
+	}
+}
+
+func TestConfigSessionDurationEnv(t *testing.T) {
+	t.Setenv("SESSION_DURATION", "48h")
+	cfg, err := loadConfig([]string{})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	if cfg.SessionDuration != 48*time.Hour {
+		t.Errorf("SessionDuration = %v, want 48h", cfg.SessionDuration)
+	}
+}
+
+func TestConfigSessionDurationTooShort(t *testing.T) {
+	_, err := loadConfig([]string{"--session-duration", "30s"})
+	if err == nil {
+		t.Fatal("loadConfig() with 30s session duration should return error")
+	}
+	if !strings.Contains(err.Error(), "at least 1m") {
+		t.Errorf("error should mention at least 1m, got: %v", err)
+	}
+}
+
+func TestConfigSessionDurationTooLong(t *testing.T) {
+	_, err := loadConfig([]string{"--session-duration", "8760h"})
+	if err == nil {
+		t.Fatal("loadConfig() with 8760h session duration should return error")
+	}
+	if !strings.Contains(err.Error(), "at most 720h") {
+		t.Errorf("error should mention at most 720h, got: %v", err)
+	}
+}
+
+func TestConfigSessionDurationNegative(t *testing.T) {
+	_, err := loadConfig([]string{"--session-duration", "-1h"})
+	if err == nil {
+		t.Fatal("loadConfig() with negative session duration should return error")
+	}
+	if !strings.Contains(err.Error(), "positive") {
+		t.Errorf("error should mention positive, got: %v", err)
+	}
+}
+
+func TestConfigSessionDurationZero(t *testing.T) {
+	_, err := loadConfig([]string{"--session-duration", "0s"})
+	if err == nil {
+		t.Fatal("loadConfig() with zero session duration should return error")
+	}
+	if !strings.Contains(err.Error(), "positive") {
+		t.Errorf("error should mention positive, got: %v", err)
 	}
 }

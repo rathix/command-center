@@ -20,6 +20,7 @@ import (
 	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/k8s"
 	"github.com/rathix/command-center/internal/server"
+	"github.com/rathix/command-center/internal/session"
 	"github.com/rathix/command-center/internal/sse"
 	"github.com/rathix/command-center/internal/state"
 )
@@ -31,16 +32,17 @@ var Version = "(unknown)"
 
 // config holds all server configuration.
 type config struct {
-	Dev            bool
-	ShowVersion    bool
-	ListenAddr     string
-	Kubeconfig     string
-	HealthInterval time.Duration
-	DataDir        string
-	LogFormat      string
-	TLSCACert      string
-	TLSCert        string
-	TLSKey         string
+	Dev             bool
+	ShowVersion     bool
+	ListenAddr      string
+	Kubeconfig      string
+	HealthInterval  time.Duration
+	SessionDuration time.Duration
+	DataDir         string
+	LogFormat       string
+	TLSCACert       string
+	TLSCert         string
+	TLSKey          string
 }
 
 func main() {
@@ -80,6 +82,9 @@ func loadConfig(args []string) (config, error) {
 	healthIntervalStr := getEnv("HEALTH_INTERVAL", "30s")
 	fs.StringVar(&healthIntervalStr, "health-interval", healthIntervalStr, "health check interval")
 
+	sessionDurationStr := getEnv("SESSION_DURATION", "24h")
+	fs.StringVar(&sessionDurationStr, "session-duration", sessionDurationStr, "session cookie duration")
+
 	fs.StringVar(&cfg.DataDir, "data-dir", getEnv("DATA_DIR", "/data"), "data directory for certificates")
 	fs.StringVar(&cfg.LogFormat, "log-format", getEnv("LOG_FORMAT", "json"), "log format (json or text)")
 	fs.StringVar(&cfg.TLSCACert, "tls-ca-cert", getEnv("TLS_CA_CERT", ""), "custom CA certificate path")
@@ -98,6 +103,21 @@ func loadConfig(args []string) (config, error) {
 		return config{}, fmt.Errorf("health interval must be at least 1s, got %q", healthIntervalStr)
 	}
 	cfg.HealthInterval = interval
+
+	sessionDuration, err := time.ParseDuration(sessionDurationStr)
+	if err != nil {
+		return config{}, fmt.Errorf("invalid session duration %q: %w", sessionDurationStr, err)
+	}
+	if sessionDuration <= 0 {
+		return config{}, fmt.Errorf("session duration must be positive, got %q", sessionDurationStr)
+	}
+	if sessionDuration < time.Minute {
+		return config{}, fmt.Errorf("session duration must be at least 1m, got %q", sessionDurationStr)
+	}
+	if sessionDuration > 720*time.Hour {
+		return config{}, fmt.Errorf("session duration must be at most 720h (30 days), got %q", sessionDurationStr)
+	}
+	cfg.SessionDuration = sessionDuration
 
 	if cfg.LogFormat != "json" && cfg.LogFormat != "text" {
 		return config{}, fmt.Errorf("unsupported log format %q: must be \"json\" or \"text\"", cfg.LogFormat)
@@ -195,17 +215,15 @@ func run(ctx context.Context, cfg config) error {
 		mux.Handle("/", proxy)
 		slog.Info("Dev mode: proxying to Vite", "url", viteURL)
 	} else {
-		handler, err := server.NewSPAHandler(commandcenter.WebFS, "web/build")
+		spaHandler, err := server.NewSPAHandler(commandcenter.WebFS, "web/build")
 		if err != nil {
 			return fmt.Errorf("failed to create SPA handler: %w", err)
 		}
-		mux.Handle("/", handler)
+		mux.Handle("/", spaHandler)
 	}
 
-	srv := &http.Server{
-		Addr:    cfg.ListenAddr,
-		Handler: mux,
-	}
+	var handler http.Handler = mux
+	var tlsConfig *tls.Config
 
 	// Configure TLS/mTLS for non-dev mode
 	if !cfg.Dev {
@@ -249,11 +267,29 @@ func run(ctx context.Context, cfg config) error {
 			slog.Info("Install client.crt + client.key in your browser to access Command Center")
 		}
 
-		tlsConfig, err := certs.NewTLSConfig(assets.CACertPath, assets.ServerCertPath, assets.ServerKeyPath)
+		tlsConfig, err = certs.NewTLSConfig(assets.CACertPath, assets.ServerCertPath, assets.ServerKeyPath)
 		if err != nil {
 			return fmt.Errorf("failed to create TLS config: %w", err)
 		}
-		srv.TLSConfig = tlsConfig
+
+		// Generate HMAC secret and wrap mux with session middleware
+		secret, err := session.GenerateSecret()
+		if err != nil {
+			return fmt.Errorf("failed to generate session secret: %w", err)
+		}
+		sessionCfg := session.Config{
+			Secret:   secret,
+			Duration: cfg.SessionDuration,
+			Secure:   true,
+		}
+		handler = session.Middleware(mux, sessionCfg)
+		slog.Info("Session authentication enabled", "duration", cfg.SessionDuration)
+	}
+
+	srv := &http.Server{
+		Addr:      cfg.ListenAddr,
+		Handler:   handler,
+		TLSConfig: tlsConfig,
 	}
 
 	// Channel to catch server errors

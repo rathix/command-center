@@ -392,7 +392,7 @@ func NewTLSConfig(caCertPath, serverCertPath, serverKeyPath string) (*tls.Config
 
 	return &tls.Config{
 		MinVersion:   tls.VersionTLS13,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientAuth:   tls.VerifyClientCertIfGiven,
 		ClientCAs:    caCertPool,
 		Certificates: []tls.Certificate{serverCert},
 	}, nil

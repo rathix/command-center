@@ -694,7 +694,7 @@ func TestNewTLSConfigMinVersionTLS13(t *testing.T) {
 	}
 }
 
-func TestNewTLSConfigRequiresClientCert(t *testing.T) {
+func TestNewTLSConfigVerifiesClientCertIfGiven(t *testing.T) {
 	assets, _ := generateTestCerts(t)
 
 	tlsCfg, err := NewTLSConfig(assets.CACertPath, assets.ServerCertPath, assets.ServerKeyPath)
@@ -702,8 +702,8 @@ func TestNewTLSConfigRequiresClientCert(t *testing.T) {
 		t.Fatalf("NewTLSConfig: %v", err)
 	}
 
-	if tlsCfg.ClientAuth != tls.RequireAndVerifyClientCert {
-		t.Errorf("expected RequireAndVerifyClientCert, got %v", tlsCfg.ClientAuth)
+	if tlsCfg.ClientAuth != tls.VerifyClientCertIfGiven {
+		t.Errorf("expected VerifyClientCertIfGiven, got %v", tlsCfg.ClientAuth)
 	}
 }
 
@@ -780,7 +780,9 @@ func TestTLSHandshakeValidClientAccepted(t *testing.T) {
 	}
 }
 
-func TestTLSHandshakeNoClientCertRejected(t *testing.T) {
+func TestTLSHandshakeNoClientCertAllowed(t *testing.T) {
+	// With VerifyClientCertIfGiven, requests without a client cert are accepted
+	// at the TLS layer. Authentication is enforced by session middleware instead.
 	assets, _ := generateTestCerts(t)
 
 	tlsCfg, err := NewTLSConfig(assets.CACertPath, assets.ServerCertPath, assets.ServerKeyPath)
@@ -809,9 +811,13 @@ func TestTLSHandshakeNoClientCertRejected(t *testing.T) {
 		},
 	}
 
-	_, err = client.Get(srv.URL)
-	if err == nil {
-		t.Error("request without client cert should fail")
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("request without client cert should succeed at TLS layer: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 }
 
