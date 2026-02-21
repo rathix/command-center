@@ -219,6 +219,7 @@ func TestGracefulShutdownViaContext(t *testing.T) {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
 	cfg.Dev = true // dev mode uses plain HTTP, no TLS setup needed
+	cfg.HistoryFile = filepath.Join(t.TempDir(), "history.jsonl")
 
 	runErr := make(chan error, 1)
 	go func() {
@@ -254,6 +255,7 @@ func TestDevModeUsesPlainHTTP(t *testing.T) {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
 	cfg.Dev = true
+	cfg.HistoryFile = filepath.Join(t.TempDir(), "history.jsonl")
 
 	go func() {
 		_ = run(ctx, cfg)
@@ -369,6 +371,7 @@ func TestSSEEndpointReturnsEventStream(t *testing.T) {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
 	cfg.Dev = true
+	cfg.HistoryFile = filepath.Join(t.TempDir(), "history.jsonl")
 
 	go func() {
 		_ = run(ctx, cfg)
@@ -406,6 +409,7 @@ func TestRunWithInvalidKubeconfigContinuesServing(t *testing.T) {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
 	cfg.Dev = true
+	cfg.HistoryFile = filepath.Join(t.TempDir(), "history.jsonl")
 
 	runErr := make(chan error, 1)
 	go func() {

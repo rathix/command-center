@@ -30,6 +30,7 @@ type HistoryWriter interface {
 // FileWriter implements HistoryWriter by appending JSONL to a file.
 type FileWriter struct {
 	mu     sync.Mutex
+	path   string
 	file   *os.File
 	logger *slog.Logger
 }
@@ -47,9 +48,22 @@ func NewFileWriter(path string, logger *slog.Logger) (*FileWriter, error) {
 	}
 
 	return &FileWriter{
+		path:   path,
 		file:   f,
 		logger: logger,
 	}, nil
+}
+
+// reopen closes the current file handle and opens a new one at the same path.
+// Must be called while mu is held.
+func (w *FileWriter) reopen() error {
+	w.file.Close()
+	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	w.file = f
+	return nil
 }
 
 // Record marshals the transition record as JSON and appends it as a single line.
@@ -72,6 +86,8 @@ func (w *FileWriter) Record(rec TransitionRecord) error {
 
 // Close closes the underlying file handle.
 func (w *FileWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.file.Close()
 }
 

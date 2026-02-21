@@ -325,7 +325,7 @@ func run(ctx context.Context, cfg config) error {
 	if lastAppCfg != nil && lastAppCfg.History.RetentionDays > 0 {
 		retentionDays = lastAppCfg.History.RetentionDays
 	}
-	pruner := history.NewPruner(cfg.HistoryFile, retentionDays, logger)
+	pruner := history.NewPruner(cfg.HistoryFile, retentionDays, historyWriter, logger)
 	go pruner.Run(ctx)
 
 	mux := http.NewServeMux()

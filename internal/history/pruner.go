@@ -40,7 +40,7 @@ func ReadAllRecords(path string) ([]TransitionRecord, error) {
 		records = append(records, rec)
 	}
 	if err := scanner.Err(); err != nil {
-		return records, err
+		return nil, err
 	}
 	return records, nil
 }
@@ -127,11 +127,14 @@ type Pruner struct {
 	path          string
 	retentionDays int
 	logger        *slog.Logger
+	writer        *FileWriter
 }
 
 // NewPruner creates a Pruner that will prune the file at path, removing
-// records older than retentionDays.
-func NewPruner(path string, retentionDays int, logger *slog.Logger) *Pruner {
+// records older than retentionDays. If writer is non-nil, the pruner
+// coordinates with it to prevent writes to a stale file descriptor
+// after the atomic rename.
+func NewPruner(path string, retentionDays int, writer *FileWriter, logger *slog.Logger) *Pruner {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
@@ -139,6 +142,7 @@ func NewPruner(path string, retentionDays int, logger *slog.Logger) *Pruner {
 		path:          path,
 		retentionDays: retentionDays,
 		logger:        logger,
+		writer:        writer,
 	}
 }
 
@@ -161,7 +165,17 @@ func (p *Pruner) Run(ctx context.Context) {
 }
 
 func (p *Pruner) runOnce() {
+	if p.writer != nil {
+		p.writer.mu.Lock()
+		defer p.writer.mu.Unlock()
+	}
 	if err := Prune(p.path, p.retentionDays, p.logger); err != nil {
 		p.logger.Warn("history prune failed", "error", err)
+		return
+	}
+	if p.writer != nil {
+		if err := p.writer.reopen(); err != nil {
+			p.logger.Warn("history writer reopen after prune failed", "error", err)
+		}
 	}
 }

@@ -361,7 +361,7 @@ func TestPrunerRun(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	pruner := NewPruner(path, 30, nil)
+	pruner := NewPruner(path, 30, nil, nil)
 
 	done := make(chan struct{})
 	go func() {
