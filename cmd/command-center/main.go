@@ -19,6 +19,7 @@ import (
 	"github.com/rathix/command-center/internal/certs"
 	appconfig "github.com/rathix/command-center/internal/config"
 	"github.com/rathix/command-center/internal/health"
+	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/k8s"
 	"github.com/rathix/command-center/internal/server"
 	"github.com/rathix/command-center/internal/session"
@@ -40,6 +41,7 @@ type config struct {
 	HealthInterval  time.Duration
 	SessionDuration time.Duration
 	DataDir         string
+	HistoryFile     string
 	LogFormat       string
 	TLSCACert       string
 	TLSCert         string
@@ -93,9 +95,14 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.TLSCert, "tls-cert", getEnv("TLS_CERT", ""), "custom server certificate path")
 	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
 	fs.StringVar(&cfg.ConfigFile, "config", getEnv("CONFIG_FILE", ""), "path to YAML config file for custom services")
+	fs.StringVar(&cfg.HistoryFile, "history-file", getEnv("HISTORY_FILE", ""), "path to history JSONL file")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
+	}
+
+	if cfg.HistoryFile == "" {
+		cfg.HistoryFile = filepath.Join(cfg.DataDir, "history.jsonl")
 	}
 
 	interval, err := time.ParseDuration(healthIntervalStr)
@@ -230,6 +237,39 @@ func run(ctx context.Context, cfg config) error {
 		slog.Info("Config overrides applied", "count", len(lastAppCfg.Overrides))
 	}
 
+	// Initialize history persistence
+	historyWriter, err := history.NewFileWriter(cfg.HistoryFile, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create history writer: %w", err)
+	}
+	defer historyWriter.Close()
+
+	records, err := history.ReadHistory(cfg.HistoryFile)
+	if err != nil {
+		slog.Warn("failed to read history", "error", err)
+		records = make(map[string]history.TransitionRecord)
+	}
+	pendingHistory := history.RestoreHistory(store, records, logger)
+
+	// Apply pending history for late-arriving services
+	pendingSub := store.Subscribe()
+	go func() {
+		defer store.Unsubscribe(pendingSub)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-pendingSub:
+				if !ok {
+					return
+				}
+				if event.Type == state.EventDiscovered {
+					pendingHistory.ApplyIfPending(store, event.Service.Namespace, event.Service.Name)
+				}
+			}
+		}
+	}()
+
 	// Start config file watcher for hot-reload
 	if cfg.ConfigFile != "" {
 		configWatcher := appconfig.NewWatcher(cfg.ConfigFile, func(newCfg *appconfig.Config, errs []error) {
@@ -278,8 +318,15 @@ func run(ctx context.Context, cfg config) error {
 			},
 		},
 	}
-	checker := health.NewChecker(store, store, probeClient, cfg.HealthInterval, logger)
+	checker := health.NewChecker(store, store, probeClient, cfg.HealthInterval, historyWriter, logger)
 	go checker.Run(ctx)
+
+	retentionDays := 30
+	if lastAppCfg != nil && lastAppCfg.History.RetentionDays > 0 {
+		retentionDays = lastAppCfg.History.RetentionDays
+	}
+	pruner := history.NewPruner(cfg.HistoryFile, retentionDays, logger)
+	go pruner.Run(ctx)
 
 	mux := http.NewServeMux()
 

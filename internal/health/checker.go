@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/state"
 )
 
@@ -31,24 +32,26 @@ type StateWriter interface {
 
 // Checker performs periodic HTTP health checks against discovered services.
 type Checker struct {
-	reader   StateReader
-	writer   StateWriter
-	client   HTTPProber
-	interval time.Duration
-	logger   *slog.Logger
+	reader        StateReader
+	writer        StateWriter
+	client        HTTPProber
+	interval      time.Duration
+	historyWriter history.HistoryWriter
+	logger        *slog.Logger
 }
 
 // NewChecker creates a new health checker. If logger is nil, a no-op logger is used.
-func NewChecker(reader StateReader, writer StateWriter, client HTTPProber, interval time.Duration, logger *slog.Logger) *Checker {
+func NewChecker(reader StateReader, writer StateWriter, client HTTPProber, interval time.Duration, historyWriter history.HistoryWriter, logger *slog.Logger) *Checker {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return &Checker{
-		reader:   reader,
-		writer:   writer,
-		client:   client,
-		interval: interval,
-		logger:   logger,
+		reader:        reader,
+		writer:        writer,
+		client:        client,
+		interval:      interval,
+		historyWriter: historyWriter,
+		logger:        logger,
 	}
 }
 
@@ -185,6 +188,16 @@ func (c *Checker) applyResult(svc *state.Service, res probeResult) {
 			"from", string(previousStatus),
 			"to", string(res.status),
 		)
+		if err := c.historyWriter.Record(history.TransitionRecord{
+			Timestamp:  now,
+			ServiceKey: svc.Namespace + "/" + svc.Name,
+			PrevStatus: previousStatus,
+			NextStatus: res.status,
+			HTTPCode:   res.httpCode,
+			ResponseMs: &res.responseTimeMs,
+		}); err != nil {
+			c.logger.Warn("history write failed", "service", svc.Name, "error", err)
+		}
 	}
 
 	logArgs := []any{
