@@ -619,3 +619,92 @@ func TestStoreConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestUpdateCallbackModifiesService(t *testing.T) {
+	store := NewStore()
+	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", Status: StatusUnknown})
+
+	store.Update("ns", "svc", func(svc *Service) {
+		svc.Status = StatusHealthy
+	})
+
+	got, ok := store.Get("ns", "svc")
+	if !ok {
+		t.Fatal("expected service to exist after Update")
+	}
+	if got.Status != StatusHealthy {
+		t.Errorf("expected status %q after Update, got %q", StatusHealthy, got.Status)
+	}
+}
+
+func TestUpdateFiresEventUpdatedOnSubscription(t *testing.T) {
+	store := NewStore()
+	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", Status: StatusUnknown})
+
+	events := store.Subscribe()
+
+	store.Update("ns", "svc", func(svc *Service) {
+		svc.Status = StatusHealthy
+	})
+
+	select {
+	case evt := <-events:
+		if evt.Type != EventUpdated {
+			t.Errorf("expected EventUpdated, got %v", evt.Type)
+		}
+		if evt.Service.Status != StatusHealthy {
+			t.Errorf("expected service status %q in event, got %q", StatusHealthy, evt.Service.Status)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for EventUpdated from Update()")
+	}
+}
+
+func TestUpdateNonExistentServiceIsNoOp(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	called := false
+	store.Update("ns", "missing", func(svc *Service) {
+		called = true
+	})
+
+	if called {
+		t.Error("callback should not be called for non-existent service")
+	}
+
+	select {
+	case evt := <-events:
+		t.Fatalf("expected no event for non-existent Update, got %+v", evt)
+	case <-time.After(50 * time.Millisecond):
+		// Success: no event emitted
+	}
+}
+
+func TestUpdateDeepCopiesEventPayload(t *testing.T) {
+	store := NewStore()
+	code := 200
+	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", HTTPCode: &code})
+
+	events := store.Subscribe()
+
+	store.Update("ns", "svc", func(svc *Service) {
+		newCode := 500
+		svc.HTTPCode = &newCode
+	})
+
+	select {
+	case evt := <-events:
+		// Modify the event payload — should not affect store
+		if evt.Service.HTTPCode != nil {
+			*evt.Service.HTTPCode = 999
+		}
+
+		got, _ := store.Get("ns", "svc")
+		if *got.HTTPCode != 500 {
+			t.Errorf("modifying event payload affected store: got %d, want 500", *got.HTTPCode)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event")
+	}
+}

@@ -354,6 +354,42 @@ func TestGetEnvBoolInvalidFallsBackToDefault(t *testing.T) {
 	}
 }
 
+// === SSE Endpoint Integration Tests ===
+
+func TestSSEEndpointReturnsEventStream(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	addr := getFreeAddr(t)
+	cfg, err := loadConfig([]string{"--listen-addr", addr})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	cfg.Dev = true
+
+	go func() {
+		_ = run(ctx, cfg)
+	}()
+
+	// Give the server time to start
+	time.Sleep(300 * time.Millisecond)
+
+	resp, err := http.Get("http://" + addr + "/api/events")
+	if err != nil {
+		t.Fatalf("GET /api/events failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	ct := resp.Header.Get("Content-Type")
+	if ct != "text/event-stream" {
+		t.Errorf("expected Content-Type 'text/event-stream', got %q", ct)
+	}
+}
+
 // === Story 2.1: K8s Watcher Integration Tests ===
 
 func TestRunWithInvalidKubeconfigContinuesServing(t *testing.T) {
