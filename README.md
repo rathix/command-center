@@ -54,8 +54,90 @@ All parameters support CLI flags and environment variables. Precedence: CLI flag
 | `--tls-ca-cert` | `TLS_CA_CERT` | *(auto-generated)* | Custom CA certificate path |
 | `--tls-cert` | `TLS_CERT` | *(auto-generated)* | Custom server certificate path |
 | `--tls-key` | `TLS_KEY` | *(auto-generated)* | Custom server key path |
+| `--config` | `CONFIG_FILE` | *(none)* | Path to YAML config file for custom services |
 
 See `.env.example` for a documented template.
+
+## YAML Configuration
+
+An optional YAML config file lets you define custom (non-Kubernetes) services, override properties of Kubernetes-discovered services, configure group metadata, and tune health checks — all without restarting.
+
+Point to it with `--config /path/to/config.yaml` or `CONFIG_FILE=/path/to/config.yaml`.
+
+**Hot-reload:** The file is watched via fsnotify. Edits are picked up automatically (~1 s debounce). If the new YAML is malformed, it is rejected and the last-known-good config stays active. Validation warnings (e.g. a service missing a required field) strip the invalid entry but keep the rest.
+
+### Example config.yaml
+
+```yaml
+# Custom services — non-Kubernetes services to monitor
+services:
+  - name: truenas
+    url: https://truenas.local
+    group: storage
+    displayName: TrueNAS
+    icon: server
+    healthEndpoint: /api/v2.0/system/state
+    expectedStatusCodes: [200]
+
+  - name: pihole
+    url: http://pihole.local
+    group: network
+    displayName: Pi-hole
+    icon: shield
+
+# Overrides — modify properties of Kubernetes-discovered services
+# Match format: namespace/name (from the Ingress object)
+overrides:
+  - match: default/grafana
+    displayName: Grafana Monitoring
+    icon: chart-line
+    healthEndpoint: /api/health
+
+  - match: media/jellyfin
+    displayName: Jellyfin
+    icon: film
+
+# Groups — display metadata for service groups
+groups:
+  storage:
+    displayName: Storage
+    icon: database
+    sortOrder: 1
+  network:
+    displayName: Network
+    icon: wifi
+    sortOrder: 2
+  media:
+    displayName: Media
+    icon: play-circle
+    sortOrder: 3
+
+# Health — tune health check behavior (overrides --health-interval)
+health:
+  interval: 30s
+  timeout: 10s
+```
+
+### Services
+
+Each custom service requires `name`, `url`, and `group`. Optional fields:
+
+| Field | Description |
+|-|-|
+| `displayName` | Label shown in the dashboard (defaults to `name`) |
+| `icon` | Icon identifier for the UI |
+| `healthEndpoint` | Path appended to `url` for health probes |
+| `expectedStatusCodes` | HTTP status codes treated as healthy (default: 200) |
+
+Service names must be unique. Duplicates are stripped with a validation warning.
+
+### Overrides
+
+Override any Kubernetes-discovered service by matching its `namespace/name`. Only set the fields you want to change — unset fields keep their Kubernetes-discovered values. Removing an override restores the original values on the next reload.
+
+### Groups
+
+Groups referenced by services are created automatically. The `groups` map adds display metadata: a friendly name, icon, and sort order for the dashboard layout.
 
 ## mTLS & Certificates
 
