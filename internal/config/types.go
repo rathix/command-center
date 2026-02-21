@@ -48,9 +48,10 @@ type HistoryConfig struct {
 	RetentionDays int `yaml:"retentionDays" json:"retentionDays"`
 }
 
-// OIDCConfig is a placeholder for Epic 8 OIDC authentication.
+// OIDCConfig controls OIDC authentication for health checks.
+// Credentials (clientId, clientSecret) come from the encrypted secrets file,
+// not from this config — only the provider URL and scopes live here.
 type OIDCConfig struct {
-	Provider     string `yaml:"provider"     json:"provider"`
-	ClientID     string `yaml:"clientId"     json:"clientId"`
-	ClientSecret string `yaml:"clientSecret" json:"clientSecret"`
+	IssuerURL string   `yaml:"issuerUrl" json:"issuerUrl"`
+	Scopes    []string `yaml:"scopes"    json:"scopes"`
 }

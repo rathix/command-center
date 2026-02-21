@@ -16,11 +16,13 @@ import (
 	"time"
 
 	commandcenter "github.com/rathix/command-center"
+	"github.com/rathix/command-center/internal/auth"
 	"github.com/rathix/command-center/internal/certs"
 	appconfig "github.com/rathix/command-center/internal/config"
 	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/k8s"
+	"github.com/rathix/command-center/internal/secrets"
 	"github.com/rathix/command-center/internal/server"
 	"github.com/rathix/command-center/internal/session"
 	"github.com/rathix/command-center/internal/sse"
@@ -42,6 +44,7 @@ type config struct {
 	SessionDuration time.Duration
 	DataDir         string
 	HistoryFile     string
+	SecretsFile     string
 	LogFormat       string
 	TLSCACert       string
 	TLSCert         string
@@ -96,6 +99,7 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
 	fs.StringVar(&cfg.ConfigFile, "config", getEnv("CONFIG_FILE", ""), "path to YAML config file for custom services")
 	fs.StringVar(&cfg.HistoryFile, "history-file", getEnv("HISTORY_FILE", ""), "path to history JSONL file")
+	fs.StringVar(&cfg.SecretsFile, "secrets", getEnv("SECRETS_FILE", ""), "path to encrypted secrets file")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -183,6 +187,17 @@ func run(ctx context.Context, cfg config) error {
 
 	slog.Info("Starting Command Center", "version", Version)
 
+	// Load optional encrypted secrets file
+	creds, err := secrets.LoadSecrets(cfg.SecretsFile, logger)
+	if err != nil {
+		slog.Error("secrets file decryption failed")
+		return fmt.Errorf("secrets: %w", err)
+	}
+	if creds != nil {
+		slog.Info("Secrets loaded successfully")
+	} else {
+		slog.Info("No secrets file configured, OIDC disabled")
+	}
 	store := state.NewStore()
 
 	// Load optional YAML config for custom services and overrides
@@ -212,7 +227,7 @@ func run(ctx context.Context, cfg config) error {
 	defer watcherCancel()
 
 	var watcher *k8s.Watcher
-	watcher, err := k8s.NewWatcher(cfg.Kubeconfig, store, logger)
+	watcher, err = k8s.NewWatcher(cfg.Kubeconfig, store, logger)
 	if err != nil {
 		slog.Warn("k8s watcher disabled: failed to create watcher", "error", err)
 	} else {
@@ -236,6 +251,24 @@ func run(ctx context.Context, cfg config) error {
 		appconfig.ApplyOverrides(store, lastAppCfg)
 		slog.Info("Config overrides applied", "count", len(lastAppCfg.Overrides))
 	}
+
+	// Create OIDC client if both config and credentials are available.
+	// The client is stored for later wiring to the health checker (Story 8.4).
+	var oidcClient *auth.OIDCClient
+	if lastAppCfg != nil && lastAppCfg.OIDC.IssuerURL != "" && creds != nil {
+		oidcClient = auth.NewOIDCClient(
+			lastAppCfg.OIDC.IssuerURL,
+			creds.ClientID,
+			creds.ClientSecret,
+			lastAppCfg.OIDC.Scopes,
+			logger,
+		)
+		slog.Info("OIDC authentication enabled")
+	} else {
+		slog.Info("OIDC authentication disabled")
+	}
+	// oidcClient will be passed to health checker in Story 8.4
+	_ = oidcClient
 
 	// Initialize history persistence
 	historyWriter, err := history.NewFileWriter(cfg.HistoryFile, logger)
@@ -308,7 +341,7 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	// Create and start SSE broker for real-time event streaming
-	broker := sse.NewBroker(store, logger, Version, cfg.HealthInterval)
+	broker := sse.NewBroker(store, nil, logger, Version, cfg.HealthInterval)
 	go broker.Run(ctx)
 
 	// Create and start HTTP health checker
