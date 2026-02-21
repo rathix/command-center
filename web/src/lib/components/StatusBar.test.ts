@@ -271,6 +271,39 @@ describe('StatusBar', () => {
 		});
 	});
 
+	describe('pre-populated startup state', () => {
+		it('shows health summary (not "Discovering services...") when services have null lastChecked', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'healthy', lastChecked: null, lastStateChange: '2026-02-18T10:00:00Z' }),
+				makeService({ name: 'svc-2', status: 'healthy', lastChecked: null, lastStateChange: '2026-02-18T10:00:00Z' })
+			], 'v1.0.0');
+			render(StatusBar);
+			expect(screen.queryByText('Discovering services...')).not.toBeInTheDocument();
+			expect(screen.getByText('2 services — all healthy')).toBeInTheDocument();
+		});
+
+		it('does not show "Last updated" timestamp when all services have null lastChecked', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'healthy', lastChecked: null, lastStateChange: '2026-02-18T10:00:00Z' })
+			], 'v1.0.0');
+			render(StatusBar);
+			expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
+		});
+
+		it('shows correct breakdown for mixed statuses with null lastChecked', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'healthy', lastChecked: null, lastStateChange: '2026-02-18T10:00:00Z' }),
+				makeService({ name: 'svc-2', status: 'unhealthy', lastChecked: null, lastStateChange: '2026-02-18T10:00:00Z' })
+			], 'v1.0.0');
+			render(StatusBar);
+			expect(screen.getByText('1 unhealthy')).toBeInTheDocument();
+			expect(screen.getByText('1 healthy')).toBeInTheDocument();
+		});
+	});
+
 	describe('config warning indicator', () => {
 		it('does not render ⚠ when there are no config errors', () => {
 			setConnectionStatus('connected');

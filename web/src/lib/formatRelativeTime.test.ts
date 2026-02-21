@@ -55,8 +55,28 @@ describe('formatRelativeTime', () => {
 		expect(formatRelativeTime('2026-02-20T11:00:00Z')).toBe('1h ago');
 	});
 
-	it('handles large hour values', () => {
-		expect(formatRelativeTime('2026-02-19T12:00:00Z')).toBe('24h ago');
+	it('returns "23h ago" at the boundary before days', () => {
+		expect(formatRelativeTime('2026-02-19T13:00:00Z')).toBe('23h ago');
+	});
+
+	it('returns days format for 1-6 days', () => {
+		expect(formatRelativeTime('2026-02-19T12:00:00Z')).toBe('1d ago');
+	});
+
+	it('returns "2d ago" for two days', () => {
+		expect(formatRelativeTime('2026-02-18T12:00:00Z')).toBe('2d ago');
+	});
+
+	it('returns "6d ago" at the boundary before weeks', () => {
+		expect(formatRelativeTime('2026-02-14T12:00:00Z')).toBe('6d ago');
+	});
+
+	it('returns weeks format for 7+ days', () => {
+		expect(formatRelativeTime('2026-02-13T12:00:00Z')).toBe('1w ago');
+	});
+
+	it('returns "2w ago" for two weeks', () => {
+		expect(formatRelativeTime('2026-02-06T12:00:00Z')).toBe('2w ago');
 	});
 
 	describe('includeSuffix: false', () => {
@@ -70,6 +90,14 @@ describe('formatRelativeTime', () => {
 
 		it('omits suffix for hours', () => {
 			expect(formatRelativeTime('2026-02-20T10:00:00Z', false)).toBe('2h');
+		});
+
+		it('omits suffix for days', () => {
+			expect(formatRelativeTime('2026-02-18T12:00:00Z', false)).toBe('2d');
+		});
+
+		it('omits suffix for weeks', () => {
+			expect(formatRelativeTime('2026-02-06T12:00:00Z', false)).toBe('2w');
 		});
 	});
 

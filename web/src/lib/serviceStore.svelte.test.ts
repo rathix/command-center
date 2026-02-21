@@ -480,6 +480,45 @@ describe('serviceStore', () => {
 		});
 	});
 
+	describe('pre-populated startup state', () => {
+		it('replaceAll preserves lastStateChange and status when lastChecked is null', () => {
+			replaceAll([
+				makeService({
+					name: 'svc-1',
+					status: 'healthy',
+					lastChecked: null,
+					lastStateChange: '2026-02-18T10:00:00Z'
+				})
+			], 'v1.0.0');
+			const services = getSortedServices();
+			expect(services).toHaveLength(1);
+			expect(services[0].status).toBe('healthy');
+			expect(services[0].lastStateChange).toBe('2026-02-18T10:00:00Z');
+			expect(services[0].lastChecked).toBeNull();
+		});
+
+		it('counts are correct when services have null lastChecked', () => {
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'healthy', lastChecked: null, lastStateChange: '2026-02-18T10:00:00Z' }),
+				makeService({ name: 'svc-2', status: 'unhealthy', lastChecked: null, lastStateChange: '2026-02-18T10:00:00Z' })
+			], 'v1.0.0');
+			expect(getCounts()).toEqual({
+				total: 2,
+				healthy: 1,
+				unhealthy: 1,
+				authBlocked: 0,
+				unknown: 0
+			});
+		});
+
+		it('lastUpdated is null when all services have null lastChecked', () => {
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'healthy', lastChecked: null, lastStateChange: '2026-02-18T10:00:00Z' })
+			], 'v1.0.0');
+			expect(getLastUpdated()).toBeNull();
+		});
+	});
+
 	describe('lastUpdated', () => {
 		it('is null initially', () => {
 			expect(getLastUpdated()).toBeNull();
