@@ -378,6 +378,18 @@ describe('serviceStore', () => {
 			expect(groups.map(g => g.name)).toEqual(['gamma', 'beta', 'delta', 'alpha', 'epsilon']);
 		});
 
+		it('groups with more unhealthy services sort higher', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'group-1', status: 'unhealthy' }),
+				makeService({ name: 'b', group: 'group-2', status: 'unhealthy' }),
+				makeService({ name: 'c', group: 'group-2', status: 'unhealthy' }),
+				makeService({ name: 'd', group: 'group-3', status: 'healthy' })
+			], 'v1.0.0');
+			const groups = getServiceGroups();
+			// group-2 (2 unhealthy) > group-1 (1 unhealthy) > group-3 (0 unhealthy)
+			expect(groups.map(g => g.name)).toEqual(['group-2', 'group-1', 'group-3']);
+		});
+
 		it('within-group sorting follows status priority then alphabetical', () => {
 			replaceAll([
 				makeService({ name: 'zebra', group: 'ns', status: 'healthy' }),

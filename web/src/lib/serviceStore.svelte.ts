@@ -21,15 +21,15 @@ let groupCollapseOverrides = $state(new Map<string, boolean>());
 function pruneGroupCollapseOverrides(nextServices: Map<string, Service>): void {
 	if (groupCollapseOverrides.size === 0) return;
 
-	const validGroups = new Set<string>();
-	for (const svc of nextServices.values()) {
-		validGroups.add(svc.group);
-	}
-
+	// Optimization: Instead of building a Set of all groups in N services,
+	// just check if each of the M overrides still has at least one service.
 	let removedAny = false;
 	const pruned = new Map<string, boolean>();
+	const servicesArray = [...nextServices.values()];
+
 	for (const [groupName, override] of groupCollapseOverrides) {
-		if (validGroups.has(groupName)) {
+		const stillExists = servicesArray.some((s) => s.group === groupName);
+		if (stillExists) {
 			pruned.set(groupName, override);
 		} else {
 			removedAny = true;
@@ -102,14 +102,17 @@ const serviceGroups = $derived.by<ServiceGroup[]>(() => {
 	}
 
 	groups.sort((a, b) => {
-		const aHasUnhealthy = a.counts.unhealthy > 0;
-		const bHasUnhealthy = b.counts.unhealthy > 0;
-		if (aHasUnhealthy && !bHasUnhealthy) return -1;
-		if (!aHasUnhealthy && bHasUnhealthy) return 1;
+		// Tier 1: Any unhealthy services? Sort by count descending
+		if (a.counts.unhealthy !== b.counts.unhealthy) {
+			return b.counts.unhealthy - a.counts.unhealthy;
+		}
 
-		if (a.hasProblems && !b.hasProblems) return -1;
-		if (!a.hasProblems && b.hasProblems) return 1;
+		// Tier 2: Any other problems (auth-blocked, unknown)?
+		if (a.hasProblems !== b.hasProblems) {
+			return a.hasProblems ? -1 : 1;
+		}
 
+		// Tier 3: Alphabetical by name (case-insensitive)
 		return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 	});
 
@@ -179,7 +182,6 @@ export function addOrUpdate(service: Service): void {
 	const updated = new Map(services);
 	updated.set(`${service.namespace}/${service.name}`, service);
 	services = updated;
-	pruneGroupCollapseOverrides(updated);
 	const checkedAt = parseLastChecked(service.lastChecked);
 	if (checkedAt && (!lastUpdated || checkedAt.getTime() > lastUpdated.getTime())) {
 		lastUpdated = checkedAt;

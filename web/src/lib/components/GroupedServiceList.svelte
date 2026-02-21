@@ -6,9 +6,12 @@
 	const groups = $derived.by(() => getServiceGroups());
 
 	function getControlsId(groupName: string): string {
-		const trimmed = groupName.trim();
-		if (!trimmed) return 'group-unnamed-services';
-		return `group-${encodeURIComponent(trimmed)}-services`;
+		const sanitized = groupName
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+		return sanitized ? `group-${sanitized}-services` : 'group-ungrouped-services';
 	}
 </script>
 

@@ -5,6 +5,7 @@
 	let { group, controlsId }: { group: ServiceGroup; controlsId: string } = $props();
 
 	const chevron = $derived(group.expanded ? '▾' : '▸');
+	const displayName = $derived(group.name.trim() || 'Ungrouped');
 
 	const summaryParts = $derived.by(() => {
 		const parts: { count: number; label: string; colorClass: string }[] = [];
@@ -44,7 +45,7 @@
 	onkeydown={handleKeydown}
 >
 	<span class="w-3 text-xs text-subtext-0" aria-hidden="true">{chevron}</span>
-	<span class="text-sm font-medium text-text">{group.name}</span>
+	<span class="text-sm font-medium text-text">{displayName}</span>
 	<span class="text-xs text-subtext-0">
 		({#each summaryParts as part, i (part.label)}{#if i > 0}, {/if}<span class={part.colorClass}>{part.count} {part.label}</span>{/each})
 	</span>

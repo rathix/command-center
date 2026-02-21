@@ -125,7 +125,7 @@ describe('GroupedServiceList', () => {
 		render(GroupedServiceList);
 		const button = screen.getByRole('button');
 		const controlsId = button.getAttribute('aria-controls');
-		expect(controlsId).toBe('group-infra%20%2F%20ops-services');
+		expect(controlsId).toBe('group-infra-ops-services');
 		expect(document.getElementById(controlsId!)).toBeTruthy();
 	});
 
