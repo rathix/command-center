@@ -23,7 +23,7 @@
 	const safeHref = $derived.by(() => sanitizeServiceUrl(service.url));
 	const iconName = $derived.by(() => {
 		const icon = service.icon?.trim();
-		return icon ? icon : service.name;
+		return icon || service.displayName;
 	});
 
 	const responseTextColorMap: Record<HealthStatus, string> = {

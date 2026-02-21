@@ -120,10 +120,10 @@ describe('ServiceRow', () => {
 		);
 	});
 
-	it('uses service name as icon fallback when icon override is empty', () => {
+	it('uses displayName as icon fallback when icon override is empty', () => {
 		const { container } = render(ServiceRow, {
 			props: {
-				service: makeService({ name: 'grafana', icon: '  ' }),
+				service: makeService({ name: 'grafana-ingress', displayName: 'grafana', icon: '  ' }),
 				odd: false
 			}
 		});
