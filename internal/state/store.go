@@ -20,6 +20,7 @@ type Service struct {
 	Name            string       `json:"name"`
 	DisplayName     string       `json:"displayName"`
 	Namespace       string       `json:"namespace"`
+	Group           string       `json:"group"`
 	URL             string       `json:"url"`
 	Status          HealthStatus `json:"status"`
 	HTTPCode        *int         `json:"httpCode"`

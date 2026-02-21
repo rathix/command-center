@@ -161,6 +161,9 @@ func TestWatcherDiscoverExistingIngresses(t *testing.T) {
 				if svc.Namespace != "default" {
 					t.Errorf("expected namespace 'default', got %q", svc.Namespace)
 				}
+				if svc.Group != "default" {
+					t.Errorf("expected group 'default', got %q", svc.Group)
+				}
 				if svc.URL != "https://my-app.example.com" {
 					t.Errorf("expected URL 'https://my-app.example.com', got %q", svc.URL)
 				}
@@ -358,6 +361,12 @@ updatePhase:
 				latest := added[len(added)-1]
 				if latest.URL != "https://new.example.com" {
 					t.Errorf("expected URL 'https://new.example.com', got %q", latest.URL)
+				}
+				if latest.Group != "default" {
+					t.Errorf("expected group 'default', got %q", latest.Group)
+				}
+				if latest.Group != latest.Namespace {
+					t.Errorf("expected group to match namespace, group=%q namespace=%q", latest.Group, latest.Namespace)
 				}
 				return
 			}
@@ -595,6 +604,42 @@ func TestWatcherDoesNotSetK8sConnectedWhenCacheSyncIncomplete(t *testing.T) {
 
 	if calls := updater.getK8sCalls(); len(calls) != 0 {
 		t.Fatalf("expected no SetK8sConnected calls when cache sync fails, got %v", calls)
+	}
+}
+
+func TestWatcherGroupMatchesNamespace(t *testing.T) {
+	ingress := newTestIngress("media-app", "media", "media-app.example.com", true)
+
+	clientset := fake.NewSimpleClientset(ingress)
+	updater := &fakeStateUpdater{}
+	logger := slog.Default()
+
+	w := NewWatcherWithClient(clientset, updater, logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go w.Run(ctx)
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for service discovery")
+		default:
+			added := updater.getAdded()
+			if len(added) >= 1 {
+				svc := added[0]
+				if svc.Group != "media" {
+					t.Errorf("expected group 'media' (matching namespace), got %q", svc.Group)
+				}
+				if svc.Group != svc.Namespace {
+					t.Errorf("expected group to match namespace, group=%q namespace=%q", svc.Group, svc.Namespace)
+				}
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 }
 

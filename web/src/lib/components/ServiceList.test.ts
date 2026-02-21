@@ -8,6 +8,7 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 	return {
 		displayName: overrides.displayName ?? overrides.name,
 		namespace: 'default',
+		group: 'default',
 		url: 'https://test.example.com',
 		status: 'unknown',
 		httpCode: null,

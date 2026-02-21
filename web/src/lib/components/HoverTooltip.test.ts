@@ -9,6 +9,7 @@ function makeService(overrides: Partial<Service> = {}): Service {
 		name: 'grafana',
 		displayName: 'grafana',
 		namespace: 'monitoring',
+		group: 'monitoring',
 		url: 'https://grafana.example.com',
 		status: 'healthy',
 		httpCode: 200,

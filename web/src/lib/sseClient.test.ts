@@ -78,6 +78,7 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 	return {
 		displayName: overrides.displayName ?? overrides.name,
 		namespace: 'default',
+		group: 'default',
 		url: 'https://test.example.com',
 		status: 'unknown',
 		httpCode: null,
@@ -316,6 +317,16 @@ describe('sseClient', () => {
 			expect(addOrUpdate).not.toHaveBeenCalled();
 
 			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-time', responseTimeMs: {} as unknown as number })));
+			expect(addOrUpdate).not.toHaveBeenCalled();
+		});
+
+		it('rejects service payloads missing group field', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+
+			const { group: _, ...serviceWithoutGroup } = makeService({ name: 'no-group' });
+			es.emit('discovered', JSON.stringify(serviceWithoutGroup));
 			expect(addOrUpdate).not.toHaveBeenCalled();
 		});
 	});

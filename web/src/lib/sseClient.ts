@@ -53,6 +53,7 @@ function isService(value: unknown): value is Service {
 		typeof value.name === 'string' &&
 		typeof value.displayName === 'string' &&
 		typeof value.namespace === 'string' &&
+		typeof value.group === 'string' &&
 		typeof value.url === 'string' &&
 		isHealthStatus(value.status) &&
 		isNullableNumber(value.httpCode) &&

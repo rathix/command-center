@@ -29,6 +29,7 @@ type DiscoveredEventPayload struct {
 	Name            string             `json:"name"`
 	DisplayName     string             `json:"displayName"`
 	Namespace       string             `json:"namespace"`
+	Group           string             `json:"group"`
 	URL             string             `json:"url"`
 	Status          state.HealthStatus `json:"status"`
 	HTTPCode        *int               `json:"httpCode"`
@@ -49,6 +50,7 @@ func discoveredEventPayloadFromService(svc state.Service) DiscoveredEventPayload
 		Name:            svc.Name,
 		DisplayName:     svc.DisplayName,
 		Namespace:       svc.Namespace,
+		Group:           svc.Group,
 		URL:             svc.URL,
 		Status:          svc.Status,
 		HTTPCode:        svc.HTTPCode,

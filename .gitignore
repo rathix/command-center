@@ -22,3 +22,6 @@ web/.svelte-kit/
 # Generated TLS certificates
 *.pem
 /certs/
+
+# OS artifacts
+.DS_Store

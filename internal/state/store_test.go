@@ -17,6 +17,7 @@ func TestServiceStructJSONTags(t *testing.T) {
 	svc := Service{
 		Name:            "my-app",
 		Namespace:       "default",
+		Group:           "default",
 		URL:             "https://my-app.example.com",
 		Status:          StatusUnknown,
 		HTTPCode:        &code,
@@ -73,6 +74,7 @@ func TestStoreAddOrUpdateAndGet(t *testing.T) {
 	svc := Service{
 		Name:      "web",
 		Namespace: "production",
+		Group:     "production",
 		URL:       "https://web.example.com",
 		Status:    StatusUnknown,
 	}
@@ -103,6 +105,7 @@ func TestStoreAddOrUpdateOverwrite(t *testing.T) {
 	svc := Service{
 		Name:      "api",
 		Namespace: "default",
+		Group:     "default",
 		URL:       "https://api.example.com",
 		Status:    StatusUnknown,
 	}
@@ -147,6 +150,7 @@ func TestStoreRemove(t *testing.T) {
 	svc := Service{
 		Name:      "worker",
 		Namespace: "jobs",
+		Group:     "jobs",
 		URL:       "https://worker.example.com",
 		Status:    StatusUnknown,
 	}
@@ -177,9 +181,9 @@ func TestStoreAll(t *testing.T) {
 
 	code := 200
 	services := []Service{
-		{Name: "svc-a", Namespace: "ns1", URL: "https://a.example.com", Status: StatusUnknown, HTTPCode: &code},
-		{Name: "svc-b", Namespace: "ns1", URL: "https://b.example.com", Status: StatusHealthy},
-		{Name: "svc-c", Namespace: "ns2", URL: "https://c.example.com", Status: StatusUnhealthy},
+		{Name: "svc-a", Namespace: "ns1", Group: "ns1", URL: "https://a.example.com", Status: StatusUnknown, HTTPCode: &code},
+		{Name: "svc-b", Namespace: "ns1", Group: "ns1", URL: "https://b.example.com", Status: StatusHealthy},
+		{Name: "svc-c", Namespace: "ns2", Group: "ns2", URL: "https://c.example.com", Status: StatusUnhealthy},
 	}
 
 	for _, svc := range services {
@@ -219,21 +223,22 @@ func TestStoreDeepCopy(t *testing.T) {
 	code := 200
 	now := time.Now()
 	err := "failed"
-	
+
 	s := Service{
 		Name:         "test",
+		Group:        "",
 		HTTPCode:     &code,
 		LastChecked:  &now,
 		ErrorSnippet: &err,
 	}
-	
+
 	cp := s.DeepCopy()
-	
+
 	// Modify original pointers
 	code = 404
 	now = now.Add(time.Hour)
 	err = "changed"
-	
+
 	if *cp.HTTPCode != 200 {
 		t.Errorf("DeepCopy failed for HTTPCode: got %d, want 200", *cp.HTTPCode)
 	}
@@ -248,11 +253,11 @@ func TestStoreDeepCopy(t *testing.T) {
 func TestStoreGetDeepCopy(t *testing.T) {
 	store := NewStore()
 	code := 200
-	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", HTTPCode: &code})
-	
+	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", Group: "ns", HTTPCode: &code})
+
 	got, _ := store.Get("ns", "svc")
 	*got.HTTPCode = 500
-	
+
 	got2, _ := store.Get("ns", "svc")
 	if *got2.HTTPCode != 200 {
 		t.Error("Get() returned a reference/shallow copy, modifying it affected store")
@@ -261,13 +266,13 @@ func TestStoreGetDeepCopy(t *testing.T) {
 
 func TestStoreMultipleSubscribers(t *testing.T) {
 	store := NewStore()
-	
+
 	sub1 := store.Subscribe()
 	sub2 := store.Subscribe()
-	
-	svc := Service{Name: "web", Namespace: "default"}
+
+	svc := Service{Name: "web", Namespace: "default", Group: "default"}
 	store.AddOrUpdate(svc)
-	
+
 	// Both should receive the event
 	for i, sub := range []<-chan Event{sub1, sub2} {
 		select {
@@ -279,12 +284,12 @@ func TestStoreMultipleSubscribers(t *testing.T) {
 			t.Fatalf("sub%d: timed out waiting for event", i+1)
 		}
 	}
-	
+
 	// Unsubscribe sub1
 	store.Unsubscribe(sub1)
-	
+
 	store.Remove("default", "web")
-	
+
 	// sub1 should be closed or not receive anything
 	select {
 	case _, ok := <-sub1:
@@ -294,7 +299,7 @@ func TestStoreMultipleSubscribers(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		// Unsubscribe closes the channel in my implementation
 	}
-	
+
 	// sub2 should still receive the event
 	select {
 	case evt := <-sub2:
@@ -313,6 +318,7 @@ func TestSubscribeDiscoveredEvent(t *testing.T) {
 	svc := Service{
 		Name:      "web",
 		Namespace: "default",
+		Group:     "default",
 		URL:       "https://web.example.com",
 		Status:    StatusUnknown,
 	}
@@ -341,6 +347,7 @@ func TestSubscribeUpdatedEvent(t *testing.T) {
 	svc := Service{
 		Name:      "api",
 		Namespace: "prod",
+		Group:     "prod",
 		URL:       "https://api.example.com",
 		Status:    StatusUnknown,
 	}
@@ -377,6 +384,7 @@ func TestSubscribeRemovedEvent(t *testing.T) {
 	svc := Service{
 		Name:      "worker",
 		Namespace: "jobs",
+		Group:     "jobs",
 		URL:       "https://worker.example.com",
 		Status:    StatusUnknown,
 	}
@@ -434,6 +442,7 @@ func TestSubscribeNonBlocking(t *testing.T) {
 			store.AddOrUpdate(Service{
 				Name:      fmt.Sprintf("svc-%d", i),
 				Namespace: "default",
+				Group:     "default",
 				URL:       "https://example.com",
 				Status:    StatusUnknown,
 			})
@@ -454,8 +463,8 @@ func TestSubscribeEventOrder(t *testing.T) {
 	events := store.Subscribe()
 
 	// Add svc-a (discovered), update svc-a (updated), remove svc-a (removed)
-	store.AddOrUpdate(Service{Name: "svc-a", Namespace: "ns", URL: "https://a.example.com", Status: StatusUnknown})
-	store.AddOrUpdate(Service{Name: "svc-a", Namespace: "ns", URL: "https://a.example.com", Status: StatusHealthy})
+	store.AddOrUpdate(Service{Name: "svc-a", Namespace: "ns", Group: "ns", URL: "https://a.example.com", Status: StatusUnknown})
+	store.AddOrUpdate(Service{Name: "svc-a", Namespace: "ns", Group: "ns", URL: "https://a.example.com", Status: StatusHealthy})
 	store.Remove("ns", "svc-a")
 
 	expected := []EventType{EventDiscovered, EventUpdated, EventRemoved}
@@ -585,6 +594,7 @@ func TestStoreConcurrentAccess(t *testing.T) {
 				svc := Service{
 					Name:      "svc",
 					Namespace: "ns",
+					Group:     "ns",
 					URL:       "https://svc.example.com",
 					Status:    HealthStatus("status-" + string(rune('0'+j%10))),
 				}
@@ -622,7 +632,7 @@ func TestStoreConcurrentAccess(t *testing.T) {
 
 func TestUpdateCallbackModifiesService(t *testing.T) {
 	store := NewStore()
-	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", Status: StatusUnknown})
+	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", Group: "ns", Status: StatusUnknown})
 
 	store.Update("ns", "svc", func(svc *Service) {
 		svc.Status = StatusHealthy
@@ -639,7 +649,7 @@ func TestUpdateCallbackModifiesService(t *testing.T) {
 
 func TestUpdateFiresEventUpdatedOnSubscription(t *testing.T) {
 	store := NewStore()
-	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", Status: StatusUnknown})
+	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", Group: "ns", Status: StatusUnknown})
 
 	events := store.Subscribe()
 
@@ -684,7 +694,7 @@ func TestUpdateNonExistentServiceIsNoOp(t *testing.T) {
 func TestUpdateDeepCopiesEventPayload(t *testing.T) {
 	store := NewStore()
 	code := 200
-	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", HTTPCode: &code})
+	store.AddOrUpdate(Service{Name: "svc", Namespace: "ns", Group: "ns", HTTPCode: &code})
 
 	events := store.Subscribe()
 

@@ -73,6 +73,7 @@ describe('types', () => {
 			name: 'api',
 			displayName: 'api',
 			namespace: 'default',
+			group: 'default',
 			url: 'https://api.example.local',
 			status: 'healthy',
 			httpCode: 200,
@@ -85,6 +86,7 @@ describe('types', () => {
 		expect(service).toHaveProperty('name');
 		expect(service).toHaveProperty('displayName');
 		expect(service).toHaveProperty('namespace');
+		expect(service).toHaveProperty('group');
 		expect(service).toHaveProperty('url');
 		expect(service).toHaveProperty('status');
 		expect(service).toHaveProperty('httpCode');

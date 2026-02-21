@@ -142,6 +142,7 @@ func (w *Watcher) onAdd(obj interface{}) {
 		Name:        ingress.Name,
 		DisplayName: displayName(host),
 		Namespace:   ingress.Namespace,
+		Group:       ingress.Namespace,
 		URL:         url,
 		Status:      state.StatusUnknown,
 	}
@@ -178,6 +179,7 @@ func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 		Name:        ingress.Name,
 		DisplayName: displayName(host),
 		Namespace:   ingress.Namespace,
+		Group:       ingress.Namespace,
 		URL:         url,
 		Status:      status,
 	}

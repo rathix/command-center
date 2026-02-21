@@ -18,6 +18,7 @@ describe('serviceStore structural integrity', () => {
 		store.replaceAll([{
 			name: 'svc-1',
 			namespace: 'default',
+			group: 'default',
 			displayName: 'Service 1',
 			url: 'http://svc-1',
 			status: 'healthy',
@@ -31,6 +32,7 @@ describe('serviceStore structural integrity', () => {
 		store.addOrUpdate({
 			name: 'svc-2',
 			namespace: 'other',
+			group: 'other',
 			displayName: 'Service 2',
 			url: 'http://svc-2',
 			status: 'unhealthy',

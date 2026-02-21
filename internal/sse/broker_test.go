@@ -160,7 +160,7 @@ func TestBrokerDiscoveredBroadcast(t *testing.T) {
 	// Send a discovered event
 	source.eventCh <- state.Event{
 		Type:    state.EventDiscovered,
-		Service: state.Service{Name: "new-svc", Namespace: "prod", URL: "https://new.example.com", Status: "unknown"},
+		Service: state.Service{Name: "new-svc", Namespace: "prod", Group: "prod", URL: "https://new.example.com", Status: "unknown"},
 	}
 
 	// Read the discovered event
@@ -186,6 +186,76 @@ func TestBrokerDiscoveredBroadcast(t *testing.T) {
 	}
 	if payload.Name != "new-svc" {
 		t.Errorf("expected name 'new-svc', got %q", payload.Name)
+	}
+	if payload.Group != "prod" {
+		t.Errorf("expected group 'prod', got %q", payload.Group)
+	}
+}
+
+func TestBrokerUpdateBroadcast(t *testing.T) {
+	source := newMockSource(nil)
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Drain initial state event
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			break
+		}
+	}
+
+	// Send an update event
+	source.eventCh <- state.Event{
+		Type: state.EventUpdated,
+		Service: state.Service{
+			Name:        "updated-svc",
+			DisplayName: "updated-svc",
+			Namespace:   "prod",
+			Group:       "prod",
+			URL:         "https://updated.example.com",
+			Status:      "healthy",
+		},
+	}
+
+	// Read the update event
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "update" {
+		t.Errorf("expected event type 'update', got %q", eventType)
+	}
+
+	var payload DiscoveredEventPayload
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		t.Fatalf("failed to unmarshal update payload: %v", err)
+	}
+	if payload.Name != "updated-svc" {
+		t.Errorf("expected name 'updated-svc', got %q", payload.Name)
+	}
+	if payload.Group != "prod" {
+		t.Errorf("expected group 'prod', got %q", payload.Group)
 	}
 }
 
@@ -596,7 +666,7 @@ func TestStateEventPayloadCamelCaseJSON(t *testing.T) {
 
 	jsonStr := string(data)
 	// Verify camelCase field names from state.Service json tags
-	for _, field := range []string{"name", "displayName", "namespace", "url", "status", "httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
+	for _, field := range []string{"name", "displayName", "namespace", "group", "url", "status", "httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
 		if !strings.Contains(jsonStr, `"`+field+`"`) {
 			t.Errorf("expected camelCase field %q in JSON, got: %s", field, jsonStr)
 		}
@@ -613,6 +683,7 @@ func TestDiscoveredEventPayloadCamelCaseJSON(t *testing.T) {
 		Name:            "web",
 		DisplayName:     "web",
 		Namespace:       "default",
+		Group:           "default",
 		URL:             "https://web.example.com",
 		Status:          "unknown",
 		HTTPCode:        &code,
@@ -628,7 +699,7 @@ func TestDiscoveredEventPayloadCamelCaseJSON(t *testing.T) {
 	}
 
 	jsonStr := string(data)
-	for _, field := range []string{"name", "displayName", "namespace", "url", "status", "httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
+	for _, field := range []string{"name", "displayName", "namespace", "group", "url", "status", "httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
 		if !strings.Contains(jsonStr, `"`+field+`"`) {
 			t.Errorf("expected camelCase field %q in JSON, got: %s", field, jsonStr)
 		}

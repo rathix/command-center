@@ -22,6 +22,7 @@ export interface Service {
 	name: string;
 	displayName: string;
 	namespace: string;
+	group: string;
 	url: string;
 	status: HealthStatus;
 	httpCode: number | null;
