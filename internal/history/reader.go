@@ -45,8 +45,11 @@ func (p *PendingHistory) ApplyIfPending(store StateWriter, namespace, name strin
 	ts := rec.Timestamp
 	status := rec.NextStatus
 	store.Update(namespace, name, func(svc *state.Service) {
-		svc.LastStateChange = &ts
-		svc.Status = status
+		// Only restore if we haven't performed a fresh health check yet.
+		if svc.LastChecked == nil {
+			svc.LastStateChange = &ts
+			svc.Status = status
+		}
 	})
 
 	if _, exists := store.Get(namespace, name); !exists {
@@ -126,8 +129,11 @@ func RestoreHistory(store StateWriter, records map[string]TransitionRecord, logg
 			ts := rec.Timestamp
 			status := rec.NextStatus
 			store.Update(namespace, name, func(svc *state.Service) {
-				svc.LastStateChange = &ts
-				svc.Status = status
+				// Only restore if we haven't performed a fresh health check yet.
+				if svc.LastChecked == nil {
+					svc.LastStateChange = &ts
+					svc.Status = status
+				}
 			})
 			restored++
 		} else {

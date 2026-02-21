@@ -25,6 +25,14 @@
 	});
 	const serviceLabel = $derived.by(() => (getCounts().total === 1 ? 'service' : 'services'));
 
+	const isInitialLoad = $derived.by(() => {
+		const status = getConnectionStatus();
+		const hasAnyService = getCounts().total > 0;
+		// If connected and has no services, it's either an empty environment or still waiting for first payload
+		// But replaceAll sets appVersion, so we can use that as a proxy for 'first payload received'
+		return status === 'connecting' && !hasAnyService;
+	});
+
 	let now = $state(Date.now());
 
 	$effect(() => {
@@ -80,7 +88,7 @@
 <div class="mx-auto max-w-[1200px]">
 	<div class="flex items-center justify-between" role="status" aria-live="polite">
 		<div class="flex items-center gap-2">
-			{#if getConnectionStatus() === 'connecting'}
+			{#if isInitialLoad}
 				<span class="text-sm font-semibold text-subtext-0">Discovering services...</span>
 			{:else if getCounts().total === 0 && getConnectionStatus() === 'connected'}
 				<span class="text-sm font-semibold text-subtext-0">No services discovered</span>

@@ -244,15 +244,10 @@ func run(ctx context.Context, cfg config) error {
 	}
 	defer historyWriter.Close()
 
-	records, err := history.ReadHistory(cfg.HistoryFile)
-	if err != nil {
-		slog.Warn("failed to read history", "error", err)
-		records = make(map[string]history.TransitionRecord)
-	}
-	pendingHistory := history.RestoreHistory(store, records, logger)
-
-	// Apply pending history for late-arriving services
+	// Apply pending history for late-arriving services.
+	// Subscribe BEFORE restoration to catch all EventDiscovered events.
 	pendingSub := store.Subscribe()
+	var pendingHistory *history.PendingHistory
 	go func() {
 		defer store.Unsubscribe(pendingSub)
 		for {
@@ -263,12 +258,19 @@ func run(ctx context.Context, cfg config) error {
 				if !ok {
 					return
 				}
-				if event.Type == state.EventDiscovered {
+				if event.Type == state.EventDiscovered && pendingHistory != nil {
 					pendingHistory.ApplyIfPending(store, event.Service.Namespace, event.Service.Name)
 				}
 			}
 		}
 	}()
+
+	records, err := history.ReadHistory(cfg.HistoryFile)
+	if err != nil {
+		slog.Warn("failed to read history", "error", err)
+		records = make(map[string]history.TransitionRecord)
+	}
+	pendingHistory = history.RestoreHistory(store, records, logger)
 
 	// Start config file watcher for hot-reload
 	if cfg.ConfigFile != "" {

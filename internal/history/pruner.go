@@ -91,7 +91,7 @@ func Prune(path string, retentionDays int, logger *slog.Logger) error {
 	}
 
 	tmpPath := path + ".tmp"
-	f, err := os.Create(tmpPath)
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}

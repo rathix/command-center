@@ -182,7 +182,9 @@ export function replaceAll(newServices: Service[], newAppVersion: string, newHea
 	const nextServices = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
 	services = nextServices;
 	pruneGroupCollapseOverrides(nextServices);
-	appVersion = newAppVersion;
+	if (newAppVersion) {
+		appVersion = newAppVersion;
+	}
 	healthCheckIntervalMs = newHealthCheckIntervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 	lastUpdated = newestLastChecked(services.values());
 }
