@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rathix/command-center/internal/auth"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/state"
 )
@@ -30,6 +31,18 @@ type StateWriter interface {
 	Update(namespace, name string, fn func(*state.Service))
 }
 
+// TokenProvider provides OIDC tokens for authenticated health checks.
+type TokenProvider interface {
+	GetToken(ctx context.Context) (string, error)
+}
+
+// EndpointDiscoverer discovers health endpoints for auth-blocked services.
+type EndpointDiscoverer interface {
+	GetStrategy(serviceKey string) *auth.EndpointStrategy
+	Discover(ctx context.Context, serviceKey string, baseURL string) (*auth.EndpointStrategy, error)
+	ClearStrategy(serviceKey string)
+}
+
 // Checker performs periodic HTTP health checks against discovered services.
 type Checker struct {
 	reader        StateReader
@@ -38,6 +51,10 @@ type Checker struct {
 	interval      time.Duration
 	historyWriter history.HistoryWriter
 	logger        *slog.Logger
+
+	// Optional OIDC fields — nil means MVP behavior (no auth retry).
+	tokenProvider TokenProvider
+	discoverer    EndpointDiscoverer
 }
 
 // NewChecker creates a new health checker. If logger is nil, a no-op logger is used.
@@ -56,6 +73,18 @@ func NewChecker(reader StateReader, writer StateWriter, client HTTPProber, inter
 		historyWriter: historyWriter,
 		logger:        logger,
 	}
+}
+
+// WithTokenProvider sets the OIDC token provider for authenticated health check retries.
+func (c *Checker) WithTokenProvider(tp TokenProvider) *Checker {
+	c.tokenProvider = tp
+	return c
+}
+
+// WithDiscoverer sets the endpoint discoverer for auth-blocked services.
+func (c *Checker) WithDiscoverer(d EndpointDiscoverer) *Checker {
+	c.discoverer = d
+	return c
 }
 
 // Run starts the health check loop. It performs an immediate check on start,
@@ -99,6 +128,11 @@ func (c *Checker) checkAll(ctx context.Context) {
 
 			// Perform the probe
 			result := c.probeService(ctx, probeURL)
+
+			// After initial probe returns auth-blocked, attempt OIDC resolution
+			if result.status == state.StatusAuthBlocked {
+				result = c.resolveAuthBlocked(ctx, s, result)
+			}
 
 			// Override status classification if ExpectedStatusCodes is set
 			if len(s.ExpectedStatusCodes) > 0 && result.httpCode != nil {
@@ -144,6 +178,98 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 			errorSnippet: ptrString(err.Error()),
 		}
 	}
+
+	start := time.Now()
+	resp, err := c.client.Do(req)
+	responseTimeMs := time.Since(start).Milliseconds()
+
+	if err != nil {
+		errMsg := err.Error()
+		return probeResult{
+			status:         state.StatusUnhealthy,
+			responseTimeMs: responseTimeMs,
+			errorSnippet:   &errMsg,
+		}
+	}
+	defer resp.Body.Close()
+
+	code := resp.StatusCode
+	newStatus := classifyStatus(code)
+
+	var snippet *string
+	if newStatus == state.StatusUnhealthy {
+		snippet = readSnippet(resp.Body)
+	}
+
+	return probeResult{
+		status:         newStatus,
+		httpCode:       &code,
+		responseTimeMs: responseTimeMs,
+		errorSnippet:   snippet,
+	}
+}
+
+// resolveAuthBlocked attempts to resolve an auth-blocked service using endpoint
+// discovery and/or OIDC authentication. If tokenProvider is nil, it returns the
+// initial result unchanged (MVP behavior).
+func (c *Checker) resolveAuthBlocked(ctx context.Context, svc state.Service, initialResult probeResult) probeResult {
+	if c.tokenProvider == nil {
+		return initialResult
+	}
+
+	serviceKey := svc.Namespace + "/" + svc.Name
+
+	if c.discoverer != nil {
+		// Check for a cached strategy first
+		strategy := c.discoverer.GetStrategy(serviceKey)
+
+		if strategy == nil {
+			// No cache — run discovery
+			discovered, err := c.discoverer.Discover(ctx, serviceKey, svc.URL)
+			if err == nil && discovered != nil && discovered.Type == "healthEndpoint" && discovered.Endpoint != "" {
+				result := c.probeService(ctx, discovered.Endpoint)
+				if result.status == state.StatusHealthy {
+					return result
+				}
+				// Discovery endpoint didn't work — clear and fall through to OIDC
+				c.discoverer.ClearStrategy(serviceKey)
+			}
+		} else if strategy.Type == "healthEndpoint" && strategy.Endpoint != "" {
+			// Cached health endpoint — probe it
+			result := c.probeService(ctx, strategy.Endpoint)
+			if result.status == state.StatusHealthy {
+				return result
+			}
+			// Cached endpoint failed — clear and fall through to OIDC
+			c.discoverer.ClearStrategy(serviceKey)
+		}
+	}
+
+	// OIDC authenticated retry (fall-through path)
+	token, err := c.tokenProvider.GetToken(ctx)
+	if err != nil {
+		c.logger.Warn("OIDC token acquisition failed",
+			"service", svc.Name,
+			"namespace", svc.Namespace,
+			"error", err,
+		)
+		return initialResult
+	}
+
+	return c.probeServiceWithAuth(ctx, svc.URL, token)
+}
+
+// probeServiceWithAuth performs a single HTTP GET health check with an Authorization header.
+func (c *Checker) probeServiceWithAuth(ctx context.Context, url, token string) probeResult {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return probeResult{
+			status:       state.StatusUnhealthy,
+			errorSnippet: ptrString(err.Error()),
+		}
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	start := time.Now()
 	resp, err := c.client.Do(req)

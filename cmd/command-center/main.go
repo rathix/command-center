@@ -267,9 +267,6 @@ func run(ctx context.Context, cfg config) error {
 	} else {
 		slog.Info("OIDC authentication disabled")
 	}
-	// oidcClient will be passed to health checker in Story 8.4
-	_ = oidcClient
-
 	// Initialize history persistence
 	historyWriter, err := history.NewFileWriter(cfg.HistoryFile, logger)
 	if err != nil {
@@ -354,6 +351,11 @@ func run(ctx context.Context, cfg config) error {
 		},
 	}
 	checker := health.NewChecker(store, store, probeClient, cfg.HealthInterval, historyWriter, logger)
+	if oidcClient != nil {
+		endpointDiscoverer := auth.NewEndpointDiscoverer(probeClient, logger)
+		checker.WithTokenProvider(oidcClient).WithDiscoverer(endpointDiscoverer)
+		slog.Info("OIDC authentication enabled for health checks")
+	}
 	go checker.Run(ctx)
 
 	retentionDays := 30
