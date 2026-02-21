@@ -325,7 +325,8 @@ describe('sseClient', () => {
 			connect();
 			const es = MockEventSource.instances[0];
 
-			const { group: _, ...serviceWithoutGroup } = makeService({ name: 'no-group' });
+			const { group, ...serviceWithoutGroup } = makeService({ name: 'no-group' });
+			void group;
 			es.emit('discovered', JSON.stringify(serviceWithoutGroup));
 			expect(addOrUpdate).not.toHaveBeenCalled();
 		});
