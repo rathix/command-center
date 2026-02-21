@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
 	getSortedServices,
 	getGroupedServices,
+	getServiceGroups,
 	getCounts,
 	getHasProblems,
 	getConnectionStatus,
@@ -15,6 +16,7 @@ import {
 	remove,
 	setConnectionStatus,
 	setK8sStatus,
+	toggleGroupCollapse,
 	_resetForTesting
 } from './serviceStore.svelte';
 import type { Service } from './types';
@@ -421,6 +423,165 @@ describe('serviceStore', () => {
 			replaceAll([makeService({ name: 'svc' })], 'v1.0.0', 15_000);
 			_resetForTesting();
 			expect(getHealthCheckIntervalMs()).toBe(30_000);
+		});
+	});
+
+	describe('serviceGroups', () => {
+		it('returns services grouped by group field', () => {
+			replaceAll([
+				makeService({ name: 'svc-a', group: 'media', status: 'healthy' }),
+				makeService({ name: 'svc-b', group: 'infra', status: 'healthy' }),
+				makeService({ name: 'svc-c', group: 'media', status: 'healthy' })
+			], 'v1.0.0');
+			const groups = getServiceGroups();
+			expect(groups).toHaveLength(2);
+			const mediaGroup = groups.find(g => g.name === 'media');
+			const infraGroup = groups.find(g => g.name === 'infra');
+			expect(mediaGroup!.services).toHaveLength(2);
+			expect(infraGroup!.services).toHaveLength(1);
+		});
+
+		it('computes per-group counts correctly', () => {
+			replaceAll([
+				makeService({ name: 'h1', group: 'media', status: 'healthy' }),
+				makeService({ name: 'h2', group: 'media', status: 'healthy' }),
+				makeService({ name: 'h3', group: 'media', status: 'healthy' }),
+				makeService({ name: 'h4', group: 'media', status: 'healthy' }),
+				makeService({ name: 'h5', group: 'media', status: 'healthy' }),
+				makeService({ name: 'h6', group: 'media', status: 'healthy' }),
+				makeService({ name: 'h7', group: 'media', status: 'healthy' }),
+				makeService({ name: 'u1', group: 'media', status: 'unhealthy' })
+			], 'v1.0.0');
+			const groups = getServiceGroups();
+			const media = groups.find(g => g.name === 'media')!;
+			expect(media.counts).toEqual({ healthy: 7, unhealthy: 1, authBlocked: 0, unknown: 0 });
+		});
+
+		it('hasProblems is true when group has unhealthy/authBlocked/unknown services', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'good', status: 'healthy' }),
+				makeService({ name: 'b', group: 'good', status: 'healthy' }),
+				makeService({ name: 'c', group: 'bad', status: 'healthy' }),
+				makeService({ name: 'd', group: 'bad', status: 'unhealthy' }),
+				makeService({ name: 'e', group: 'mixed', status: 'healthy' }),
+				makeService({ name: 'f', group: 'mixed', status: 'authBlocked' })
+			], 'v1.0.0');
+			const groups = getServiceGroups();
+			expect(groups.find(g => g.name === 'good')!.hasProblems).toBe(false);
+			expect(groups.find(g => g.name === 'bad')!.hasProblems).toBe(true);
+			expect(groups.find(g => g.name === 'mixed')!.hasProblems).toBe(true);
+		});
+
+		it('groups with problems sort before all-healthy groups', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'alpha', status: 'healthy' }),
+				makeService({ name: 'b', group: 'beta', status: 'unhealthy' }),
+				makeService({ name: 'c', group: 'gamma', status: 'healthy' })
+			], 'v1.0.0');
+			const groups = getServiceGroups();
+			expect(groups.map(g => g.name)).toEqual(['beta', 'alpha', 'gamma']);
+		});
+
+		it('group sorting is 3-tier: unhealthy first, then other problem groups, then healthy alphabetical', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'alpha', status: 'healthy' }),
+				makeService({ name: 'b', group: 'beta', status: 'authBlocked' }),
+				makeService({ name: 'c', group: 'gamma', status: 'unhealthy' }),
+				makeService({ name: 'd', group: 'delta', status: 'unknown' }),
+				makeService({ name: 'e', group: 'epsilon', status: 'healthy' })
+			], 'v1.0.0');
+
+			const groups = getServiceGroups();
+			expect(groups.map(g => g.name)).toEqual(['gamma', 'beta', 'delta', 'alpha', 'epsilon']);
+		});
+
+		it('within-group sorting follows status priority then alphabetical', () => {
+			replaceAll([
+				makeService({ name: 'zebra', group: 'ns', status: 'healthy' }),
+				makeService({ name: 'alpha', group: 'ns', status: 'healthy' }),
+				makeService({ name: 'delta', group: 'ns', status: 'unknown' }),
+				makeService({ name: 'bravo', group: 'ns', status: 'authBlocked' }),
+				makeService({ name: 'echo', group: 'ns', status: 'unhealthy' })
+			], 'v1.0.0');
+			const group = getServiceGroups().find(g => g.name === 'ns')!;
+			expect(group.services.map(s => s.name)).toEqual([
+				'echo', 'bravo', 'delta', 'alpha', 'zebra'
+			]);
+		});
+
+		it('all-healthy groups sort alphabetically among themselves', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'zebra', status: 'healthy' }),
+				makeService({ name: 'b', group: 'alpha', status: 'healthy' }),
+				makeService({ name: 'c', group: 'mid', status: 'healthy' })
+			], 'v1.0.0');
+			const groups = getServiceGroups();
+			expect(groups.map(g => g.name)).toEqual(['alpha', 'mid', 'zebra']);
+		});
+
+		it('empty store returns empty array', () => {
+			expect(getServiceGroups()).toEqual([]);
+		});
+
+		it('toggleGroupCollapse flips expanded state and _resetForTesting clears overrides', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'healthy-group', status: 'healthy' }),
+				makeService({ name: 'b', group: 'problem-group', status: 'unhealthy' })
+			], 'v1.0.0');
+
+			// Default: healthy-group collapsed (expanded=false), problem-group expanded (expanded=true)
+			let groups = getServiceGroups();
+			expect(groups.find(g => g.name === 'healthy-group')!.expanded).toBe(false);
+			expect(groups.find(g => g.name === 'problem-group')!.expanded).toBe(true);
+
+			// Toggle healthy-group → should become expanded
+			toggleGroupCollapse('healthy-group');
+			groups = getServiceGroups();
+			expect(groups.find(g => g.name === 'healthy-group')!.expanded).toBe(true);
+
+			// Toggle problem-group → should become collapsed
+			toggleGroupCollapse('problem-group');
+			groups = getServiceGroups();
+			expect(groups.find(g => g.name === 'problem-group')!.expanded).toBe(false);
+
+			// Reset clears overrides — back to defaults
+			_resetForTesting();
+			replaceAll([
+				makeService({ name: 'a', group: 'healthy-group', status: 'healthy' }),
+				makeService({ name: 'b', group: 'problem-group', status: 'unhealthy' })
+			], 'v1.0.0');
+			groups = getServiceGroups();
+			expect(groups.find(g => g.name === 'healthy-group')!.expanded).toBe(false);
+			expect(groups.find(g => g.name === 'problem-group')!.expanded).toBe(true);
+		});
+
+		it('authBlocked-only groups are expanded by default', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'healthy-group', status: 'healthy' }),
+				makeService({ name: 'b', group: 'auth-group', status: 'authBlocked' })
+			], 'v1.0.0');
+
+			const groups = getServiceGroups();
+			expect(groups.find(g => g.name === 'healthy-group')!.expanded).toBe(false);
+			expect(groups.find(g => g.name === 'auth-group')!.expanded).toBe(true);
+		});
+
+		it('prunes stale collapse overrides when groups disappear', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'healthy-group', status: 'healthy' }),
+				makeService({ name: 'b', group: 'temp-group', status: 'unhealthy' })
+			], 'v1.0.0');
+
+			// temp-group starts expanded (problem group), toggle to collapsed
+			toggleGroupCollapse('temp-group');
+			expect(getServiceGroups().find(g => g.name === 'temp-group')!.expanded).toBe(false);
+
+			// Remove the only service in temp-group, then re-add the group later.
+			// The old override should be discarded.
+			remove('default', 'b');
+			addOrUpdate(makeService({ name: 'c', group: 'temp-group', status: 'unhealthy' }));
+
+			expect(getServiceGroups().find(g => g.name === 'temp-group')!.expanded).toBe(true);
 		});
 	});
 

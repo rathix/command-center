@@ -1,4 +1,4 @@
-import type { Service, HealthStatus, ConnectionStatus } from './types';
+import type { Service, ServiceGroup, HealthStatus, ConnectionStatus } from './types';
 import { DEFAULT_HEALTH_CHECK_INTERVAL_MS } from './types';
 
 const statusPriority: Record<HealthStatus, number> = {
@@ -21,6 +21,30 @@ let appVersion = $state<string>('');
 let k8sConnected = $state<boolean>(false);
 let k8sLastEvent = $state<Date | null>(null);
 let healthCheckIntervalMs = $state<number>(DEFAULT_HEALTH_CHECK_INTERVAL_MS);
+let groupCollapseOverrides = $state(new Map<string, boolean>());
+
+function pruneGroupCollapseOverrides(nextServices: Map<string, Service>): void {
+	if (groupCollapseOverrides.size === 0) return;
+
+	const validGroups = new Set<string>();
+	for (const svc of nextServices.values()) {
+		validGroups.add(svc.group);
+	}
+
+	let removedAny = false;
+	const pruned = new Map<string, boolean>();
+	for (const [groupName, override] of groupCollapseOverrides) {
+		if (validGroups.has(groupName)) {
+			pruned.set(groupName, override);
+		} else {
+			removedAny = true;
+		}
+	}
+
+	if (removedAny) {
+		groupCollapseOverrides = pruned;
+	}
+}
 
 function parseLastChecked(value: string | null): Date | null {
 	if (!value) return null;
@@ -65,6 +89,53 @@ const groupedServices = $derived.by<GroupedServices>(() => {
 	return { needsAttention, healthy };
 });
 
+const serviceGroups = $derived.by<ServiceGroup[]>(() => {
+	const groupMap = new Map<string, Service[]>();
+	for (const svc of services.values()) {
+		const g = svc.group;
+		if (!groupMap.has(g)) groupMap.set(g, []);
+		groupMap.get(g)!.push(svc);
+	}
+
+	const groups: ServiceGroup[] = [];
+	for (const [name, svcs] of groupMap) {
+		const sorted = [...svcs].sort((a, b) => {
+			const pri = statusPriority[a.status] - statusPriority[b.status];
+			if (pri !== 0) return pri;
+			return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
+		});
+
+		const groupCounts = {
+			healthy: svcs.filter((s) => s.status === 'healthy').length,
+			unhealthy: svcs.filter((s) => s.status === 'unhealthy').length,
+			authBlocked: svcs.filter((s) => s.status === 'authBlocked').length,
+			unknown: svcs.filter((s) => s.status === 'unknown').length
+		};
+
+		const hasProblems =
+			groupCounts.unhealthy > 0 || groupCounts.authBlocked > 0 || groupCounts.unknown > 0;
+
+		const override = groupCollapseOverrides.get(name);
+		const expanded = override !== undefined ? override : hasProblems;
+
+		groups.push({ name, services: sorted, counts: groupCounts, hasProblems, expanded });
+	}
+
+	groups.sort((a, b) => {
+		const aHasUnhealthy = a.counts.unhealthy > 0;
+		const bHasUnhealthy = b.counts.unhealthy > 0;
+		if (aHasUnhealthy && !bHasUnhealthy) return -1;
+		if (!aHasUnhealthy && bHasUnhealthy) return 1;
+
+		if (a.hasProblems && !b.hasProblems) return -1;
+		if (!a.hasProblems && b.hasProblems) return 1;
+
+		return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+	});
+
+	return groups;
+});
+
 const counts = $derived.by(() => {
 	const vals = [...services.values()];
 	return {
@@ -101,6 +172,9 @@ export function getLastUpdated(): Date | null {
 export function getGroupedServices(): GroupedServices {
 	return groupedServices;
 }
+export function getServiceGroups(): ServiceGroup[] {
+	return serviceGroups;
+}
 export function getAppVersion(): string {
 	return appVersion;
 }
@@ -116,7 +190,9 @@ export function getHealthCheckIntervalMs(): number {
 
 // Mutation functions (called by sseClient only)
 export function replaceAll(newServices: Service[], newAppVersion: string, newHealthCheckIntervalMs?: number): void {
-	services = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
+	const nextServices = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
+	services = nextServices;
+	pruneGroupCollapseOverrides(nextServices);
 	appVersion = newAppVersion;
 	healthCheckIntervalMs = newHealthCheckIntervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 	lastUpdated = newestLastChecked(services.values());
@@ -126,6 +202,7 @@ export function addOrUpdate(service: Service): void {
 	const updated = new Map(services);
 	updated.set(`${service.namespace}/${service.name}`, service);
 	services = updated;
+	pruneGroupCollapseOverrides(updated);
 	const checkedAt = parseLastChecked(service.lastChecked);
 	if (checkedAt && (!lastUpdated || checkedAt.getTime() > lastUpdated.getTime())) {
 		lastUpdated = checkedAt;
@@ -136,10 +213,19 @@ export function remove(namespace: string, name: string): void {
 	const updated = new Map(services);
 	updated.delete(`${namespace}/${name}`);
 	services = updated;
+	pruneGroupCollapseOverrides(updated);
 }
 
 export function setConnectionStatus(status: ConnectionStatus): void {
 	connectionStatus = status;
+}
+
+export function toggleGroupCollapse(groupName: string): void {
+	const group = serviceGroups.find((g) => g.name === groupName);
+	if (!group) return;
+	const newOverrides = new Map(groupCollapseOverrides);
+	newOverrides.set(groupName, !group.expanded);
+	groupCollapseOverrides = newOverrides;
 }
 
 export function setK8sStatus(connected: boolean, lastEvent: string | null): void {
@@ -156,4 +242,5 @@ export function _resetForTesting(): void {
 	k8sConnected = false;
 	k8sLastEvent = null;
 	healthCheckIntervalMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS;
+	groupCollapseOverrides = new Map();
 }

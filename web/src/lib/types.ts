@@ -32,6 +32,19 @@ export interface Service {
 	errorSnippet: string | null;
 }
 
+export interface ServiceGroup {
+	name: string;
+	services: Service[];
+	counts: {
+		healthy: number;
+		unhealthy: number;
+		authBlocked: number;
+		unknown: number;
+	};
+	hasProblems: boolean;
+	expanded: boolean;
+}
+
 export interface StateEventPayload {
 	appVersion: string;
 	services: Service[];

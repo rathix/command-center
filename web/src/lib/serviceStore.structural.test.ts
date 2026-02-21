@@ -73,6 +73,7 @@ describe('serviceStore structural integrity', () => {
 			'getConnectionStatus',
 			'getLastUpdated',
 			'getGroupedServices',
+			'getServiceGroups',
 			'getAppVersion',
 			'getK8sConnected',
 			'getK8sLastEvent',
