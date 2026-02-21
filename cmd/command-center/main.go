@@ -21,6 +21,7 @@ import (
 	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/k8s"
+	"github.com/rathix/command-center/internal/secrets"
 	"github.com/rathix/command-center/internal/server"
 	"github.com/rathix/command-center/internal/session"
 	"github.com/rathix/command-center/internal/sse"
@@ -42,6 +43,7 @@ type config struct {
 	SessionDuration time.Duration
 	DataDir         string
 	HistoryFile     string
+	SecretsFile     string
 	LogFormat       string
 	TLSCACert       string
 	TLSCert         string
@@ -96,6 +98,7 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
 	fs.StringVar(&cfg.ConfigFile, "config", getEnv("CONFIG_FILE", ""), "path to YAML config file for custom services")
 	fs.StringVar(&cfg.HistoryFile, "history-file", getEnv("HISTORY_FILE", ""), "path to history JSONL file")
+	fs.StringVar(&cfg.SecretsFile, "secrets", getEnv("SECRETS_FILE", ""), "path to encrypted secrets file")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -183,6 +186,20 @@ func run(ctx context.Context, cfg config) error {
 
 	slog.Info("Starting Command Center", "version", Version)
 
+	// Load optional encrypted secrets file
+	creds, err := secrets.LoadSecrets(cfg.SecretsFile, logger)
+	if err != nil {
+		slog.Error("secrets file decryption failed")
+		return fmt.Errorf("secrets: %w", err)
+	}
+	if creds != nil {
+		slog.Info("Secrets loaded successfully")
+	} else {
+		slog.Info("No secrets file configured, OIDC disabled")
+	}
+	// creds is passed to auth module in Story 8.2
+	_ = creds
+
 	store := state.NewStore()
 
 	// Load optional YAML config for custom services and overrides
@@ -212,7 +229,7 @@ func run(ctx context.Context, cfg config) error {
 	defer watcherCancel()
 
 	var watcher *k8s.Watcher
-	watcher, err := k8s.NewWatcher(cfg.Kubeconfig, store, logger)
+	watcher, err = k8s.NewWatcher(cfg.Kubeconfig, store, logger)
 	if err != nil {
 		slog.Warn("k8s watcher disabled: failed to create watcher", "error", err)
 	} else {

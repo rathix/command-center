@@ -1,4 +1,4 @@
-.PHONY: build test dev clean docker
+.PHONY: build test dev clean docker encrypt-secrets
 
 CONTAINER_TOOL ?= $(shell if command -v docker >/dev/null 2>&1; then echo docker; elif command -v podman >/dev/null 2>&1; then echo podman; else echo docker; fi)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -27,6 +27,9 @@ dev:
 	@set -m; cd web && npm run dev & VITE_PID=$$!; \
 	trap "kill -- -$$VITE_PID 2>/dev/null; wait" EXIT INT TERM; \
 	go run -ldflags "$(LDFLAGS)" ./cmd/command-center --dev
+
+encrypt-secrets:
+	go build -o bin/encrypt-secrets ./cmd/encrypt-secrets
 
 clean:
 	rm -rf bin/ web/build/ web/.svelte-kit/
