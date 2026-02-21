@@ -136,6 +136,11 @@
 			<ServiceIcon name={iconName} />
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url}</span>
+			{#if service.source === 'kubernetes'}
+				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⎈</span>
+			{:else if service.source === 'config'}
+				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⌂</span>
+			{/if}
 			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
 		</a>
 	{:else}
@@ -148,6 +153,11 @@
 			<ServiceIcon name={iconName} />
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url} (invalid)</span>
+			{#if service.source === 'kubernetes'}
+				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⎈</span>
+			{:else if service.source === 'config'}
+				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⌂</span>
+			{/if}
 			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
 		</div>
 	{/if}

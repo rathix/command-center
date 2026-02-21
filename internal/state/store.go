@@ -15,19 +15,29 @@ const (
 	StatusUnknown     HealthStatus = "unknown"
 )
 
-// Service represents a discovered Kubernetes service with health information.
+// Service source constants.
+const (
+	SourceKubernetes = "kubernetes"
+	SourceConfig     = "config"
+)
+
+// Service represents a discovered service with health information.
 type Service struct {
-	Name            string       `json:"name"`
-	DisplayName     string       `json:"displayName"`
-	Namespace       string       `json:"namespace"`
-	Group           string       `json:"group"`
-	URL             string       `json:"url"`
-	Status          HealthStatus `json:"status"`
-	HTTPCode        *int         `json:"httpCode"`
-	ResponseTimeMs  *int64       `json:"responseTimeMs"`
-	LastChecked     *time.Time   `json:"lastChecked"`
-	LastStateChange *time.Time   `json:"lastStateChange"`
-	ErrorSnippet    *string      `json:"errorSnippet"`
+	Name                string       `json:"name"`
+	DisplayName         string       `json:"displayName"`
+	Namespace           string       `json:"namespace"`
+	Group               string       `json:"group"`
+	URL                 string       `json:"url"`
+	Icon                string       `json:"icon,omitempty"`
+	Source              string       `json:"source"`
+	Status              HealthStatus `json:"status"`
+	HTTPCode            *int         `json:"httpCode"`
+	ResponseTimeMs      *int64       `json:"responseTimeMs"`
+	LastChecked         *time.Time   `json:"lastChecked"`
+	LastStateChange     *time.Time   `json:"lastStateChange"`
+	ErrorSnippet        *string      `json:"errorSnippet"`
+	HealthEndpoint      string       `json:"healthEndpoint,omitempty"`
+	ExpectedStatusCodes []int        `json:"expectedStatusCodes,omitempty"`
 }
 
 // EventType identifies the kind of state mutation.
@@ -38,6 +48,7 @@ const (
 	EventRemoved
 	EventUpdated
 	EventK8sStatus
+	EventConfigErrors
 )
 
 // Event represents a state mutation notification.
@@ -56,6 +67,7 @@ type Store struct {
 	subs         map[chan Event]struct{}
 	k8sConnected bool
 	lastK8sEvent time.Time
+	configErrors []string
 }
 
 // NewStore creates a new empty Store.
@@ -95,28 +107,40 @@ func serviceKey(namespace, name string) string {
 	return namespace + "/" + name
 }
 
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // AddOrUpdate inserts or replaces a service in the store.
 // It sends an EventDiscovered event for new services or an EventUpdated event for existing ones.
 func (s *Store) AddOrUpdate(svc Service) {
 	s.mu.Lock()
 	key := serviceKey(svc.Namespace, svc.Name)
 	_, exists := s.services[key]
-	
+
 	// Store a deep copy to prevent external mutation of shared pointers
 	s.services[key] = svc.DeepCopy()
-	
+
 	eventType := EventDiscovered
 	if exists {
 		eventType = EventUpdated
 	}
-	
+
 	// Fan-out to all subscribers
 	event := Event{Type: eventType, Service: svc.DeepCopy()}
 	for ch := range s.subs {
 		select {
 		case ch <- event:
 		default:
-			// Buffer full, subscriber is too slow. 
+			// Buffer full, subscriber is too slow.
 			// In a more robust system, we might flag the client for reconnection.
 		}
 	}
@@ -132,7 +156,7 @@ func (s *Store) Remove(namespace, name string) {
 		return
 	}
 	delete(s.services, key)
-	
+
 	// Fan-out to all subscribers
 	event := Event{Type: EventRemoved, Namespace: namespace, Name: name}
 	for ch := range s.subs {
@@ -221,6 +245,36 @@ func (s *Store) LastK8sEvent() time.Time {
 	return s.lastK8sEvent
 }
 
+// SetConfigErrors stores config validation errors for SSE broadcasting.
+func (s *Store) SetConfigErrors(errs []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	next := make([]string, len(errs))
+	copy(next, errs)
+	if stringSlicesEqual(s.configErrors, next) {
+		return
+	}
+	s.configErrors = next
+
+	event := Event{Type: EventConfigErrors}
+	for ch := range s.subs {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
+}
+
+// ConfigErrors returns the current config validation errors.
+func (s *Store) ConfigErrors() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]string, len(s.configErrors))
+	copy(result, s.configErrors)
+	return result
+}
+
 // DeepCopy creates a complete copy of the Service, including pointer fields.
 func (s Service) DeepCopy() Service {
 	cp := s
@@ -244,6 +298,9 @@ func (s Service) DeepCopy() Service {
 		val := *s.ErrorSnippet
 		cp.ErrorSnippet = &val
 	}
+	if s.ExpectedStatusCodes != nil {
+		cp.ExpectedStatusCodes = make([]int, len(s.ExpectedStatusCodes))
+		copy(cp.ExpectedStatusCodes, s.ExpectedStatusCodes)
+	}
 	return cp
 }
-

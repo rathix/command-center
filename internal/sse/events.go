@@ -11,11 +11,12 @@ import (
 
 // StateEventPayload wraps the full service list for the initial "state" event.
 type StateEventPayload struct {
-	AppVersion             string          `json:"appVersion"`
-	Services               []state.Service `json:"services"`
-	K8sConnected           bool            `json:"k8sConnected"`
-	K8sLastEvent           *time.Time      `json:"k8sLastEvent"`
-	HealthCheckIntervalMs  int             `json:"healthCheckIntervalMs"`
+	AppVersion            string          `json:"appVersion"`
+	Services              []state.Service `json:"services"`
+	K8sConnected          bool            `json:"k8sConnected"`
+	K8sLastEvent          *time.Time      `json:"k8sLastEvent"`
+	HealthCheckIntervalMs int             `json:"healthCheckIntervalMs"`
+	ConfigErrors          []string        `json:"configErrors"`
 }
 
 // K8sStatusPayload is the JSON payload for "k8sStatus" events.
@@ -31,6 +32,8 @@ type DiscoveredEventPayload struct {
 	Namespace       string             `json:"namespace"`
 	Group           string             `json:"group"`
 	URL             string             `json:"url"`
+	Icon            string             `json:"icon,omitempty"`
+	Source          string             `json:"source"`
 	Status          state.HealthStatus `json:"status"`
 	HTTPCode        *int               `json:"httpCode"`
 	ResponseTimeMs  *int64             `json:"responseTimeMs"`
@@ -52,6 +55,8 @@ func discoveredEventPayloadFromService(svc state.Service) DiscoveredEventPayload
 		Namespace:       svc.Namespace,
 		Group:           svc.Group,
 		URL:             svc.URL,
+		Icon:            svc.Icon,
+		Source:          svc.Source,
 		Status:          svc.Status,
 		HTTPCode:        svc.HTTPCode,
 		ResponseTimeMs:  svc.ResponseTimeMs,

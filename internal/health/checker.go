@@ -84,10 +84,24 @@ func (c *Checker) checkAll(ctx context.Context) {
 	for _, svc := range services {
 		go func(s state.Service) {
 			defer wg.Done()
-			
+
+			// Determine probe URL: HealthEndpoint overrides base URL
+			probeURL := s.URL
+			if s.HealthEndpoint != "" {
+				probeURL = s.HealthEndpoint
+			}
+
 			// Perform the probe
-			result := c.probeService(ctx, s.URL)
-			
+			result := c.probeService(ctx, probeURL)
+
+			// Override status classification if ExpectedStatusCodes is set
+			if len(s.ExpectedStatusCodes) > 0 && result.httpCode != nil {
+				if containsInt(s.ExpectedStatusCodes, *result.httpCode) {
+					result.status = state.StatusHealthy
+					result.errorSnippet = nil
+				}
+			}
+
 			// Atomically update only health fields
 			c.writer.Update(s.Namespace, s.Name, func(svc *state.Service) {
 				c.applyResult(svc, result)
@@ -219,4 +233,13 @@ func readSnippet(body io.Reader) *string {
 
 func ptrString(s string) *string {
 	return &s
+}
+
+func containsInt(slice []int, val int) bool {
+	for _, v := range slice {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }

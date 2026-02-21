@@ -45,6 +45,7 @@ describe('serviceStore structural integrity', () => {
 
 		store.setConnectionStatus('disconnected');
 		store.setK8sStatus(true, '2026-02-20T12:00:00Z');
+		store.setConfigErrors(['some error']);
 
 		// Verify state is actually changed
 		expect(store.getAppVersion()).toBe('v9.9.9');
@@ -76,7 +77,9 @@ describe('serviceStore structural integrity', () => {
 			'getAppVersion',
 			'getK8sConnected',
 			'getK8sLastEvent',
-			'getHealthCheckIntervalMs'
+			'getHealthCheckIntervalMs',
+			'getConfigErrors',
+			'getHasConfigErrors'
 		];
 
 		expect(getters.sort()).toEqual(expectedGetters.sort());

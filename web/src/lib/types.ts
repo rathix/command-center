@@ -25,6 +25,7 @@ export interface Service {
 	namespace: string;
 	group: string;
 	url: string;
+	source?: string;
 	status: HealthStatus;
 	httpCode: number | null;
 	responseTimeMs: number | null;
@@ -52,6 +53,7 @@ export interface StateEventPayload {
 	k8sConnected?: boolean;
 	k8sLastEvent?: string | null;
 	healthCheckIntervalMs?: number;
+	configErrors?: string[];
 }
 
 export interface K8sStatusPayload {

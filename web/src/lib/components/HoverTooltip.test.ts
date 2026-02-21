@@ -165,6 +165,45 @@ describe('HoverTooltip', () => {
 		expect(screen.getByText(/unhealthy for 4m 37s/)).toBeInTheDocument();
 	});
 
+	it('renders source line for kubernetes service', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ source: 'kubernetes', namespace: 'media' }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('Source: Kubernetes / media')).toBeInTheDocument();
+	});
+
+	it('renders source line for config service', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ source: 'config' }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('Source: Custom config')).toBeInTheDocument();
+	});
+
+	it('does not render source line when source is undefined', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService(),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/Source:/)).not.toBeInTheDocument();
+	});
+
 	it('renders with graceful defaults when lastStateChange is null', () => {
 		render(HoverTooltip, {
 			props: {

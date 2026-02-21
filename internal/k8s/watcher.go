@@ -41,6 +41,7 @@ type Watcher struct {
 	updater      StateUpdater
 	logger       *slog.Logger
 	k8sConnected atomic.Bool
+	syncedCh     chan struct{}
 }
 
 // NewWatcher creates a Watcher from a kubeconfig path. Supports both
@@ -66,10 +67,11 @@ func NewWatcherWithClient(clientset kubernetes.Interface, updater StateUpdater, 
 	ingressInformer := factory.Networking().V1().Ingresses()
 
 	w := &Watcher{
-		factory: factory,
-		lister:  ingressInformer.Lister(),
-		updater: updater,
-		logger:  logger,
+		factory:  factory,
+		lister:   ingressInformer.Lister(),
+		updater:  updater,
+		logger:   logger,
+		syncedCh: make(chan struct{}),
 	}
 
 	if err := ingressInformer.Informer().SetWatchErrorHandler(func(r *cache.Reflector, err error) {
@@ -92,6 +94,8 @@ func NewWatcherWithClient(clientset kubernetes.Interface, updater StateUpdater, 
 
 // Run starts the informer factory and blocks until the context is cancelled.
 func (w *Watcher) Run(ctx context.Context) {
+	defer close(w.syncedCh)
+
 	w.logger.Info("Starting Kubernetes Ingress watcher")
 	w.factory.Start(ctx.Done())
 	syncStatus := w.factory.WaitForCacheSync(ctx.Done())
@@ -113,6 +117,16 @@ func (w *Watcher) Run(ctx context.Context) {
 	<-ctx.Done()
 	w.factory.Shutdown()
 	w.logger.Info("Kubernetes Ingress watcher stopped")
+}
+
+// WaitForSync waits until the watcher has completed its initial cache sync.
+func (w *Watcher) WaitForSync(ctx context.Context) bool {
+	select {
+	case <-w.syncedCh:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func (w *Watcher) markK8sConnected() {
@@ -144,6 +158,7 @@ func (w *Watcher) onAdd(obj interface{}) {
 		Namespace:   ingress.Namespace,
 		Group:       ingress.Namespace,
 		URL:         url,
+		Source:      state.SourceKubernetes,
 		Status:      state.StatusUnknown,
 	}
 	w.updater.AddOrUpdate(svc)
@@ -169,19 +184,41 @@ func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
+	oldDefaultDisplayName := ""
+	if oldIngress, ok := oldObj.(*networkingv1.Ingress); ok {
+		if _, oldHost, ok := extractServiceURL(oldIngress); ok {
+			oldDefaultDisplayName = displayName(oldHost)
+		}
+	}
+
 	// Preserve health status if service already exists
 	status := state.StatusUnknown
+	display := displayName(host)
+	healthEndpoint := ""
+	var expectedCodes []int
+	icon := ""
 	if existing, ok := w.updater.Get(ingress.Namespace, ingress.Name); ok {
 		status = existing.Status
+		// If the display name no longer matches the old computed default, treat it as an override.
+		if existing.DisplayName != "" && existing.DisplayName != oldDefaultDisplayName {
+			display = existing.DisplayName
+		}
+		healthEndpoint = existing.HealthEndpoint
+		expectedCodes = existing.ExpectedStatusCodes
+		icon = existing.Icon
 	}
 
 	svc := state.Service{
-		Name:        ingress.Name,
-		DisplayName: displayName(host),
-		Namespace:   ingress.Namespace,
-		Group:       ingress.Namespace,
-		URL:         url,
-		Status:      status,
+		Name:                ingress.Name,
+		DisplayName:         display,
+		Namespace:           ingress.Namespace,
+		Group:               ingress.Namespace,
+		URL:                 url,
+		Icon:                icon,
+		Source:              state.SourceKubernetes,
+		Status:              status,
+		HealthEndpoint:      healthEndpoint,
+		ExpectedStatusCodes: expectedCodes,
 	}
 	w.updater.AddOrUpdate(svc)
 	w.logger.Info("service updated",

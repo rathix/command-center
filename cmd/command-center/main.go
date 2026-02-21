@@ -17,6 +17,7 @@ import (
 
 	commandcenter "github.com/rathix/command-center"
 	"github.com/rathix/command-center/internal/certs"
+	appconfig "github.com/rathix/command-center/internal/config"
 	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/k8s"
 	"github.com/rathix/command-center/internal/server"
@@ -43,6 +44,7 @@ type config struct {
 	TLSCACert       string
 	TLSCert         string
 	TLSKey          string
+	ConfigFile      string
 }
 
 func main() {
@@ -90,6 +92,7 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.TLSCACert, "tls-ca-cert", getEnv("TLS_CA_CERT", ""), "custom CA certificate path")
 	fs.StringVar(&cfg.TLSCert, "tls-cert", getEnv("TLS_CERT", ""), "custom server certificate path")
 	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
+	fs.StringVar(&cfg.ConfigFile, "config", getEnv("CONFIG_FILE", ""), "path to YAML config file for custom services")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -172,17 +175,94 @@ func run(ctx context.Context, cfg config) error {
 	slog.SetDefault(logger)
 
 	slog.Info("Starting Command Center", "version", Version)
+
 	store := state.NewStore()
+
+	// Load optional YAML config for custom services and overrides
+	var lastAppCfg *appconfig.Config
+	if cfg.ConfigFile != "" {
+		appCfg, configErrs := appconfig.Load(cfg.ConfigFile)
+		if appCfg != nil {
+			slog.Info("Config loaded",
+				"services", len(appCfg.Services),
+				"overrides", len(appCfg.Overrides),
+				"groups", len(appCfg.Groups),
+			)
+		}
+		storeConfigErrors(store, configErrs)
+		for _, e := range configErrs {
+			if appCfg == nil {
+				slog.Error("Config parse failed, continuing without custom services", "error", e)
+			} else {
+				slog.Warn("Config validation warning", "error", e)
+			}
+		}
+		lastAppCfg = appCfg
+	}
 
 	// Start Kubernetes Ingress watcher
 	watcherCtx, watcherCancel := context.WithCancel(ctx)
 	defer watcherCancel()
 
+	var watcher *k8s.Watcher
 	watcher, err := k8s.NewWatcher(cfg.Kubeconfig, store, logger)
 	if err != nil {
 		slog.Warn("k8s watcher disabled: failed to create watcher", "error", err)
 	} else {
 		go watcher.Run(watcherCtx)
+	}
+
+	// Register config services and apply overrides after K8s watcher starts
+	if lastAppCfg != nil {
+		appconfig.RegisterServices(store, lastAppCfg)
+		slog.Info("Config services registered", "count", len(lastAppCfg.Services))
+
+		// Wait for initial K8s informer sync so overrides can be applied to discovered services.
+		if watcher != nil {
+			waitCtx, cancelWait := context.WithTimeout(watcherCtx, 5*time.Second)
+			if !watcher.WaitForSync(waitCtx) {
+				slog.Warn("timed out waiting for k8s sync before applying config overrides")
+			}
+			cancelWait()
+		}
+
+		appconfig.ApplyOverrides(store, lastAppCfg)
+		slog.Info("Config overrides applied", "count", len(lastAppCfg.Overrides))
+	}
+
+	// Start config file watcher for hot-reload
+	if cfg.ConfigFile != "" {
+		configWatcher := appconfig.NewWatcher(cfg.ConfigFile, func(newCfg *appconfig.Config, errs []error) {
+			if newCfg != nil {
+				slog.Info("Config reloaded",
+					"services", len(newCfg.Services),
+					"overrides", len(newCfg.Overrides),
+					"groups", len(newCfg.Groups),
+				)
+			}
+			storeConfigErrors(store, errs)
+			for _, e := range errs {
+				if newCfg == nil {
+					slog.Error("Config reload parse failed", "error", e)
+				} else {
+					slog.Warn("Config reload validation warning", "error", e)
+				}
+			}
+			if newCfg == nil {
+				// Keep the last-known-good config active when reload parsing fails.
+				return
+			}
+			added, removed, updated := appconfig.ReconcileOnReload(store, lastAppCfg, newCfg)
+			if added > 0 || removed > 0 || updated > 0 {
+				slog.Info("Config reconciled", "added", added, "removed", removed, "updated", updated)
+			}
+			lastAppCfg = newCfg
+		}, logger)
+		go func() {
+			if err := configWatcher.Run(watcherCtx); err != nil && watcherCtx.Err() == nil {
+				slog.Warn("config watcher stopped with error", "error", err)
+			}
+		}()
 	}
 
 	// Create and start SSE broker for real-time event streaming
@@ -327,4 +407,13 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	return nil
+}
+
+// storeConfigErrors converts config error slice to string slice and stores in state.
+func storeConfigErrors(store *state.Store, errs []error) {
+	strs := make([]string, 0, len(errs))
+	for _, e := range errs {
+		strs = append(strs, e.Error())
+	}
+	store.SetConfigErrors(strs)
 }

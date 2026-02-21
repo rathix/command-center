@@ -23,6 +23,7 @@ type mockStateSource struct {
 	eventCh      chan state.Event
 	k8sConnected bool
 	lastK8sEvent time.Time
+	configErrors []string
 }
 
 func newMockSource(services []state.Service) *mockStateSource {
@@ -46,6 +47,10 @@ func (m *mockStateSource) K8sConnected() bool {
 
 func (m *mockStateSource) LastK8sEvent() time.Time {
 	return m.lastK8sEvent
+}
+
+func (m *mockStateSource) ConfigErrors() []string {
+	return m.configErrors
 }
 
 // parseSSEEvents reads SSE events from a response body string.
@@ -810,6 +815,72 @@ func TestBrokerK8sStatusEventBroadcast(t *testing.T) {
 	}
 	if payload.K8sLastEvent == "" {
 		t.Error("expected k8sLastEvent to be set in k8sStatus event")
+	}
+}
+
+func TestBrokerConfigErrorsEventBroadcastsStateSnapshot(t *testing.T) {
+	source := newMockSource([]state.Service{
+		{
+			Name:      "svc",
+			Namespace: "default",
+			Group:     "default",
+			URL:       "https://svc.example.com",
+			Status:    state.StatusHealthy,
+		},
+	})
+	source.configErrors = []string{"services[1].url: required field missing"}
+	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Drain initial state event.
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			break
+		}
+	}
+
+	// Update config errors and broadcast.
+	source.configErrors = []string{}
+	source.eventCh <- state.Event{Type: state.EventConfigErrors}
+
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "state" {
+		t.Fatalf("expected event type 'state', got %q", eventType)
+	}
+
+	var payload StateEventPayload
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		t.Fatalf("failed to unmarshal state payload: %v", err)
+	}
+	if len(payload.ConfigErrors) != 0 {
+		t.Fatalf("expected empty configErrors after update, got %v", payload.ConfigErrors)
+	}
+	if len(payload.Services) != 1 || payload.Services[0].Name != "svc" {
+		t.Fatalf("expected full state snapshot with services, got %+v", payload.Services)
 	}
 }
 

@@ -5,6 +5,7 @@ import {
 	replaceAll,
 	setConnectionStatus,
 	setK8sStatus,
+	setConfigErrors,
 	_resetForTesting
 } from '$lib/serviceStore.svelte';
 import type { Service } from '$lib/types';
@@ -267,6 +268,55 @@ describe('StatusBar', () => {
 			const timeEl = screen.getByText(/Last updated/).closest('time');
 			expect(timeEl).toBeTruthy();
 			expect(timeEl?.getAttribute('datetime')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+		});
+	});
+
+	describe('config warning indicator', () => {
+		it('does not render ⚠ when there are no config errors', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			render(StatusBar);
+			expect(screen.queryByText('⚠')).not.toBeInTheDocument();
+		});
+
+		it('renders ⚠ when config errors exist', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setConfigErrors(['services[2].url: required field missing']);
+			render(StatusBar);
+			expect(screen.getByText('⚠')).toBeInTheDocument();
+		});
+
+		it('⚠ has yellow text color', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setConfigErrors(['some error']);
+			render(StatusBar);
+			const warning = screen.getByText('⚠');
+			expect(warning).toHaveClass('text-health-auth-blocked');
+		});
+
+		it('⚠ has title with error count and messages', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setConfigErrors(['url required', 'name missing']);
+			render(StatusBar);
+			const warning = screen.getByText('⚠');
+			expect(warning).toHaveAttribute('title', expect.stringContaining('Config: 2 error(s)'));
+			expect(warning).toHaveAttribute('title', expect.stringContaining('- url required'));
+			expect(warning).toHaveAttribute('title', expect.stringContaining('- name missing'));
+		});
+
+		it('⚠ disappears when config errors are cleared', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setConfigErrors(['some error']);
+			const { unmount } = render(StatusBar);
+			expect(screen.getByText('⚠')).toBeInTheDocument();
+			unmount();
+			setConfigErrors([]);
+			render(StatusBar);
+			expect(screen.queryByText('⚠')).not.toBeInTheDocument();
 		});
 	});
 });

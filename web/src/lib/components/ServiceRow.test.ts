@@ -148,6 +148,37 @@ describe('ServiceRow', () => {
 		);
 	});
 
+	describe('source glyph', () => {
+		it('renders ⎈ glyph for kubernetes source', () => {
+			render(ServiceRow, {
+				props: { service: makeService({ source: 'kubernetes' }), odd: false }
+			});
+			expect(screen.getByText('⎈')).toBeInTheDocument();
+		});
+
+		it('renders ⌂ glyph for config source', () => {
+			render(ServiceRow, {
+				props: { service: makeService({ source: 'config' }), odd: false }
+			});
+			expect(screen.getByText('⌂')).toBeInTheDocument();
+		});
+
+		it('renders no source glyph when source is undefined', () => {
+			render(ServiceRow, {
+				props: { service: makeService(), odd: false }
+			});
+			expect(screen.queryByText('⎈')).not.toBeInTheDocument();
+			expect(screen.queryByText('⌂')).not.toBeInTheDocument();
+		});
+
+		it('source glyph has aria-hidden="true"', () => {
+			render(ServiceRow, {
+				props: { service: makeService({ source: 'kubernetes' }), odd: false }
+			});
+			expect(screen.getByText('⎈')).toHaveAttribute('aria-hidden', 'true');
+		});
+	});
+
 	describe('health response details', () => {
 		it('shows response code and time for healthy service in muted text', () => {
 			render(ServiceRow, {

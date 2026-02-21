@@ -17,6 +17,7 @@ let k8sConnected = $state<boolean>(false);
 let k8sLastEvent = $state<Date | null>(null);
 let healthCheckIntervalMs = $state<number>(DEFAULT_HEALTH_CHECK_INTERVAL_MS);
 let groupCollapseOverrides = $state(new Map<string, boolean>());
+let configErrors = $state<string[]>([]);
 
 function pruneGroupCollapseOverrides(nextServices: Map<string, Service>): void {
 	if (groupCollapseOverrides.size === 0) return;
@@ -136,6 +137,8 @@ const hasProblems = $derived.by(() => {
 	);
 });
 
+const hasConfigErrors = $derived.by(() => configErrors.length > 0);
+
 // Exported getter functions for reading state (Svelte 5 requires functions, not direct $derived exports)
 export function getSortedServices(): Service[] {
 	return sortedServices;
@@ -166,6 +169,12 @@ export function getK8sLastEvent(): Date | null {
 }
 export function getHealthCheckIntervalMs(): number {
 	return healthCheckIntervalMs;
+}
+export function getConfigErrors(): string[] {
+	return configErrors;
+}
+export function getHasConfigErrors(): boolean {
+	return hasConfigErrors;
 }
 
 // Mutation functions (called by sseClient only)
@@ -207,6 +216,10 @@ export function toggleGroupCollapse(groupName: string): void {
 	groupCollapseOverrides = newOverrides;
 }
 
+export function setConfigErrors(errs: string[]): void {
+	configErrors = errs;
+}
+
 export function setK8sStatus(connected: boolean, lastEvent: string | null): void {
 	k8sConnected = connected;
 	k8sLastEvent = lastEvent ? new Date(lastEvent) : null;
@@ -222,4 +235,5 @@ export function _resetForTesting(): void {
 	k8sLastEvent = null;
 	healthCheckIntervalMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 	groupCollapseOverrides = new Map();
+	configErrors = [];
 }

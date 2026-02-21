@@ -51,6 +51,12 @@
 		return snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet;
 	});
 
+	const sourceLine = $derived.by(() => {
+		if (service.source === 'kubernetes') return `Source: Kubernetes / ${service.namespace}`;
+		if (service.source === 'config') return 'Source: Custom config';
+		return null;
+	});
+
 	const positionClasses = $derived.by(() => {
 		return position === 'above' ? 'bottom-full mb-1' : 'top-full mt-1';
 	});
@@ -82,6 +88,9 @@
 		<div class={stateColor}>{stateDisplay}</div>
 		{#if errorLine}
 			<div class="truncate">{errorLine}</div>
+		{/if}
+		{#if sourceLine}
+			<div>{sourceLine}</div>
 		{/if}
 	</div>
 {/if}

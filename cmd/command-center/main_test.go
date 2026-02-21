@@ -41,6 +41,7 @@ func TestConfigDefaults(t *testing.T) {
 		{"TLSCACert", cfg.TLSCACert, ""},
 		{"TLSCert", cfg.TLSCert, ""},
 		{"TLSKey", cfg.TLSKey, ""},
+		{"ConfigFile", cfg.ConfigFile, ""},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -98,6 +99,7 @@ func TestConfigEnvVarAllParameters(t *testing.T) {
 	t.Setenv("TLS_CA_CERT", "/ca.crt")
 	t.Setenv("TLS_CERT", "/server.crt")
 	t.Setenv("TLS_KEY", "/server.key")
+	t.Setenv("CONFIG_FILE", "/custom/config.yaml")
 
 	cfg, err := loadConfig([]string{})
 	if err != nil {
@@ -116,6 +118,7 @@ func TestConfigEnvVarAllParameters(t *testing.T) {
 		{"TLSCACert", cfg.TLSCACert, "/ca.crt"},
 		{"TLSCert", cfg.TLSCert, "/server.crt"},
 		{"TLSKey", cfg.TLSKey, "/server.key"},
+		{"ConfigFile", cfg.ConfigFile, "/custom/config.yaml"},
 	}
 	for _, c := range checks {
 		if c.got != c.want {

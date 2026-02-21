@@ -8,6 +8,7 @@ vi.mock('./serviceStore.svelte', () => ({
 	remove: vi.fn(),
 	setConnectionStatus: vi.fn(),
 	setK8sStatus: vi.fn(),
+	setConfigErrors: vi.fn(),
 	getK8sConnected: vi.fn(() => true)
 }));
 
@@ -18,6 +19,7 @@ import {
 	remove,
 	setConnectionStatus,
 	setK8sStatus,
+	setConfigErrors,
 	getK8sConnected
 } from './serviceStore.svelte';
 

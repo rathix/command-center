@@ -17,6 +17,7 @@ type StateSource interface {
 	Subscribe() <-chan state.Event
 	K8sConnected() bool
 	LastK8sEvent() time.Time
+	ConfigErrors() []string
 }
 
 const defaultKeepaliveInterval = 15 * time.Second
@@ -94,6 +95,8 @@ func (b *Broker) Run(ctx context.Context) {
 					K8sConnected: b.source.K8sConnected(),
 					K8sLastEvent: k8sLastEvent,
 				})
+			case state.EventConfigErrors:
+				data, err = b.buildStateEvent()
 			default:
 				b.logger.Debug("unknown state event type", "type", evt.Type)
 				continue
@@ -166,18 +169,7 @@ func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer b.removeClient(clientCh)
 
 	// Send initial state event with all current services.
-	services := b.source.All()
-	var k8sLastEvent *time.Time
-	if t := b.source.LastK8sEvent(); !t.IsZero() {
-		k8sLastEvent = &t
-	}
-	initialData, err := formatSSEEvent("state", StateEventPayload{
-		AppVersion:            b.appVersion,
-		Services:              services,
-		K8sConnected:          b.source.K8sConnected(),
-		K8sLastEvent:          k8sLastEvent,
-		HealthCheckIntervalMs: int(b.healthCheckInterval.Milliseconds()),
-	})
+	initialData, err := b.buildStateEvent()
 	if err != nil {
 		b.logger.Debug("failed to format initial state event", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -221,4 +213,20 @@ func writeAndFlush(w http.ResponseWriter, flusher http.Flusher, payload []byte) 
 	}
 	flusher.Flush()
 	return nil
+}
+
+func (b *Broker) buildStateEvent() ([]byte, error) {
+	services := b.source.All()
+	var k8sLastEvent *time.Time
+	if t := b.source.LastK8sEvent(); !t.IsZero() {
+		k8sLastEvent = &t
+	}
+	return formatSSEEvent("state", StateEventPayload{
+		AppVersion:            b.appVersion,
+		Services:              services,
+		K8sConnected:          b.source.K8sConnected(),
+		K8sLastEvent:          k8sLastEvent,
+		HealthCheckIntervalMs: int(b.healthCheckInterval.Milliseconds()),
+		ConfigErrors:          b.source.ConfigErrors(),
+	})
 }

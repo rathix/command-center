@@ -4,6 +4,7 @@ import {
 	remove,
 	setConnectionStatus,
 	setK8sStatus,
+	setConfigErrors,
 	getK8sConnected
 } from './serviceStore.svelte';
 import type { HealthStatus, Service, K8sStatusPayload } from './types';
@@ -15,6 +16,7 @@ type StatePayload = {
 	k8sConnected?: boolean;
 	k8sLastEvent?: string | null;
 	healthCheckIntervalMs?: number;
+	configErrors?: string[];
 };
 
 function closeActiveConnection(): void {
@@ -46,6 +48,10 @@ function isNullableString(value: unknown): value is string | null {
 	return value === null || typeof value === 'string';
 }
 
+function isOptionalString(value: unknown): value is string | undefined {
+	return value === undefined || typeof value === 'string';
+}
+
 function isService(value: unknown): value is Service {
 	if (!isRecord(value)) return false;
 
@@ -55,6 +61,8 @@ function isService(value: unknown): value is Service {
 		typeof value.namespace === 'string' &&
 		typeof value.group === 'string' &&
 		typeof value.url === 'string' &&
+		isOptionalString(value.source) &&
+		(value.icon === undefined || isNullableString(value.icon)) &&
 		isHealthStatus(value.status) &&
 		isNullableNumber(value.httpCode) &&
 		isNullableNumber(value.responseTimeMs) &&
@@ -79,6 +87,12 @@ function isStatePayload(value: unknown): value is StatePayload {
 		(typeof value.healthCheckIntervalMs !== 'number' ||
 			!Number.isInteger(value.healthCheckIntervalMs) ||
 			value.healthCheckIntervalMs <= 0)
+	)
+		return false;
+	if (
+		value.configErrors !== undefined &&
+		(!Array.isArray(value.configErrors) ||
+			!value.configErrors.every((e: unknown) => typeof e === 'string'))
 	)
 		return false;
 	return value.services.every((service) => isService(service));
@@ -129,6 +143,7 @@ export function connect(): void {
 		} else if (payload.k8sLastEvent !== undefined) {
 			setK8sStatus(getK8sConnected(), payload.k8sLastEvent ?? null);
 		}
+		setConfigErrors(payload.configErrors ?? []);
 	});
 
 	source.addEventListener('discovered', (e: MessageEvent) => {

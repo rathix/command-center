@@ -578,6 +578,61 @@ func TestK8sConnectedGettersConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSetConfigErrorsFiresEventWhenChanged(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	store.SetConfigErrors([]string{"services[0].url: required"})
+
+	select {
+	case evt := <-events:
+		if evt.Type != EventConfigErrors {
+			t.Fatalf("expected EventConfigErrors, got %v", evt.Type)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for EventConfigErrors")
+	}
+}
+
+func TestSetConfigErrorsNoEventWhenUnchanged(t *testing.T) {
+	store := NewStore()
+	events := store.Subscribe()
+
+	store.SetConfigErrors([]string{"same error"})
+	select {
+	case <-events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial EventConfigErrors")
+	}
+
+	store.SetConfigErrors([]string{"same error"})
+	select {
+	case evt := <-events:
+		t.Fatalf("expected no event for unchanged config errors, got %+v", evt)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestSetConfigErrorsStoresAndReturnsCopies(t *testing.T) {
+	store := NewStore()
+	in := []string{"a", "b"}
+	store.SetConfigErrors(in)
+
+	// Mutate caller slice after set.
+	in[0] = "mutated"
+	got := store.ConfigErrors()
+	if got[0] != "a" {
+		t.Fatalf("expected store to keep its own copy, got %q", got[0])
+	}
+
+	// Mutate returned slice and ensure store remains unchanged.
+	got[1] = "changed"
+	got2 := store.ConfigErrors()
+	if got2[1] != "b" {
+		t.Fatalf("expected ConfigErrors() to return a copy, got %q", got2[1])
+	}
+}
+
 func TestStoreConcurrentAccess(t *testing.T) {
 	store := NewStore()
 	const goroutines = 100

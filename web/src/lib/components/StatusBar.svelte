@@ -5,7 +5,9 @@
 		getHasProblems,
 		getAppVersion,
 		getLastUpdated,
-		getHealthCheckIntervalMs
+		getHealthCheckIntervalMs,
+		getHasConfigErrors,
+		getConfigErrors
 	} from '$lib/serviceStore.svelte';
 	import { formatRelativeTime } from '$lib/formatRelativeTime';
 
@@ -67,6 +69,12 @@
 	                if (!lastUpdatedLabel) return null;
 	                return `Last updated ${lastUpdatedLabel}`;
 	        });
+
+	const configWarningTitle = $derived.by(() => {
+		const errs = getConfigErrors();
+		if (errs.length === 0) return '';
+		return `Config: ${errs.length} error(s)\n${errs.map((e) => `- ${e}`).join('\n')}`;
+	});
 	</script>
 <div class="mx-auto max-w-[1200px]">
 	<div class="flex items-center justify-between" role="status" aria-live="polite">
@@ -96,6 +104,10 @@
 				<span class="text-sm font-semibold text-health-error">Connection lost</span>
 			{:else if getAppVersion()}
 				<span class="text-xs text-subtext-0">Command Center {getAppVersion()}</span>
+			{/if}
+
+			{#if getHasConfigErrors()}
+				<span class="text-xs text-health-auth-blocked" title={configWarningTitle} aria-label="Config warnings">⚠</span>
 			{/if}
 
 			{#if lastUpdatedIso && timestampText}
