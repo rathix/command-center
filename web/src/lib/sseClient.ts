@@ -5,9 +5,10 @@ import {
 	setConnectionStatus,
 	setK8sStatus,
 	setConfigErrors,
+	setOIDCStatus,
 	getK8sConnected
 } from './serviceStore.svelte';
-import type { HealthStatus, Service, K8sStatusPayload, ServiceSource } from './types';
+import type { HealthStatus, Service, K8sStatusPayload, ServiceSource, OIDCStatus } from './types';
 
 let eventSource: EventSource | null = null;
 type StatePayload = {
@@ -17,6 +18,7 @@ type StatePayload = {
 	k8sLastEvent?: string | null;
 	healthCheckIntervalMs?: number;
 	configErrors?: string[];
+	oidcStatus?: OIDCStatus;
 };
 
 function closeActiveConnection(): void {
@@ -59,6 +61,16 @@ function isNullableISODateString(value: unknown): value is string | null {
 	);
 }
 
+function isOIDCStatus(value: unknown): value is OIDCStatus {
+	if (!isRecord(value)) return false;
+	return (
+		typeof value.connected === 'boolean' &&
+		typeof value.providerName === 'string' &&
+		typeof value.tokenState === 'string' &&
+		isNullableString(value.lastSuccess)
+	);
+}
+
 function isService(value: unknown): value is Service {
 	if (!isRecord(value)) return false;
 
@@ -75,7 +87,8 @@ function isService(value: unknown): value is Service {
 		isNullableNumber(value.responseTimeMs) &&
 		isNullableString(value.lastChecked) &&
 		isNullableString(value.lastStateChange) &&
-		isNullableString(value.errorSnippet)
+		isNullableString(value.errorSnippet) &&
+		(value.authMethod === undefined || typeof value.authMethod === 'string')
 	);
 }
 
@@ -98,6 +111,7 @@ function isStatePayload(value: unknown): value is StatePayload {
 			!value.configErrors.every((e: unknown) => typeof e === 'string'))
 	)
 		return false;
+	if (value.oidcStatus !== undefined && !isOIDCStatus(value.oidcStatus)) return false;
 	return value.services.every((service) => isService(service));
 }
 
@@ -144,6 +158,7 @@ export function connect(): void {
 			setK8sStatus(getK8sConnected(), payload.k8sLastEvent ?? null);
 		}
 		setConfigErrors(payload.configErrors ?? []);
+		setOIDCStatus(payload.oidcStatus ?? null);
 	});
 
 	source.addEventListener('discovered', (e: MessageEvent) => {

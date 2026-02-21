@@ -79,7 +79,8 @@ describe('serviceStore structural integrity', () => {
 			'getK8sLastEvent',
 			'getHealthCheckIntervalMs',
 			'getConfigErrors',
-			'getHasConfigErrors'
+			'getHasConfigErrors',
+			'getOIDCStatus'
 		];
 
 		expect(getters.sort()).toEqual(expectedGetters.sort());

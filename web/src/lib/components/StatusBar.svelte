@@ -7,7 +7,8 @@
 		getLastUpdated,
 		getHealthCheckIntervalMs,
 		getHasConfigErrors,
-		getConfigErrors
+		getConfigErrors,
+		getOIDCStatus
 	} from '$lib/serviceStore.svelte';
 	import { formatRelativeTime } from '$lib/formatRelativeTime';
 
@@ -84,10 +85,38 @@
 		if (errs.length === 0) return '';
 		return `Config: ${errs.length} error(s)\n${errs.map((e) => `- ${e}`).join('\n')}`;
 	});
+
+	const oidcIndicatorColor = $derived.by(() => {
+		const status = getOIDCStatus();
+		if (!status) return null;
+		if (!status.connected) return 'text-health-error';
+		if (status.tokenState === 'refreshing') return 'text-health-auth-blocked';
+		return 'text-health-ok';
+	});
+
+	const oidcTooltipTitle = $derived.by(() => {
+		const status = getOIDCStatus();
+		if (!status) return '';
+		const lines = [
+			`Provider: ${status.providerName}`,
+			`Token: ${status.tokenState}`
+		];
+		if (status.lastSuccess) {
+			lines.push(`Last auth: ${formatRelativeTime(status.lastSuccess)}`);
+		}
+		return lines.join('\n');
+	});
 	</script>
 <div class="mx-auto max-w-[1200px]">
 	<div class="flex items-center justify-between" role="status" aria-live="polite">
 		<div class="flex items-center gap-2">
+			{#if getOIDCStatus()}
+				<span
+					class="text-sm {oidcIndicatorColor}"
+					title={oidcTooltipTitle}
+					aria-label="OIDC status"
+				>🔒</span>
+			{/if}
 			{#if isInitialLoad}
 				<span class="text-sm font-semibold text-subtext-0">Discovering services...</span>
 			{:else if getCounts().total === 0 && getConnectionStatus() === 'connected'}

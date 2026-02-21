@@ -6,6 +6,7 @@ import {
 	setConnectionStatus,
 	setK8sStatus,
 	setConfigErrors,
+	setOIDCStatus,
 	_resetForTesting
 } from '$lib/serviceStore.svelte';
 import type { Service } from '$lib/types';
@@ -350,6 +351,64 @@ describe('StatusBar', () => {
 			setConfigErrors([]);
 			render(StatusBar);
 			expect(screen.queryByText('⚠')).not.toBeInTheDocument();
+		});
+	});
+
+	describe('OIDC status indicator', () => {
+		it('shows lock with text-health-ok when connected and token valid', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: '2026-02-21T10:00:00Z' });
+			render(StatusBar);
+			const lock = screen.getByLabelText('OIDC status');
+			expect(lock).toBeInTheDocument();
+			expect(lock).toHaveClass('text-health-ok');
+		});
+
+		it('shows lock with text-health-auth-blocked when token refreshing', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'refreshing', lastSuccess: '2026-02-21T09:55:00Z' });
+			render(StatusBar);
+			const lock = screen.getByLabelText('OIDC status');
+			expect(lock).toBeInTheDocument();
+			expect(lock).toHaveClass('text-health-auth-blocked');
+		});
+
+		it('shows lock with text-health-error when disconnected', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setOIDCStatus({ connected: false, providerName: 'PocketID', tokenState: 'error', lastSuccess: null });
+			render(StatusBar);
+			const lock = screen.getByLabelText('OIDC status');
+			expect(lock).toBeInTheDocument();
+			expect(lock).toHaveClass('text-health-error');
+		});
+
+		it('does not render OIDC lock when oidcStatus is null', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			render(StatusBar);
+			expect(screen.queryByLabelText('OIDC status')).not.toBeInTheDocument();
+		});
+
+		it('has title attribute containing provider name and token state', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: '2026-02-21T10:00:00Z' });
+			render(StatusBar);
+			const lock = screen.getByLabelText('OIDC status');
+			expect(lock).toHaveAttribute('title', expect.stringContaining('Provider: PocketID'));
+			expect(lock).toHaveAttribute('title', expect.stringContaining('Token: valid'));
+		});
+
+		it('has aria-label="OIDC status"', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: null });
+			render(StatusBar);
+			const lock = screen.getByLabelText('OIDC status');
+			expect(lock).toHaveAttribute('aria-label', 'OIDC status');
 		});
 	});
 });

@@ -10,6 +10,8 @@ import {
 	getK8sConnected,
 	getK8sLastEvent,
 	getHealthCheckIntervalMs,
+	getOIDCStatus,
+	setOIDCStatus,
 	replaceAll,
 	addOrUpdate,
 	remove,
@@ -555,6 +557,30 @@ describe('serviceStore', () => {
 			replaceAll([makeService({ name: 'svc', lastChecked: checkedAt })], 'v1.0.0');
 			remove('default', 'svc');
 			expect(getLastUpdated()?.toISOString()).toBe(checkedAt);
+		});
+	});
+
+	describe('oidcStatus', () => {
+		it('defaults to null', () => {
+			expect(getOIDCStatus()).toBeNull();
+		});
+
+		it('setOIDCStatus stores value and getOIDCStatus returns it', () => {
+			const status = { connected: true, providerName: 'PocketID', tokenState: 'valid' as const, lastSuccess: '2026-02-21T10:00:00Z' };
+			setOIDCStatus(status);
+			expect(getOIDCStatus()).toEqual(status);
+		});
+
+		it('setOIDCStatus(null) clears stored value', () => {
+			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: null });
+			setOIDCStatus(null);
+			expect(getOIDCStatus()).toBeNull();
+		});
+
+		it('_resetForTesting clears oidcStatus back to null', () => {
+			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: null });
+			_resetForTesting();
+			expect(getOIDCStatus()).toBeNull();
 		});
 	});
 });

@@ -1,4 +1,4 @@
-import type { Service, ServiceGroup, HealthStatus, ConnectionStatus } from './types';
+import type { Service, ServiceGroup, HealthStatus, ConnectionStatus, OIDCStatus } from './types';
 import { DEFAULT_HEALTH_CHECK_INTERVAL_MS } from './types';
 
 const statusPriority: Record<HealthStatus, number> = {
@@ -18,6 +18,7 @@ let k8sLastEvent = $state<Date | null>(null);
 let healthCheckIntervalMs = $state<number>(DEFAULT_HEALTH_CHECK_INTERVAL_MS);
 let groupCollapseOverrides = $state(new Map<string, boolean>());
 let configErrors = $state<string[]>([]);
+let oidcStatus = $state<OIDCStatus | null>(null);
 
 function pruneGroupCollapseOverrides(nextServices: Map<string, Service>): void {
 	if (groupCollapseOverrides.size === 0) return;
@@ -176,6 +177,9 @@ export function getConfigErrors(): string[] {
 export function getHasConfigErrors(): boolean {
 	return hasConfigErrors;
 }
+export function getOIDCStatus(): OIDCStatus | null {
+	return oidcStatus;
+}
 
 // Mutation functions (called by sseClient only)
 export function replaceAll(newServices: Service[], newAppVersion: string, newHealthCheckIntervalMs?: number): void {
@@ -227,6 +231,10 @@ export function setK8sStatus(connected: boolean, lastEvent: string | null): void
 	k8sLastEvent = lastEvent ? new Date(lastEvent) : null;
 }
 
+export function setOIDCStatus(status: OIDCStatus | null): void {
+	oidcStatus = status;
+}
+
 // Test helper — resets all state to initial values
 export function _resetForTesting(): void {
 	services = new Map();
@@ -238,4 +246,5 @@ export function _resetForTesting(): void {
 	healthCheckIntervalMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 	groupCollapseOverrides = new Map();
 	configErrors = [];
+	oidcStatus = null;
 }

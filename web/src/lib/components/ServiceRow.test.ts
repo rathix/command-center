@@ -148,6 +148,43 @@ describe('ServiceRow', () => {
 		);
 	});
 
+	describe('OIDC lock glyph', () => {
+		it('renders lock with aria-label when authMethod is "oidc"', () => {
+			render(ServiceRow, {
+				props: { service: makeService({ authMethod: 'oidc' }), odd: false }
+			});
+			expect(screen.getByLabelText('OIDC authenticated')).toBeInTheDocument();
+		});
+
+		it('does not render lock when authMethod is undefined', () => {
+			render(ServiceRow, {
+				props: { service: makeService(), odd: false }
+			});
+			expect(screen.queryByLabelText('OIDC authenticated')).not.toBeInTheDocument();
+		});
+
+		it('renders lock in invalid URL branch too', () => {
+			render(ServiceRow, {
+				props: { service: makeService({ authMethod: 'oidc', url: 'javascript:alert(1)' }), odd: false }
+			});
+			expect(screen.getByLabelText('OIDC authenticated')).toBeInTheDocument();
+		});
+
+		it('lock glyph appears between icon and display name (DOM order)', () => {
+			const { container } = render(ServiceRow, {
+				props: { service: makeService({ authMethod: 'oidc', displayName: 'my-svc' }), odd: false }
+			});
+			const lockEl = screen.getByLabelText('OIDC authenticated');
+			const nameEl = screen.getByText('my-svc');
+			// Lock should come before name in DOM
+			const allSpans = Array.from(container.querySelectorAll('span'));
+			const lockIdx = allSpans.indexOf(lockEl as HTMLSpanElement);
+			const nameIdx = allSpans.indexOf(nameEl as HTMLSpanElement);
+			expect(lockIdx).toBeLessThan(nameIdx);
+			expect(lockIdx).toBeGreaterThan(-1);
+		});
+	});
+
 	describe('source glyph', () => {
 		it('renders ⎈ glyph for kubernetes source', () => {
 			render(ServiceRow, {

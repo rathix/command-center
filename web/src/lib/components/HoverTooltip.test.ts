@@ -240,6 +240,32 @@ describe('HoverTooltip', () => {
 		expect(screen.getByText(/healthy for 2d/)).toBeInTheDocument();
 	});
 
+	it('renders auth line "Auth: OIDC via PocketID" when authMethod is "oidc"', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ authMethod: 'oidc' }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('Auth: OIDC via PocketID')).toBeInTheDocument();
+	});
+
+	it('does not render auth line when authMethod is undefined', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService(),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/Auth:/)).not.toBeInTheDocument();
+	});
+
 	it('renders with graceful defaults when lastStateChange is null', () => {
 		render(HoverTooltip, {
 			props: {
