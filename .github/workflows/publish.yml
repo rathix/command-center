@@ -110,13 +110,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if tag is highest semver
+        id: is_latest
+        if: github.ref_type == 'tag'
+        run: |
+          highest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
+          current=${GITHUB_REF_NAME#v}
+          echo "highest=$highest current=$current"
+          if [[ "$current" == "$highest" ]]; then
+            echo "result=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ steps.is_latest.outputs.result == 'true' }}
             type=raw,value=dev,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=sha,prefix=sha-
             type=semver,pattern={{version}}
