@@ -308,7 +308,7 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	// Create and start SSE broker for real-time event streaming
-	broker := sse.NewBroker(store, logger, Version, cfg.HealthInterval)
+	broker := sse.NewBroker(store, nil, logger, Version, cfg.HealthInterval)
 	go broker.Run(ctx)
 
 	// Create and start HTTP health checker

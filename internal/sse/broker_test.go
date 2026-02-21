@@ -84,7 +84,7 @@ func TestBrokerInitialStateEvent(t *testing.T) {
 		{Name: "api", Namespace: "default", URL: "https://api.example.com", Status: "healthy"},
 	}
 	source := newMockSource(services)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -139,7 +139,7 @@ func TestBrokerInitialStateEvent(t *testing.T) {
 
 func TestBrokerDiscoveredBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -199,7 +199,7 @@ func TestBrokerDiscoveredBroadcast(t *testing.T) {
 
 func TestBrokerUpdateBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -266,7 +266,7 @@ func TestBrokerUpdateBroadcast(t *testing.T) {
 
 func TestBrokerRemovedBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -327,7 +327,7 @@ func TestBrokerRemovedBroadcast(t *testing.T) {
 
 func TestBrokerKeepaliveTiming(t *testing.T) {
 	source := newMockSource(nil)
-	broker := newBrokerWithKeepalive(source, discardLogger(), "v1.0.0", 30*time.Second, 40*time.Millisecond)
+	broker := newBrokerWithKeepalive(source, nil, discardLogger(), "v1.0.0", 30*time.Second, 40*time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -373,7 +373,7 @@ func TestBrokerKeepaliveTiming(t *testing.T) {
 
 func TestBrokerClientDisconnectCleanup(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -416,7 +416,7 @@ func TestBrokerClientDisconnectCleanup(t *testing.T) {
 
 func TestBrokerMultiClientBroadcast(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -490,7 +490,7 @@ func TestBrokerMultiClientBroadcast(t *testing.T) {
 
 func TestBrokerGracefulShutdown(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go broker.Run(ctx)
@@ -539,7 +539,7 @@ func TestBrokerGracefulShutdown(t *testing.T) {
 
 func TestBrokerSourceChannelClosedStopsBroker(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -715,7 +715,7 @@ func TestBrokerInitialStateIncludesK8sMetadata(t *testing.T) {
 	source := newMockSource(nil)
 	source.k8sConnected = true
 	source.lastK8sEvent = time.Date(2026, 2, 20, 14, 30, 0, 0, time.UTC)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -763,7 +763,7 @@ func TestBrokerK8sStatusEventBroadcast(t *testing.T) {
 	source := newMockSource(nil)
 	source.k8sConnected = true
 	source.lastK8sEvent = time.Date(2026, 2, 20, 14, 30, 0, 0, time.UTC)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -829,7 +829,7 @@ func TestBrokerConfigErrorsEventBroadcastsStateSnapshot(t *testing.T) {
 		},
 	})
 	source.configErrors = []string{"services[1].url: required field missing"}
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -929,7 +929,7 @@ func TestStateEventPayloadK8sFieldsCamelCaseJSON(t *testing.T) {
 
 func TestBrokerInitialStateIncludesHealthCheckInterval(t *testing.T) {
 	source := newMockSource(nil)
-	broker := NewBroker(source, discardLogger(), "v1.0.0", 30*time.Second)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -967,6 +967,404 @@ func TestBrokerInitialStateIncludesHealthCheckInterval(t *testing.T) {
 	}
 	if payload.HealthCheckIntervalMs != 30000 {
 		t.Errorf("expected healthCheckIntervalMs 30000, got %d", payload.HealthCheckIntervalMs)
+	}
+}
+
+// mockOIDCStatusProvider implements OIDCStatusProvider for testing.
+type mockOIDCStatusProvider struct {
+	status *OIDCStatus
+}
+
+func (m *mockOIDCStatusProvider) GetOIDCStatus() *OIDCStatus {
+	return m.status
+}
+
+func TestBrokerInitialStateIncludesOIDCStatus(t *testing.T) {
+	source := newMockSource(nil)
+	fixedTime := time.Date(2026, 2, 21, 14, 30, 0, 0, time.UTC)
+	provider := &mockOIDCStatusProvider{
+		status: &OIDCStatus{
+			Connected:    true,
+			ProviderName: "PocketID",
+			TokenState:   TokenStateValid,
+			LastSuccess:  &fixedTime,
+		},
+	}
+	broker := NewBroker(source, provider, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "state" {
+		t.Fatalf("expected event type 'state', got %q", eventType)
+	}
+
+	// Check raw JSON for field presence
+	if !strings.Contains(data, `"oidcStatus"`) {
+		t.Fatalf("expected oidcStatus in JSON payload, got: %s", data)
+	}
+	if !strings.Contains(data, `"connected":true`) {
+		t.Errorf("expected connected:true in JSON payload, got: %s", data)
+	}
+	if !strings.Contains(data, `"providerName":"PocketID"`) {
+		t.Errorf("expected providerName:PocketID in JSON payload, got: %s", data)
+	}
+	if !strings.Contains(data, `"tokenState":"valid"`) {
+		t.Errorf("expected tokenState:valid in JSON payload, got: %s", data)
+	}
+	if !strings.Contains(data, `"lastSuccess":"2026-02-21T14:30:00Z"`) {
+		t.Errorf("expected lastSuccess timestamp in JSON payload, got: %s", data)
+	}
+
+	// Also unmarshal and verify struct values
+	var payload StateEventPayload
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if payload.OIDCStatus == nil {
+		t.Fatal("expected OIDCStatus to be non-nil")
+	}
+	if !payload.OIDCStatus.Connected {
+		t.Error("expected OIDCStatus.Connected = true")
+	}
+	if payload.OIDCStatus.ProviderName != "PocketID" {
+		t.Errorf("expected ProviderName 'PocketID', got %q", payload.OIDCStatus.ProviderName)
+	}
+	if payload.OIDCStatus.TokenState != TokenStateValid {
+		t.Errorf("expected TokenState 'valid', got %q", payload.OIDCStatus.TokenState)
+	}
+	if payload.OIDCStatus.LastSuccess == nil || !payload.OIDCStatus.LastSuccess.Equal(fixedTime) {
+		t.Errorf("expected LastSuccess %v, got %v", fixedTime, payload.OIDCStatus.LastSuccess)
+	}
+}
+
+func TestBrokerStateOIDCStatusError(t *testing.T) {
+	source := newMockSource(nil)
+	provider := &mockOIDCStatusProvider{
+		status: &OIDCStatus{
+			Connected:    false,
+			ProviderName: "PocketID",
+			TokenState:   TokenStateError,
+			LastSuccess:  nil,
+		},
+	}
+	broker := NewBroker(source, provider, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "state" {
+		t.Fatalf("expected event type 'state', got %q", eventType)
+	}
+
+	if !strings.Contains(data, `"connected":false`) {
+		t.Errorf("expected connected:false in JSON payload, got: %s", data)
+	}
+	if !strings.Contains(data, `"tokenState":"error"`) {
+		t.Errorf("expected tokenState:error in JSON payload, got: %s", data)
+	}
+	if !strings.Contains(data, `"lastSuccess":null`) {
+		t.Errorf("expected lastSuccess:null in JSON payload, got: %s", data)
+	}
+}
+
+func TestBrokerStateOmitsOIDCStatusWhenNotConfigured(t *testing.T) {
+	source := newMockSource(nil)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "state" {
+		t.Fatalf("expected event type 'state', got %q", eventType)
+	}
+
+	if strings.Contains(data, `"oidcStatus"`) {
+		t.Errorf("expected oidcStatus to be absent from JSON payload, got: %s", data)
+	}
+
+	// Verify other fields remain present
+	for _, field := range []string{"appVersion", "services", "k8sConnected", "healthCheckIntervalMs", "configErrors"} {
+		if !strings.Contains(data, `"`+field+`"`) {
+			t.Errorf("expected field %q to be present in JSON payload, got: %s", field, data)
+		}
+	}
+}
+
+func TestBrokerStateOmitsOIDCStatusWhenProviderReturnsNil(t *testing.T) {
+	source := newMockSource(nil)
+	provider := &mockOIDCStatusProvider{status: nil}
+	broker := NewBroker(source, provider, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "state" {
+		t.Fatalf("expected event type 'state', got %q", eventType)
+	}
+
+	if strings.Contains(data, `"oidcStatus"`) {
+		t.Errorf("expected oidcStatus to be absent when provider returns nil, got: %s", data)
+	}
+}
+
+func TestDiscoveredEventIncludesAuthMethod(t *testing.T) {
+	source := newMockSource(nil)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			break
+		}
+	}
+
+	source.eventCh <- state.Event{
+		Type: state.EventDiscovered,
+		Service: state.Service{
+			Name:       "grafana",
+			Namespace:  "monitoring",
+			Group:      "monitoring",
+			URL:        "https://grafana.home.lab",
+			Status:     state.StatusHealthy,
+			AuthMethod: "oidc",
+		},
+	}
+
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "discovered" {
+		t.Fatalf("expected event type 'discovered', got %q", eventType)
+	}
+	if !strings.Contains(data, `"authMethod":"oidc"`) {
+		t.Errorf("expected authMethod:oidc in discovered event, got: %s", data)
+	}
+}
+
+func TestUpdateEventIncludesAuthMethod(t *testing.T) {
+	source := newMockSource(nil)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			break
+		}
+	}
+
+	source.eventCh <- state.Event{
+		Type: state.EventUpdated,
+		Service: state.Service{
+			Name:       "grafana",
+			Namespace:  "monitoring",
+			Group:      "monitoring",
+			URL:        "https://grafana.home.lab",
+			Status:     state.StatusHealthy,
+			AuthMethod: "oidc",
+		},
+	}
+
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "update" {
+		t.Fatalf("expected event type 'update', got %q", eventType)
+	}
+	if !strings.Contains(data, `"authMethod":"oidc"`) {
+		t.Errorf("expected authMethod:oidc in update event, got: %s", data)
+	}
+}
+
+func TestDiscoveredEventOmitsAuthMethodWhenEmpty(t *testing.T) {
+	source := newMockSource(nil)
+	broker := NewBroker(source, nil, discardLogger(), "v1.0.0", 30*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go broker.Run(ctx)
+
+	ts := httptest.NewServer(broker)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			break
+		}
+	}
+
+	source.eventCh <- state.Event{
+		Type: state.EventDiscovered,
+		Service: state.Service{
+			Name:       "api",
+			Namespace:  "default",
+			Group:      "default",
+			URL:        "https://api.home.lab",
+			Status:     state.StatusHealthy,
+			AuthMethod: "",
+		},
+	}
+
+	var eventType, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+		} else if line == "" && eventType != "" {
+			break
+		}
+	}
+
+	if eventType != "discovered" {
+		t.Fatalf("expected event type 'discovered', got %q", eventType)
+	}
+	if strings.Contains(data, `"authMethod"`) {
+		t.Errorf("expected authMethod to be absent when empty, got: %s", data)
 	}
 }
 

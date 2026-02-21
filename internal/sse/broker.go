@@ -20,6 +20,12 @@ type StateSource interface {
 	ConfigErrors() []string
 }
 
+// OIDCStatusProvider returns the current OIDC status for SSE state events.
+// Returns nil when OIDC is not configured.
+type OIDCStatusProvider interface {
+	GetOIDCStatus() *OIDCStatus
+}
+
 const defaultKeepaliveInterval = 15 * time.Second
 
 // sseEvent is an internal representation of a formatted SSE message ready to write.
@@ -30,6 +36,7 @@ type sseEvent struct {
 // Broker manages SSE client connections and broadcasts state events.
 type Broker struct {
 	source              StateSource
+	oidcStatusProvider  OIDCStatusProvider
 	logger              *slog.Logger
 	appVersion          string
 	healthCheckInterval time.Duration
@@ -38,18 +45,20 @@ type Broker struct {
 	mu                  sync.Mutex
 }
 
-// NewBroker creates a new SSE broker.
-func NewBroker(source StateSource, logger *slog.Logger, appVersion string, healthCheckInterval time.Duration) *Broker {
-	return newBrokerWithKeepalive(source, logger, appVersion, healthCheckInterval, defaultKeepaliveInterval)
+// NewBroker creates a new SSE broker. The oidcStatus parameter may be nil
+// when OIDC is not configured — in that case, oidcStatus is omitted from state events.
+func NewBroker(source StateSource, oidcStatus OIDCStatusProvider, logger *slog.Logger, appVersion string, healthCheckInterval time.Duration) *Broker {
+	return newBrokerWithKeepalive(source, oidcStatus, logger, appVersion, healthCheckInterval, defaultKeepaliveInterval)
 }
 
-func newBrokerWithKeepalive(source StateSource, logger *slog.Logger, appVersion string, healthCheckInterval time.Duration, keepaliveInterval time.Duration) *Broker {
+func newBrokerWithKeepalive(source StateSource, oidcStatus OIDCStatusProvider, logger *slog.Logger, appVersion string, healthCheckInterval time.Duration, keepaliveInterval time.Duration) *Broker {
 	if keepaliveInterval <= 0 {
 		keepaliveInterval = defaultKeepaliveInterval
 	}
 
 	return &Broker{
 		source:              source,
+		oidcStatusProvider:  oidcStatus,
 		logger:              logger,
 		appVersion:          appVersion,
 		healthCheckInterval: healthCheckInterval,
@@ -221,6 +230,10 @@ func (b *Broker) buildStateEvent() ([]byte, error) {
 	if t := b.source.LastK8sEvent(); !t.IsZero() {
 		k8sLastEvent = &t
 	}
+	var oidcStatus *OIDCStatus
+	if b.oidcStatusProvider != nil {
+		oidcStatus = b.oidcStatusProvider.GetOIDCStatus()
+	}
 	return formatSSEEvent("state", StateEventPayload{
 		AppVersion:            b.appVersion,
 		Services:              services,
@@ -228,5 +241,6 @@ func (b *Broker) buildStateEvent() ([]byte, error) {
 		K8sLastEvent:          k8sLastEvent,
 		HealthCheckIntervalMs: int(b.healthCheckInterval.Milliseconds()),
 		ConfigErrors:          b.source.ConfigErrors(),
+		OIDCStatus:            oidcStatus,
 	})
 }
