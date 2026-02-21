@@ -448,6 +448,25 @@ describe('sseClient', () => {
 
 				expect(setK8sStatus).toHaveBeenCalledWith(false, '2026-02-20T14:30:00Z');
 			});
+
+			it('extracts configErrors from state event', async () => {
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
+				const services = [makeService({ name: 'svc-a' })];
+				const configErrors = ['error 1', 'error 2'];
+
+				es.emit(
+					'state',
+					JSON.stringify({
+						services,
+						appVersion: 'v1.0.0',
+						configErrors
+					})
+				);
+
+				expect(setConfigErrors).toHaveBeenCalledWith(configErrors);
+			});
 		});
 
 	describe('disconnect', () => {
