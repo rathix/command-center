@@ -23,27 +23,18 @@ import (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-func run(args []string, stderr io.Writer) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("encrypt-secrets", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	var inFile, outFile string
-	fs.StringVar(&inFile, "in", "", "path to plaintext YAML secrets file")
-	fs.StringVar(&outFile, "out", "", "path to write encrypted output")
+	fs.StringVar(&inFile, "in", "-", "path to plaintext YAML secrets file ('-' for stdin)")
+	fs.StringVar(&outFile, "out", "-", "path to write encrypted output ('-' for stdout)")
 
 	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-
-	if inFile == "" {
-		fmt.Fprintln(stderr, "error: -in flag is required")
-		return 1
-	}
-	if outFile == "" {
-		fmt.Fprintln(stderr, "error: -out flag is required")
 		return 1
 	}
 
@@ -53,9 +44,9 @@ func run(args []string, stderr io.Writer) int {
 		return 1
 	}
 
-	plaintext, err := os.ReadFile(inFile)
+	plaintext, err := readInput(inFile, stdin)
 	if err != nil {
-		fmt.Fprintln(stderr, "error: cannot read input file")
+		fmt.Fprintln(stderr, "error: cannot read input")
 		return 1
 	}
 
@@ -65,13 +56,42 @@ func run(args []string, stderr io.Writer) int {
 		return 1
 	}
 
-	if err := os.WriteFile(outFile, encrypted, 0400); err != nil {
-		fmt.Fprintln(stderr, "error: cannot write output file")
+	if err := writeOutput(outFile, encrypted, stdout); err != nil {
+		fmt.Fprintln(stderr, "error: cannot write output")
 		return 1
 	}
 
 	fmt.Fprintln(stderr, "encrypted secrets written successfully")
 	return 0
+}
+
+func readInput(path string, stdin io.Reader) ([]byte, error) {
+	if path == "-" {
+		return io.ReadAll(stdin)
+	}
+	return os.ReadFile(path)
+}
+
+func writeOutput(path string, data []byte, stdout io.Writer) error {
+	if path == "-" {
+		_, err := stdout.Write(data)
+		return err
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0400)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	// Enforce restrictive permissions even when the file already existed.
+	return os.Chmod(path, 0400)
 }
 
 func encrypt(plaintext []byte, passphrase string) ([]byte, error) {

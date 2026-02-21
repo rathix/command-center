@@ -52,6 +52,68 @@ type config struct {
 	ConfigFile      string
 }
 
+type oidcStatusProviderAdapter struct {
+	client *auth.OIDCClient
+}
+
+func (a oidcStatusProviderAdapter) GetOIDCStatus() *sse.OIDCStatus {
+	if a.client == nil {
+		return nil
+	}
+	status := a.client.GetStatus()
+	if status == nil {
+		return nil
+	}
+	return &sse.OIDCStatus{
+		Connected:    status.Connected,
+		ProviderName: status.ProviderName,
+		TokenState:   status.TokenState,
+		LastSuccess:  status.LastSuccess,
+	}
+}
+
+type endpointDiscovererAdapter struct {
+	discoverer *auth.EndpointDiscoverer
+}
+
+func (a endpointDiscovererAdapter) GetStrategy(serviceKey string) *health.EndpointStrategy {
+	if a.discoverer == nil {
+		return nil
+	}
+	strategy := a.discoverer.GetStrategy(serviceKey)
+	if strategy == nil {
+		return nil
+	}
+	return &health.EndpointStrategy{
+		Type:     strategy.Type,
+		Endpoint: strategy.Endpoint,
+	}
+}
+
+func (a endpointDiscovererAdapter) Discover(ctx context.Context, serviceKey string, baseURL string) (*health.EndpointStrategy, error) {
+	if a.discoverer == nil {
+		return nil, fmt.Errorf("endpoint discoverer is not configured")
+	}
+	strategy, err := a.discoverer.Discover(ctx, serviceKey, baseURL)
+	if err != nil {
+		return nil, err
+	}
+	if strategy == nil {
+		return nil, nil
+	}
+	return &health.EndpointStrategy{
+		Type:     strategy.Type,
+		Endpoint: strategy.Endpoint,
+	}, nil
+}
+
+func (a endpointDiscovererAdapter) ClearStrategy(serviceKey string) {
+	if a.discoverer == nil {
+		return
+	}
+	a.discoverer.ClearStrategy(serviceKey)
+}
+
 func main() {
 	// Quick check for version flag before full config loading
 	for _, arg := range os.Args[1:] {
@@ -338,7 +400,11 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	// Create and start SSE broker for real-time event streaming
-	broker := sse.NewBroker(store, nil, logger, Version, cfg.HealthInterval)
+	var oidcStatusProvider sse.OIDCStatusProvider
+	if oidcClient != nil {
+		oidcStatusProvider = oidcStatusProviderAdapter{client: oidcClient}
+	}
+	broker := sse.NewBroker(store, oidcStatusProvider, logger, Version, cfg.HealthInterval)
 	go broker.Run(ctx)
 
 	// Create and start HTTP health checker
@@ -352,7 +418,9 @@ func run(ctx context.Context, cfg config) error {
 	}
 	checker := health.NewChecker(store, store, probeClient, cfg.HealthInterval, historyWriter, logger)
 	if oidcClient != nil {
-		endpointDiscoverer := auth.NewEndpointDiscoverer(probeClient, logger)
+		endpointDiscoverer := endpointDiscovererAdapter{
+			discoverer: auth.NewEndpointDiscoverer(probeClient, logger),
+		}
 		checker.WithTokenProvider(oidcClient).WithDiscoverer(endpointDiscoverer)
 		slog.Info("OIDC authentication enabled for health checks")
 	}

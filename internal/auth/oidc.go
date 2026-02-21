@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,22 @@ import (
 	"time"
 )
 
+// Token state values surfaced to SSE.
+const (
+	TokenStateValid      = "valid"
+	TokenStateRefreshing = "refreshing"
+	TokenStateExpired    = "expired"
+	TokenStateError      = "error"
+)
+
+// OIDCStatus is a snapshot of provider/token health used for SSE status payloads.
+type OIDCStatus struct {
+	Connected    bool
+	ProviderName string
+	TokenState   string
+	LastSuccess  *time.Time
+}
+
 // cachedToken holds an in-memory OIDC access token and its expiry.
 // Never written to disk, logs, or SSE payloads.
 type cachedToken struct {
@@ -23,9 +40,9 @@ type cachedToken struct {
 
 // singleflightCall represents an in-progress token fetch shared across goroutines.
 type singleflightCall struct {
-	wg  sync.WaitGroup
-	val *cachedToken
-	err error
+	done chan struct{}
+	val  *cachedToken
+	err  error
 }
 
 // singleflightGroup deduplicates concurrent token fetches so only one HTTP
@@ -35,21 +52,24 @@ type singleflightGroup struct {
 	inflight *singleflightCall
 }
 
-func (g *singleflightGroup) Do(fn func() (*cachedToken, error)) (*cachedToken, error) {
+func (g *singleflightGroup) Do(ctx context.Context, fn func() (*cachedToken, error)) (*cachedToken, error) {
 	g.mu.Lock()
 	if g.inflight != nil {
 		call := g.inflight
 		g.mu.Unlock()
-		call.wg.Wait()
-		return call.val, call.err
+		select {
+		case <-call.done:
+			return call.val, call.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
-	call := &singleflightCall{}
-	call.wg.Add(1)
+	call := &singleflightCall{done: make(chan struct{})}
 	g.inflight = call
 	g.mu.Unlock()
 
 	call.val, call.err = fn()
-	call.wg.Done()
+	close(call.done)
 
 	g.mu.Lock()
 	g.inflight = nil
@@ -62,6 +82,7 @@ func (g *singleflightGroup) Do(fn func() (*cachedToken, error)) (*cachedToken, e
 // It is safe for concurrent use by multiple goroutines.
 type OIDCClient struct {
 	issuerURL     string
+	providerName  string
 	clientID      string
 	clientSecret  string
 	scopes        []string
@@ -69,6 +90,9 @@ type OIDCClient struct {
 	httpClient    *http.Client
 	mu            sync.Mutex
 	cachedToken   *cachedToken
+	connected     bool
+	tokenState    string
+	lastSuccess   *time.Time
 	logger        *slog.Logger
 	singleflight  singleflightGroup
 }
@@ -81,6 +105,7 @@ func NewOIDCClient(issuerURL, clientID, clientSecret string, scopes []string, lo
 	}
 	return &OIDCClient{
 		issuerURL:    issuerURL,
+		providerName: deriveProviderName(issuerURL),
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		scopes:       scopes,
@@ -92,7 +117,8 @@ func NewOIDCClient(issuerURL, clientID, clientSecret string, scopes []string, lo
 				},
 			},
 		},
-		logger: logger,
+		tokenState: TokenStateRefreshing,
+		logger:     logger,
 	}
 }
 
@@ -107,22 +133,48 @@ func (c *OIDCClient) GetToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	if c.cachedToken != nil && time.Until(c.cachedToken.expiresAt) > refreshThreshold {
 		token := c.cachedToken.accessToken
+		c.connected = true
+		c.tokenState = TokenStateValid
 		c.mu.Unlock()
 		return token, nil
+	}
+	if c.cachedToken != nil {
+		if time.Until(c.cachedToken.expiresAt) <= 0 {
+			c.connected = false
+			c.tokenState = TokenStateExpired
+		} else {
+			c.connected = true
+			c.tokenState = TokenStateRefreshing
+		}
+	} else {
+		c.connected = false
+		c.tokenState = TokenStateRefreshing
 	}
 	c.mu.Unlock()
 
 	// Slow path: fetch with singleflight dedup
-	tok, err := c.singleflight.Do(func() (*cachedToken, error) {
+	tok, err := c.singleflight.Do(ctx, func() (*cachedToken, error) {
 		return c.fetchToken(ctx)
 	})
 	if err != nil {
+		// Waiter cancellation should not mutate global provider status.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return "", err
+		}
+		c.mu.Lock()
+		c.connected = false
+		c.tokenState = TokenStateError
+		c.mu.Unlock()
 		return "", err
 	}
 
 	// Store in cache
 	c.mu.Lock()
 	c.cachedToken = tok
+	c.connected = true
+	c.tokenState = TokenStateValid
+	lastSuccess := time.Now()
+	c.lastSuccess = &lastSuccess
 	c.mu.Unlock()
 
 	return tok.accessToken, nil
@@ -208,6 +260,9 @@ func (c *OIDCClient) fetchToken(ctx context.Context) (*cachedToken, error) {
 	if tokenResp.AccessToken == "" {
 		return nil, fmt.Errorf("oidc token: empty access_token in response")
 	}
+	if tokenResp.ExpiresIn <= 0 {
+		return nil, fmt.Errorf("oidc token: invalid expires_in value")
+	}
 
 	expiresAt := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 	c.logger.Info("OIDC token acquired")
@@ -216,4 +271,42 @@ func (c *OIDCClient) fetchToken(ctx context.Context) (*cachedToken, error) {
 		accessToken: tokenResp.AccessToken,
 		expiresAt:   expiresAt,
 	}, nil
+}
+
+// GetStatus returns a snapshot of current OIDC status for SSE payload generation.
+func (c *OIDCClient) GetStatus() *OIDCStatus {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	tokenState := c.tokenState
+	connected := c.connected
+	if c.cachedToken != nil && time.Until(c.cachedToken.expiresAt) <= 0 && tokenState != TokenStateRefreshing {
+		tokenState = TokenStateExpired
+		connected = false
+	}
+
+	var lastSuccess *time.Time
+	if c.lastSuccess != nil {
+		ts := *c.lastSuccess
+		lastSuccess = &ts
+	}
+
+	return &OIDCStatus{
+		Connected:    connected,
+		ProviderName: c.providerName,
+		TokenState:   tokenState,
+		LastSuccess:  lastSuccess,
+	}
+}
+
+func deriveProviderName(issuerURL string) string {
+	u, err := url.Parse(issuerURL)
+	if err != nil || u.Hostname() == "" {
+		return "OIDC"
+	}
+	host := strings.ToLower(u.Hostname())
+	if strings.Contains(host, "pocketid") {
+		return "PocketID"
+	}
+	return u.Hostname()
 }

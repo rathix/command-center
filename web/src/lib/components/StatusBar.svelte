@@ -90,8 +90,17 @@
 		const status = getOIDCStatus();
 		if (!status) return null;
 		if (!status.connected) return 'text-health-error';
-		if (status.tokenState === 'refreshing') return 'text-health-auth-blocked';
-		return 'text-health-ok';
+		switch (status.tokenState) {
+			case 'valid':
+				return 'text-health-ok';
+			case 'refreshing':
+				return 'text-health-auth-blocked';
+			case 'expired':
+			case 'error':
+				return 'text-health-error';
+			default:
+				return 'text-health-error';
+		}
 	});
 
 	const oidcTooltipTitle = $derived.by(() => {

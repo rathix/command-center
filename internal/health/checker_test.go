@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rathix/command-center/internal/auth"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/state"
 )
@@ -841,19 +840,19 @@ func (m *mockTokenProvider) GetToken(_ context.Context) (string, error) {
 // mockEndpointDiscoverer is a configurable mock for EndpointDiscoverer.
 type mockEndpointDiscoverer struct {
 	mu          sync.Mutex
-	strategies  map[string]*auth.EndpointStrategy
-	discovered  map[string]*auth.EndpointStrategy // keyed by serviceKey
+	strategies  map[string]*EndpointStrategy
+	discovered  map[string]*EndpointStrategy // keyed by serviceKey
 	discoverErr error
 	cleared     []string
 }
 
-func (m *mockEndpointDiscoverer) GetStrategy(key string) *auth.EndpointStrategy {
+func (m *mockEndpointDiscoverer) GetStrategy(key string) *EndpointStrategy {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.strategies[key]
 }
 
-func (m *mockEndpointDiscoverer) Discover(_ context.Context, serviceKey, _ string) (*auth.EndpointStrategy, error) {
+func (m *mockEndpointDiscoverer) Discover(_ context.Context, serviceKey, _ string) (*EndpointStrategy, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.discoverErr != nil {
@@ -926,6 +925,12 @@ func TestCheckAll_403NilTokenProviderStaysAuthBlocked(t *testing.T) {
 
 // --- Task 8: OIDC retry happy path tests ---
 
+func runCheckCycles(checker *Checker, cycles int) {
+	for i := 0; i < cycles; i++ {
+		checker.checkAll(context.Background())
+	}
+}
+
 func TestCheckAll_OIDCRetry401BecomesHealthy(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
@@ -935,8 +940,8 @@ func TestCheckAll_OIDCRetry401BecomesHealthy(t *testing.T) {
 
 	tp := &mockTokenProvider{token: "test-token-123"}
 	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*auth.EndpointStrategy),
-		discovered: map[string]*auth.EndpointStrategy{
+		strategies: make(map[string]*EndpointStrategy),
+		discovered: map[string]*EndpointStrategy{
 			"ns1/svc1": {Type: "oidcAuth"},
 		},
 	}
@@ -952,7 +957,7 @@ func TestCheckAll_OIDCRetry401BecomesHealthy(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -981,15 +986,15 @@ func TestCheckAll_OIDCRetry403BecomesHealthy(t *testing.T) {
 
 	tp := &mockTokenProvider{token: "test-token-456"}
 	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*auth.EndpointStrategy),
-		discovered: map[string]*auth.EndpointStrategy{
+		strategies: make(map[string]*EndpointStrategy),
+		discovered: map[string]*EndpointStrategy{
 			"ns1/svc1": {Type: "oidcAuth"},
 		},
 	}
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1015,15 +1020,15 @@ func TestCheckAll_OIDCRetryBearerHeaderSent(t *testing.T) {
 
 	tp := &mockTokenProvider{token: "my-secret-token"}
 	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*auth.EndpointStrategy),
-		discovered: map[string]*auth.EndpointStrategy{
+		strategies: make(map[string]*EndpointStrategy),
+		discovered: map[string]*EndpointStrategy{
 			"ns1/svc1": {Type: "oidcAuth"},
 		},
 	}
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	reqs := authClient.getCapturedRequests()
 	foundAuth := false
@@ -1084,15 +1089,15 @@ func TestCheckAll_DiscoveryFindsHealthEndpointNoTokenNeeded(t *testing.T) {
 
 	tp := &mockTokenProvider{token: "should-not-be-used"}
 	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*auth.EndpointStrategy),
-		discovered: map[string]*auth.EndpointStrategy{
+		strategies: make(map[string]*EndpointStrategy),
+		discovered: map[string]*EndpointStrategy{
 			"ns1/svc1": {Type: "healthEndpoint", Endpoint: "https://svc1.example.com/healthz"},
 		},
 	}
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1119,14 +1124,14 @@ func TestCheckAll_CachedHealthEndpointWorks(t *testing.T) {
 
 	tp := &mockTokenProvider{token: "should-not-be-used"}
 	disc := &mockEndpointDiscoverer{
-		strategies: map[string]*auth.EndpointStrategy{
+		strategies: map[string]*EndpointStrategy{
 			"ns1/svc1": {Type: "healthEndpoint", Endpoint: "https://svc1.example.com/healthz"},
 		},
 	}
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1156,14 +1161,14 @@ func TestCheckAll_CachedEndpointFailsFallsToOIDC(t *testing.T) {
 
 	tp := &mockTokenProvider{token: "fallback-token"}
 	disc := &mockEndpointDiscoverer{
-		strategies: map[string]*auth.EndpointStrategy{
+		strategies: map[string]*EndpointStrategy{
 			"ns1/svc1": {Type: "healthEndpoint", Endpoint: "https://svc1.example.com/healthz"},
 		},
 	}
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1196,15 +1201,15 @@ func TestCheckAll_DiscoveryFindsNoEndpointsFallsToOIDC(t *testing.T) {
 
 	tp := &mockTokenProvider{token: "oidc-token"}
 	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*auth.EndpointStrategy),
-		discovered: map[string]*auth.EndpointStrategy{
+		strategies: make(map[string]*EndpointStrategy),
+		discovered: map[string]*EndpointStrategy{
 			"ns1/svc1": {Type: "oidcAuth"}, // No health endpoint found
 		},
 	}
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1234,11 +1239,14 @@ func TestCheckAll_OIDCProviderDownStaysAuthBlocked(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusAuthBlocked {
 		t.Errorf("expected %q when OIDC provider down, got %q", state.StatusAuthBlocked, svc.Status)
+	}
+	if tp.calls.Load() != 1 {
+		t.Errorf("expected token provider called once on retry cycle, got %d", tp.calls.Load())
 	}
 }
 
@@ -1264,7 +1272,7 @@ func TestCheckAll_OIDCProviderDownHealthyServicesUnaffected(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	healthy, _ := store.Get("ns1", "healthy-svc")
 	if healthy.Status != state.StatusHealthy {
@@ -1274,6 +1282,9 @@ func TestCheckAll_OIDCProviderDownHealthyServicesUnaffected(t *testing.T) {
 	blocked, _ := store.Get("ns1", "blocked-svc")
 	if blocked.Status != state.StatusAuthBlocked {
 		t.Errorf("blocked service: expected %q, got %q", state.StatusAuthBlocked, blocked.Status)
+	}
+	if tp.calls.Load() != 1 {
+		t.Errorf("expected token provider called once for blocked service, got %d", tp.calls.Load())
 	}
 }
 
@@ -1295,13 +1306,13 @@ func TestCheckAll_DiscoveryErrorFallsToOIDC(t *testing.T) {
 
 	tp := &mockTokenProvider{token: "fallback-token"}
 	disc := &mockEndpointDiscoverer{
-		strategies:  make(map[string]*auth.EndpointStrategy),
+		strategies:  make(map[string]*EndpointStrategy),
 		discoverErr: errors.New("discovery network error"),
 	}
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1362,7 +1373,7 @@ func TestCheckAll_MultipleAuthBlockedServicesConcurrent(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp)
-	checker.checkAll(context.Background())
+	runCheckCycles(checker, 2)
 
 	for i := 0; i < numServices; i++ {
 		name := "svc" + strings.Repeat("x", i)

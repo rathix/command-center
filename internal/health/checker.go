@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rathix/command-center/internal/auth"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/state"
 )
@@ -36,10 +35,16 @@ type TokenProvider interface {
 	GetToken(ctx context.Context) (string, error)
 }
 
+// EndpointStrategy represents the auth resolution strategy for an auth-blocked service.
+type EndpointStrategy struct {
+	Type     string // "healthEndpoint" or "oidcAuth"
+	Endpoint string // non-empty when Type == "healthEndpoint"
+}
+
 // EndpointDiscoverer discovers health endpoints for auth-blocked services.
 type EndpointDiscoverer interface {
-	GetStrategy(serviceKey string) *auth.EndpointStrategy
-	Discover(ctx context.Context, serviceKey string, baseURL string) (*auth.EndpointStrategy, error)
+	GetStrategy(serviceKey string) *EndpointStrategy
+	Discover(ctx context.Context, serviceKey string, baseURL string) (*EndpointStrategy, error)
 	ClearStrategy(serviceKey string)
 }
 
@@ -55,6 +60,10 @@ type Checker struct {
 	// Optional OIDC fields — nil means MVP behavior (no auth retry).
 	tokenProvider TokenProvider
 	discoverer    EndpointDiscoverer
+
+	// Tracks services that should be retried with OIDC on the next cycle.
+	authRetryMu        sync.Mutex
+	pendingAuthRetries map[string]struct{}
 }
 
 // NewChecker creates a new health checker. If logger is nil, a no-op logger is used.
@@ -66,12 +75,13 @@ func NewChecker(reader StateReader, writer StateWriter, client HTTPProber, inter
 		historyWriter = history.NoopWriter{}
 	}
 	return &Checker{
-		reader:        reader,
-		writer:        writer,
-		client:        client,
-		interval:      interval,
-		historyWriter: historyWriter,
-		logger:        logger,
+		reader:             reader,
+		writer:             writer,
+		client:             client,
+		interval:           interval,
+		historyWriter:      historyWriter,
+		logger:             logger,
+		pendingAuthRetries: make(map[string]struct{}),
 	}
 }
 
@@ -119,6 +129,7 @@ func (c *Checker) checkAll(ctx context.Context) {
 	for _, svc := range services {
 		go func(s state.Service) {
 			defer wg.Done()
+			serviceKey := s.Namespace + "/" + s.Name
 
 			// Determine probe URL: HealthURL overrides base URL
 			probeURL := s.URL
@@ -131,7 +142,17 @@ func (c *Checker) checkAll(ctx context.Context) {
 
 			// After initial probe returns auth-blocked, attempt OIDC resolution
 			if result.status == state.StatusAuthBlocked {
-				result = c.resolveAuthBlocked(ctx, s, result)
+				if c.tokenProvider != nil {
+					if c.shouldRetryAuthNow(serviceKey) {
+						result = c.resolveAuthBlocked(ctx, s, result)
+					}
+				}
+			} else {
+				c.clearPendingAuthRetry(serviceKey)
+			}
+
+			if result.status != state.StatusAuthBlocked {
+				c.clearPendingAuthRetry(serviceKey)
 			}
 
 			// Override status classification if ExpectedStatusCodes is set
@@ -167,6 +188,7 @@ type probeResult struct {
 	httpCode       *int
 	responseTimeMs int64
 	errorSnippet   *string
+	authMethod     string
 }
 
 // probeService performs a single HTTP GET health check against a service URL.
@@ -176,6 +198,7 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 		return probeResult{
 			status:       state.StatusUnhealthy,
 			errorSnippet: ptrString(err.Error()),
+			authMethod:   "",
 		}
 	}
 
@@ -189,6 +212,7 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 			status:         state.StatusUnhealthy,
 			responseTimeMs: responseTimeMs,
 			errorSnippet:   &errMsg,
+			authMethod:     "",
 		}
 	}
 	defer resp.Body.Close()
@@ -206,6 +230,7 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 		httpCode:       &code,
 		responseTimeMs: responseTimeMs,
 		errorSnippet:   snippet,
+		authMethod:     "",
 	}
 }
 
@@ -266,6 +291,7 @@ func (c *Checker) probeServiceWithAuth(ctx context.Context, url, token string) p
 		return probeResult{
 			status:       state.StatusUnhealthy,
 			errorSnippet: ptrString(err.Error()),
+			authMethod:   "",
 		}
 	}
 
@@ -281,6 +307,7 @@ func (c *Checker) probeServiceWithAuth(ctx context.Context, url, token string) p
 			status:         state.StatusUnhealthy,
 			responseTimeMs: responseTimeMs,
 			errorSnippet:   &errMsg,
+			authMethod:     "oidc",
 		}
 	}
 	defer resp.Body.Close()
@@ -298,6 +325,7 @@ func (c *Checker) probeServiceWithAuth(ctx context.Context, url, token string) p
 		httpCode:       &code,
 		responseTimeMs: responseTimeMs,
 		errorSnippet:   snippet,
+		authMethod:     "oidc",
 	}
 }
 
@@ -316,6 +344,7 @@ func (c *Checker) applyResult(svc *state.Service, res probeResult) *history.Tran
 	svc.HTTPCode = res.httpCode
 	svc.ResponseTimeMs = &res.responseTimeMs
 	svc.ErrorSnippet = res.errorSnippet
+	svc.AuthMethod = res.authMethod
 
 	now := time.Now()
 	svc.LastChecked = &now
@@ -388,6 +417,22 @@ func readSnippet(body io.Reader) *string {
 
 func ptrString(s string) *string {
 	return &s
+}
+
+func (c *Checker) shouldRetryAuthNow(serviceKey string) bool {
+	c.authRetryMu.Lock()
+	defer c.authRetryMu.Unlock()
+	if _, exists := c.pendingAuthRetries[serviceKey]; !exists {
+		c.pendingAuthRetries[serviceKey] = struct{}{}
+		return false
+	}
+	return true
+}
+
+func (c *Checker) clearPendingAuthRetry(serviceKey string) {
+	c.authRetryMu.Lock()
+	delete(c.pendingAuthRetries, serviceKey)
+	c.authRetryMu.Unlock()
 }
 
 func containsInt(slice []int, val int) bool {

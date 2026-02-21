@@ -50,11 +50,15 @@ func NewEndpointDiscoverer(client HTTPProber, logger *slog.Logger) *EndpointDisc
 // It returns the first successful strategy and caches the result.
 // If a cached strategy exists, it is returned without re-probing.
 func (d *EndpointDiscoverer) Discover(ctx context.Context, serviceKey, baseURL string) (*EndpointStrategy, error) {
+	if d.client == nil {
+		return nil, fmt.Errorf("endpoint discovery failed for %s: no HTTP client configured", serviceKey)
+	}
+
 	// Check cache under read-lock first
 	d.mu.RLock()
 	if cached, ok := d.cache[serviceKey]; ok {
 		d.mu.RUnlock()
-		return cached, nil
+		return cloneStrategy(cached), nil
 	}
 	d.mu.RUnlock()
 
@@ -64,12 +68,7 @@ func (d *EndpointDiscoverer) Discover(ctx context.Context, serviceKey, baseURL s
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
 		if err != nil {
-			d.logger.Debug("probing health endpoint",
-				"serviceKey", serviceKey,
-				"url", probeURL,
-				"error", err,
-			)
-			continue
+			return nil, fmt.Errorf("endpoint discovery failed for %s: invalid probe URL %q", serviceKey, probeURL)
 		}
 
 		resp, err := d.client.Do(req)
@@ -106,7 +105,7 @@ func (d *EndpointDiscoverer) Discover(ctx context.Context, serviceKey, baseURL s
 				"serviceKey", serviceKey,
 				"endpoint", probeURL,
 			)
-			return strategy, nil
+			return cloneStrategy(strategy), nil
 		}
 	}
 
@@ -120,14 +119,14 @@ func (d *EndpointDiscoverer) Discover(ctx context.Context, serviceKey, baseURL s
 	d.logger.Info("no health endpoint found, using OIDC",
 		"serviceKey", serviceKey,
 	)
-	return strategy, nil
+	return cloneStrategy(strategy), nil
 }
 
 // GetStrategy returns the cached endpoint strategy for a service, or nil if not cached.
 func (d *EndpointDiscoverer) GetStrategy(serviceKey string) *EndpointStrategy {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	return d.cache[serviceKey]
+	return cloneStrategy(d.cache[serviceKey])
 }
 
 // ClearStrategy removes the cached endpoint strategy for a service.
@@ -144,4 +143,12 @@ func (d *EndpointDiscoverer) ClearStrategy(serviceKey string) {
 // It strips trailing slashes from baseURL to prevent double-slash URLs.
 func buildProbeURL(baseURL, path string) string {
 	return strings.TrimRight(baseURL, "/") + path
+}
+
+func cloneStrategy(strategy *EndpointStrategy) *EndpointStrategy {
+	if strategy == nil {
+		return nil
+	}
+	copy := *strategy
+	return &copy
 }

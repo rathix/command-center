@@ -16,6 +16,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"regexp"
@@ -59,6 +60,10 @@ type secretsYAML struct {
 // empty, it returns (nil, nil) indicating OIDC is disabled. The decryption key
 // is read from the SECRETS_KEY environment variable.
 func LoadSecrets(secretsFile string, logger *slog.Logger) (*OIDCCredentials, error) {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	if secretsFile == "" {
 		return nil, nil
 	}

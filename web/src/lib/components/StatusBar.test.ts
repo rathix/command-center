@@ -385,6 +385,16 @@ describe('StatusBar', () => {
 			expect(lock).toHaveClass('text-health-error');
 		});
 
+		it('shows lock with text-health-error when connected but token expired', () => {
+			setConnectionStatus('connected');
+			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
+			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'expired', lastSuccess: null });
+			render(StatusBar);
+			const lock = screen.getByLabelText('OIDC status');
+			expect(lock).toBeInTheDocument();
+			expect(lock).toHaveClass('text-health-error');
+		});
+
 		it('does not render OIDC lock when oidcStatus is null', () => {
 			setConnectionStatus('connected');
 			replaceAll([makeService({ name: 'svc-1', status: 'healthy' })], 'v1.0.0');
