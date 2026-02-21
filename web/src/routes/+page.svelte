@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { connect, disconnect } from '$lib/sseClient';
 	import StatusBar from '$lib/components/StatusBar.svelte';
-	import ServiceList from '$lib/components/ServiceList.svelte';
+	import GroupedServiceList from '$lib/components/GroupedServiceList.svelte';
 
 	onMount(() => {
 		connect();
@@ -22,5 +22,5 @@
 </header>
 
 <main id="service-list" tabindex="-1" class="mx-auto mt-16 max-w-[1200px] px-6 py-8">
-	<ServiceList />
+	<GroupedServiceList />
 </main>
