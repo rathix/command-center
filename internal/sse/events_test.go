@@ -144,3 +144,117 @@ func TestDiscoveredEventPayloadFromServiceNilOptionalFields(t *testing.T) {
 		}
 	}
 }
+
+func TestOIDCStatusJSONCamelCase(t *testing.T) {
+	ts := time.Date(2026, 2, 21, 14, 30, 0, 0, time.UTC)
+	status := OIDCStatus{
+		Connected:    true,
+		ProviderName: "PocketID",
+		TokenState:   TokenStateValid,
+		LastSuccess:  &ts,
+	}
+
+	data, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	for _, field := range []string{"connected", "providerName", "tokenState", "lastSuccess"} {
+		if !strings.Contains(jsonStr, `"`+field+`"`) {
+			t.Errorf("expected camelCase field %q in JSON, got: %s", field, jsonStr)
+		}
+	}
+}
+
+func TestOIDCStatusJSONRoundTrip(t *testing.T) {
+	ts := time.Date(2026, 2, 21, 14, 30, 0, 0, time.UTC)
+	original := OIDCStatus{
+		Connected:    true,
+		ProviderName: "PocketID",
+		TokenState:   TokenStateValid,
+		LastSuccess:  &ts,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var roundTrip OIDCStatus
+	if err := json.Unmarshal(data, &roundTrip); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if roundTrip.Connected != original.Connected {
+		t.Errorf("Connected = %v, want %v", roundTrip.Connected, original.Connected)
+	}
+	if roundTrip.ProviderName != original.ProviderName {
+		t.Errorf("ProviderName = %q, want %q", roundTrip.ProviderName, original.ProviderName)
+	}
+	if roundTrip.TokenState != original.TokenState {
+		t.Errorf("TokenState = %q, want %q", roundTrip.TokenState, original.TokenState)
+	}
+	if roundTrip.LastSuccess == nil || !roundTrip.LastSuccess.Equal(*original.LastSuccess) {
+		t.Errorf("LastSuccess = %v, want %v", roundTrip.LastSuccess, original.LastSuccess)
+	}
+}
+
+func TestStateEventPayloadOIDCStatusOmittedWhenNil(t *testing.T) {
+	payload := StateEventPayload{
+		AppVersion:   "v1.0.0",
+		Services:     []state.Service{},
+		ConfigErrors: []string{},
+		OIDCStatus:   nil,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	if strings.Contains(jsonStr, `"oidcStatus"`) {
+		t.Errorf("expected oidcStatus to be omitted when nil, got: %s", jsonStr)
+	}
+}
+
+func TestServiceAuthMethodOmittedWhenEmpty(t *testing.T) {
+	svc := state.Service{
+		Name:       "svc",
+		Namespace:  "default",
+		URL:        "https://svc.example.com",
+		Status:     state.StatusHealthy,
+		AuthMethod: "",
+	}
+
+	data, err := json.Marshal(svc)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	if strings.Contains(jsonStr, `"authMethod"`) {
+		t.Errorf("expected authMethod to be omitted when empty, got: %s", jsonStr)
+	}
+}
+
+func TestServiceAuthMethodPresentWhenSet(t *testing.T) {
+	svc := state.Service{
+		Name:       "svc",
+		Namespace:  "default",
+		URL:        "https://svc.example.com",
+		Status:     state.StatusHealthy,
+		AuthMethod: "oidc",
+	}
+
+	data, err := json.Marshal(svc)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	if !strings.Contains(jsonStr, `"authMethod":"oidc"`) {
+		t.Errorf("expected authMethod:oidc in JSON, got: %s", jsonStr)
+	}
+}

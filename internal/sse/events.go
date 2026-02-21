@@ -9,6 +9,22 @@ import (
 	"github.com/rathix/command-center/internal/state"
 )
 
+// TokenState constants for OIDCStatus.
+const (
+	TokenStateValid      = "valid"
+	TokenStateRefreshing = "refreshing"
+	TokenStateExpired    = "expired"
+	TokenStateError      = "error"
+)
+
+// OIDCStatus represents the OIDC provider status included in state events.
+type OIDCStatus struct {
+	Connected    bool       `json:"connected"`
+	ProviderName string     `json:"providerName"`
+	TokenState   string     `json:"tokenState"`
+	LastSuccess  *time.Time `json:"lastSuccess"`
+}
+
 // StateEventPayload wraps the full service list for the initial "state" event.
 type StateEventPayload struct {
 	AppVersion            string          `json:"appVersion"`
@@ -17,6 +33,7 @@ type StateEventPayload struct {
 	K8sLastEvent          *time.Time      `json:"k8sLastEvent"`
 	HealthCheckIntervalMs int             `json:"healthCheckIntervalMs"`
 	ConfigErrors          []string        `json:"configErrors"`
+	OIDCStatus            *OIDCStatus     `json:"oidcStatus,omitempty"`
 }
 
 // K8sStatusPayload is the JSON payload for "k8sStatus" events.
@@ -40,6 +57,7 @@ type DiscoveredEventPayload struct {
 	LastChecked     *time.Time         `json:"lastChecked"`
 	LastStateChange *time.Time         `json:"lastStateChange"`
 	ErrorSnippet    *string            `json:"errorSnippet"`
+	AuthMethod      string             `json:"authMethod,omitempty"`
 }
 
 // RemovedEventPayload contains only the identifier fields for a "removed" event.
@@ -63,6 +81,7 @@ func discoveredEventPayloadFromService(svc state.Service) DiscoveredEventPayload
 		LastChecked:     svc.LastChecked,
 		LastStateChange: svc.LastStateChange,
 		ErrorSnippet:    svc.ErrorSnippet,
+		AuthMethod:      svc.AuthMethod,
 	}
 }
 
