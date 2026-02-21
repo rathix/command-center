@@ -7,7 +7,7 @@ import {
 	setConfigErrors,
 	getK8sConnected
 } from './serviceStore.svelte';
-import type { HealthStatus, Service, K8sStatusPayload } from './types';
+import type { HealthStatus, Service, K8sStatusPayload, ServiceSource } from './types';
 
 let eventSource: EventSource | null = null;
 type StatePayload = {
@@ -48,8 +48,15 @@ function isNullableString(value: unknown): value is string | null {
 	return value === null || typeof value === 'string';
 }
 
-function isOptionalString(value: unknown): value is string | undefined {
-	return value === undefined || typeof value === 'string';
+function isOptionalServiceSource(value: unknown): value is ServiceSource | undefined {
+	return value === undefined || value === 'kubernetes' || value === 'config';
+}
+
+function isNullableISODateString(value: unknown): value is string | null {
+	return (
+		value === null ||
+		(typeof value === 'string' && !Number.isNaN(new Date(value).getTime()))
+	);
 }
 
 function isService(value: unknown): value is Service {
@@ -61,7 +68,7 @@ function isService(value: unknown): value is Service {
 		typeof value.namespace === 'string' &&
 		typeof value.group === 'string' &&
 		typeof value.url === 'string' &&
-		isOptionalString(value.source) &&
+		isOptionalServiceSource(value.source) &&
 		(value.icon === undefined || isNullableString(value.icon)) &&
 		isHealthStatus(value.status) &&
 		isNullableNumber(value.httpCode) &&
@@ -76,11 +83,7 @@ function isStatePayload(value: unknown): value is StatePayload {
 	if (!isRecord(value) || !Array.isArray(value.services)) return false;
 	if (value.appVersion !== undefined && typeof value.appVersion !== 'string') return false;
 	if (value.k8sConnected !== undefined && typeof value.k8sConnected !== 'boolean') return false;
-	if (
-		value.k8sLastEvent !== undefined &&
-		value.k8sLastEvent !== null &&
-		typeof value.k8sLastEvent !== 'string'
-	)
+	if (value.k8sLastEvent !== undefined && !isNullableISODateString(value.k8sLastEvent))
 		return false;
 	if (
 		value.healthCheckIntervalMs !== undefined &&
@@ -105,10 +108,7 @@ function isRemovedPayload(value: unknown): value is { namespace: string; name: s
 
 function isK8sStatusPayload(value: unknown): value is K8sStatusPayload {
 	if (!isRecord(value)) return false;
-	const hasValidEvent = value.k8sLastEvent === null || 
-		(typeof value.k8sLastEvent === 'string' && !Number.isNaN(new Date(value.k8sLastEvent).getTime()));
-	
-	return typeof value.k8sConnected === 'boolean' && hasValidEvent;
+	return typeof value.k8sConnected === 'boolean' && isNullableISODateString(value.k8sLastEvent);
 }
 
 export function connect(): void {

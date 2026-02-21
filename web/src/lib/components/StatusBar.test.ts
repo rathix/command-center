@@ -60,7 +60,7 @@ describe('StatusBar', () => {
 		setConnectionStatus('reconnecting');
 		render(StatusBar);
 		expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
-		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
+		expect(screen.getByText('1 service — all healthy')).toBeInTheDocument();
 		expect(screen.getByText('Last updated 0s ago')).toBeInTheDocument();
 		expect(screen.queryByText('Command Center v1.0.0')).not.toBeInTheDocument();
 	});
@@ -73,7 +73,7 @@ describe('StatusBar', () => {
 		expect(connectionLost).toBeInTheDocument();
 		expect(connectionLost).toHaveClass('text-health-error');
 		// Health summary is still visible
-		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
+		expect(screen.getByText('1 service — all healthy')).toBeInTheDocument();
 		expect(screen.getByText('Last updated 0s ago')).toBeInTheDocument();
 		expect(screen.queryByText('Command Center v1.0.0')).not.toBeInTheDocument();
 	});
@@ -113,7 +113,7 @@ describe('StatusBar', () => {
 		render(StatusBar);
 		expect(screen.queryByText('Reconnecting...')).not.toBeInTheDocument();
 		expect(screen.queryByText('Connection lost')).not.toBeInTheDocument();
-		expect(screen.getByText('1 services — all healthy')).toBeInTheDocument();
+		expect(screen.getByText('1 service — all healthy')).toBeInTheDocument();
 	});
 
 	describe('health breakdown', () => {

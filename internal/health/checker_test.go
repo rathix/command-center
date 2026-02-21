@@ -696,7 +696,7 @@ func (m *mockHistoryWriter) getRecords() []history.TransitionRecord {
 	return cp
 }
 
-func TestApplyResult_TransitionRecordsHistory(t *testing.T) {
+func TestCheckAll_TransitionRecordsHistory(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
 		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
@@ -711,8 +711,7 @@ func TestApplyResult_TransitionRecordsHistory(t *testing.T) {
 
 	hw := &mockHistoryWriter{}
 	checker := NewChecker(store, store, client, time.Hour, hw, nil)
-	svc, _ := store.Get("ns1", "svc1")
-	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
+	checker.checkAll(context.Background())
 
 	recs := hw.getRecords()
 	if len(recs) != 1 {
@@ -736,7 +735,7 @@ func TestApplyResult_TransitionRecordsHistory(t *testing.T) {
 	}
 }
 
-func TestApplyResult_NoTransitionNoHistory(t *testing.T) {
+func TestCheckAll_NoTransitionNoHistory(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
 		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
@@ -751,8 +750,7 @@ func TestApplyResult_NoTransitionNoHistory(t *testing.T) {
 
 	hw := &mockHistoryWriter{}
 	checker := NewChecker(store, store, client, time.Hour, hw, nil)
-	svc, _ := store.Get("ns1", "svc1")
-	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
+	checker.checkAll(context.Background())
 
 	recs := hw.getRecords()
 	if len(recs) != 0 {
@@ -760,7 +758,7 @@ func TestApplyResult_NoTransitionNoHistory(t *testing.T) {
 	}
 }
 
-func TestApplyResult_HistoryWriteErrorLogged(t *testing.T) {
+func TestCheckAll_HistoryWriteErrorDoesNotBlockUpdates(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
 		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
@@ -775,13 +773,33 @@ func TestApplyResult_HistoryWriteErrorLogged(t *testing.T) {
 
 	hw := &mockHistoryWriter{err: errors.New("disk full")}
 	checker := NewChecker(store, store, client, time.Hour, hw, nil)
-	svc, _ := store.Get("ns1", "svc1")
-
-	// Should not panic or block even when Record returns an error
-	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
+	checker.checkAll(context.Background())
 
 	// Status should still be updated despite history write failure
+	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
 		t.Errorf("expected status %q despite history error, got %q", state.StatusHealthy, svc.Status)
+	}
+}
+
+func TestNewChecker_NilHistoryWriterDefaultsToNoop(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
+		Status: state.StatusUnknown,
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://svc1.example.com": {statusCode: 200, body: "OK"},
+		},
+	}
+
+	checker := NewChecker(store, store, client, time.Hour, nil, nil)
+	checker.checkAll(context.Background())
+
+	svc, _ := store.Get("ns1", "svc1")
+	if svc.Status != state.StatusHealthy {
+		t.Errorf("expected status %q with nil history writer, got %q", state.StatusHealthy, svc.Status)
 	}
 }

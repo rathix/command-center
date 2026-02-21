@@ -45,6 +45,9 @@ func NewChecker(reader StateReader, writer StateWriter, client HTTPProber, inter
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+	if historyWriter == nil {
+		historyWriter = history.NoopWriter{}
+	}
 	return &Checker{
 		reader:        reader,
 		writer:        writer,
@@ -105,10 +108,14 @@ func (c *Checker) checkAll(ctx context.Context) {
 				}
 			}
 
+			var transition *history.TransitionRecord
 			// Atomically update only health fields
 			c.writer.Update(s.Namespace, s.Name, func(svc *state.Service) {
-				c.applyResult(svc, result)
+				transition = c.applyResult(svc, result)
 			})
+			if transition != nil {
+				c.recordTransition(*transition)
+			}
 		}(svc)
 	}
 	wg.Wait()
@@ -168,8 +175,15 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 	}
 }
 
+func (c *Checker) recordTransition(rec history.TransitionRecord) {
+	if err := c.historyWriter.Record(rec); err != nil {
+		c.logger.Warn("history write failed", "service", rec.ServiceKey, "error", err)
+	}
+}
+
 // applyResult updates health fields on a service, preserving non-health fields.
-func (c *Checker) applyResult(svc *state.Service, res probeResult) {
+// It returns a history transition record when a status transition occurred.
+func (c *Checker) applyResult(svc *state.Service, res probeResult) *history.TransitionRecord {
 	previousStatus := svc.Status
 
 	svc.Status = res.status
@@ -180,6 +194,7 @@ func (c *Checker) applyResult(svc *state.Service, res probeResult) {
 	now := time.Now()
 	svc.LastChecked = &now
 
+	var transition *history.TransitionRecord
 	if res.status != previousStatus {
 		svc.LastStateChange = &now
 		c.logger.Info("service health changed",
@@ -188,16 +203,16 @@ func (c *Checker) applyResult(svc *state.Service, res probeResult) {
 			"from", string(previousStatus),
 			"to", string(res.status),
 		)
-		if err := c.historyWriter.Record(history.TransitionRecord{
+
+		rec := history.TransitionRecord{
 			Timestamp:  now,
 			ServiceKey: svc.Namespace + "/" + svc.Name,
 			PrevStatus: previousStatus,
 			NextStatus: res.status,
 			HTTPCode:   res.httpCode,
 			ResponseMs: &res.responseTimeMs,
-		}); err != nil {
-			c.logger.Warn("history write failed", "service", svc.Name, "error", err)
 		}
+		transition = &rec
 	}
 
 	logArgs := []any{
@@ -210,6 +225,7 @@ func (c *Checker) applyResult(svc *state.Service, res probeResult) {
 		logArgs = append(logArgs, "httpCode", *res.httpCode)
 	}
 	c.logger.Debug("health check completed", logArgs...)
+	return transition
 }
 
 // classifyStatus maps an HTTP status code to a HealthStatus.

@@ -315,3 +315,38 @@ func TestFileWriter_JSONFieldNames(t *testing.T) {
 		t.Errorf("got %d JSON fields, want %d", len(raw), len(expectedKeys))
 	}
 }
+
+func TestFileWriter_CreatesParentDirsAutomatically(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "nested", "deeper", "history.jsonl")
+	w, err := NewFileWriter(path, nil)
+	if err != nil {
+		t.Fatalf("NewFileWriter: %v", err)
+	}
+	defer w.Close()
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected history file to exist, got stat error: %v", err)
+	}
+}
+
+func TestFileWriter_NewFileHasOwnerOnlyPermissions(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	w, err := NewFileWriter(path, nil)
+	if err != nil {
+		t.Fatalf("NewFileWriter: %v", err)
+	}
+	defer w.Close()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Fatalf("file mode = %o, want 600", got)
+	}
+}

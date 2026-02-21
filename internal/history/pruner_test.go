@@ -314,6 +314,31 @@ func TestPrune(t *testing.T) {
 		}
 	})
 
+	t.Run("malformed-only cleanup rewrites file even when no old records", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		path := filepath.Join(dir, "malformed-only.jsonl")
+
+		rec := makeRecord(1, "svc-good")
+		goodData, _ := json.Marshal(rec)
+		content := string(goodData) + "\n" +
+			"garbage line\n"
+		os.WriteFile(path, []byte(content), 0644)
+
+		err := Prune(path, 30, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := ReadAllRecords(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("expected 1 valid record after cleanup, got %d", len(got))
+		}
+	})
+
 	t.Run("atomic write produces correct file contents", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
@@ -388,5 +413,53 @@ func TestPrunerRun(t *testing.T) {
 	}
 	if got[0].ServiceKey != "svc-new" {
 		t.Errorf("expected svc-new, got %s", got[0].ServiceKey)
+	}
+}
+
+func TestPrunerRunOnce_WithWriter_ReopensAndContinuesAppending(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "history.jsonl")
+
+	writer, err := NewFileWriter(path, nil)
+	if err != nil {
+		t.Fatalf("NewFileWriter: %v", err)
+	}
+	defer writer.Close()
+
+	if err := writer.Record(makeRecord(60, "svc-old")); err != nil {
+		t.Fatalf("writer.Record old: %v", err)
+	}
+	if err := writer.Record(makeRecord(1, "svc-keep")); err != nil {
+		t.Fatalf("writer.Record keep: %v", err)
+	}
+
+	pruner := NewPruner(path, 30, writer, nil)
+	pruner.runOnce()
+
+	// Verify writes still go to the renamed file after prune+reopen.
+	if err := writer.Record(makeRecord(0, "svc-post-prune")); err != nil {
+		t.Fatalf("writer.Record post-prune: %v", err)
+	}
+
+	got, err := ReadAllRecords(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keys := make(map[string]struct{}, len(got))
+	for _, rec := range got {
+		keys[rec.ServiceKey] = struct{}{}
+	}
+
+	if _, ok := keys["svc-old"]; ok {
+		t.Fatalf("expected old record to be pruned")
+	}
+	if _, ok := keys["svc-keep"]; !ok {
+		t.Fatalf("expected retained record to remain after prune")
+	}
+	if _, ok := keys["svc-post-prune"]; !ok {
+		t.Fatalf("expected post-prune append to succeed after writer reopen")
 	}
 }

@@ -131,6 +131,49 @@ func TestConfigEnvVarAllParameters(t *testing.T) {
 	}
 }
 
+func TestConfigHistoryFileDefaultUsesDataDir(t *testing.T) {
+	cfg, err := loadConfig([]string{"--data-dir", "/custom/data"})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	want := filepath.Join("/custom/data", "history.jsonl")
+	if cfg.HistoryFile != want {
+		t.Fatalf("HistoryFile = %q, want %q", cfg.HistoryFile, want)
+	}
+}
+
+func TestConfigHistoryFileFlag(t *testing.T) {
+	cfg, err := loadConfig([]string{"--history-file", "/tmp/custom-history.jsonl"})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	if cfg.HistoryFile != "/tmp/custom-history.jsonl" {
+		t.Fatalf("HistoryFile = %q, want %q", cfg.HistoryFile, "/tmp/custom-history.jsonl")
+	}
+}
+
+func TestConfigHistoryFileEnvFallback(t *testing.T) {
+	t.Setenv("HISTORY_FILE", "/env/history.jsonl")
+	cfg, err := loadConfig([]string{})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	if cfg.HistoryFile != "/env/history.jsonl" {
+		t.Fatalf("HistoryFile = %q, want %q", cfg.HistoryFile, "/env/history.jsonl")
+	}
+}
+
+func TestConfigHistoryFileFlagPrecedenceOverEnv(t *testing.T) {
+	t.Setenv("HISTORY_FILE", "/env/history.jsonl")
+	cfg, err := loadConfig([]string{"--history-file", "/flag/history.jsonl"})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	if cfg.HistoryFile != "/flag/history.jsonl" {
+		t.Fatalf("HistoryFile = %q, want %q", cfg.HistoryFile, "/flag/history.jsonl")
+	}
+}
+
 func TestConfigInvalidHealthInterval(t *testing.T) {
 	// Invalid health interval should return an error
 	t.Setenv("HEALTH_INTERVAL", "not-a-duration")

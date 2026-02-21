@@ -23,6 +23,7 @@
 		if (c.healthy > 0) parts.push({ label: 'healthy', count: c.healthy, color: 'text-health-ok' });
 		return parts;
 	});
+	const serviceLabel = $derived.by(() => (getCounts().total === 1 ? 'service' : 'services'));
 
 	let now = $state(Date.now());
 
@@ -85,7 +86,7 @@
 				<span class="text-sm font-semibold text-subtext-0">No services discovered</span>
 			{:else if !getHasProblems()}
 				<span class="text-sm font-semibold text-health-ok"
-					>{getCounts().total} services — all healthy</span
+					>{getCounts().total} {serviceLabel} — all healthy</span
 				>
 			{:else}
 				<span class="text-sm font-semibold">

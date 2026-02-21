@@ -31,12 +31,14 @@ func (p *PendingHistory) ApplyIfPending(store StateWriter, namespace, name strin
 	key := namespace + "/" + name
 	p.mu.Lock()
 	rec, ok := p.pending[key]
-	if ok {
-		delete(p.pending, key)
-	}
 	p.mu.Unlock()
 
 	if !ok {
+		return
+	}
+
+	if _, exists := store.Get(namespace, name); !exists {
+		// Service is still not present; keep record pending.
 		return
 	}
 
@@ -46,6 +48,15 @@ func (p *PendingHistory) ApplyIfPending(store StateWriter, namespace, name strin
 		svc.LastStateChange = &ts
 		svc.Status = status
 	})
+
+	if _, exists := store.Get(namespace, name); !exists {
+		// Service disappeared before update could apply; keep it pending.
+		return
+	}
+
+	p.mu.Lock()
+	delete(p.pending, key)
+	p.mu.Unlock()
 }
 
 // ReadHistory reads a JSONL history file and returns the latest TransitionRecord per service key.
@@ -66,6 +77,7 @@ func ReadHistory(path string) (map[string]TransitionRecord, error) {
 func readRecords(r io.Reader, logger *slog.Logger) (map[string]TransitionRecord, error) {
 	records := make(map[string]TransitionRecord)
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -135,7 +147,10 @@ func RestoreHistory(store StateWriter, records map[string]TransitionRecord, logg
 // Returns false if the key does not contain a slash.
 func splitServiceKey(key string) (namespace, name string, ok bool) {
 	idx := strings.Index(key, "/")
-	if idx < 0 {
+	if idx <= 0 || idx >= len(key)-1 {
+		return "", "", false
+	}
+	if strings.Contains(key[idx+1:], "/") {
 		return "", "", false
 	}
 	return key[:idx], key[idx+1:], true

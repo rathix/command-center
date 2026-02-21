@@ -305,3 +305,55 @@ func TestApplyIfPending_NoopForNonPending(t *testing.T) {
 		t.Error("LastStateChange should remain nil for non-pending service")
 	}
 }
+
+func TestApplyIfPending_KeepsRecordWhenServiceStillMissing(t *testing.T) {
+	t.Parallel()
+	store := newMockStateWriter()
+
+	ts := time.Date(2025, 6, 15, 14, 0, 0, 0, time.UTC)
+	pending := &PendingHistory{
+		pending: map[string]TransitionRecord{
+			"default/svc-missing": {
+				Timestamp:  ts,
+				ServiceKey: "default/svc-missing",
+				PrevStatus: state.StatusUnknown,
+				NextStatus: state.StatusHealthy,
+			},
+		},
+	}
+
+	pending.ApplyIfPending(store, "default", "svc-missing")
+
+	if len(pending.pending) != 1 {
+		t.Fatalf("expected pending record to remain, got %d records", len(pending.pending))
+	}
+}
+
+func TestSplitServiceKey_Validation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		key        string
+		wantNS     string
+		wantName   string
+		wantParsed bool
+	}{
+		{key: "default/svc-a", wantNS: "default", wantName: "svc-a", wantParsed: true},
+		{key: "/svc-a", wantParsed: false},
+		{key: "default/", wantParsed: false},
+		{key: "default/svc/a", wantParsed: false},
+		{key: "noslash", wantParsed: false},
+	}
+
+	for _, tt := range tests {
+		ns, name, ok := splitServiceKey(tt.key)
+		if ok != tt.wantParsed {
+			t.Fatalf("splitServiceKey(%q) ok=%v, want %v", tt.key, ok, tt.wantParsed)
+		}
+		if ok {
+			if ns != tt.wantNS || name != tt.wantName {
+				t.Fatalf("splitServiceKey(%q) = (%q,%q), want (%q,%q)", tt.key, ns, name, tt.wantNS, tt.wantName)
+			}
+		}
+	}
+}

@@ -239,6 +239,21 @@ describe('sseClient', () => {
 				expect(setK8sStatus).not.toHaveBeenCalled();
 			});
 
+			it('ignores state payload when k8sLastEvent is not a valid timestamp', async () => {
+				const { connect } = await import('./sseClient');
+				connect();
+				const es = MockEventSource.instances[0];
+				const services = [makeService({ name: 'svc-a' })];
+
+				es.emit(
+					'state',
+					JSON.stringify({ services, appVersion: 'v1.0.0', k8sLastEvent: 'not-a-date' })
+				);
+
+				expect(replaceAll).not.toHaveBeenCalled();
+				expect(setK8sStatus).not.toHaveBeenCalled();
+			});
+
 			it('ignores state payload when healthCheckIntervalMs has invalid type', async () => {
 				const { connect } = await import('./sseClient');
 				connect();
@@ -319,6 +334,12 @@ describe('sseClient', () => {
 			expect(addOrUpdate).not.toHaveBeenCalled();
 
 			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-time', responseTimeMs: {} as unknown as number })));
+			expect(addOrUpdate).not.toHaveBeenCalled();
+
+			es.emit(
+				'discovered',
+				JSON.stringify(makeService({ name: 'bad-source', source: 'other' as Service['source'] }))
+			);
 			expect(addOrUpdate).not.toHaveBeenCalled();
 		});
 

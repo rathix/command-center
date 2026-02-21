@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -17,32 +18,41 @@ const defaultRetentionDays = 30
 // Malformed and blank lines are skipped. Returns an empty slice if the
 // file is missing or empty.
 func ReadAllRecords(path string) ([]TransitionRecord, error) {
+	records, _, err := parseHistoryFile(path)
+	return records, err
+}
+
+func parseHistoryFile(path string) ([]TransitionRecord, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 
 	var records []TransitionRecord
+	nonEmptyLines := 0
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
 			continue
 		}
+		nonEmptyLines++
+
 		var rec TransitionRecord
-		if json.Unmarshal(line, &rec) != nil {
+		if json.Unmarshal([]byte(line), &rec) != nil {
 			continue
 		}
 		records = append(records, rec)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return records, nil
+	return records, nonEmptyLines, nil
 }
 
 // Prune removes records older than retentionDays from the JSONL file at path.
@@ -56,7 +66,7 @@ func Prune(path string, retentionDays int, logger *slog.Logger) error {
 		retentionDays = defaultRetentionDays
 	}
 
-	records, err := ReadAllRecords(path)
+	records, nonEmptyLines, err := parseHistoryFile(path)
 	if err != nil {
 		return err
 	}
@@ -70,7 +80,9 @@ func Prune(path string, retentionDays int, logger *slog.Logger) error {
 		}
 	}
 
-	removed := len(records) - len(kept)
+	oldRemoved := len(records) - len(kept)
+	malformedRemoved := nonEmptyLines - len(records)
+	removed := oldRemoved + malformedRemoved
 	if removed == 0 {
 		logger.Info("history prune: nothing to remove",
 			"total", len(records),
@@ -118,6 +130,8 @@ func Prune(path string, retentionDays int, logger *slog.Logger) error {
 		"before", len(records),
 		"after", len(kept),
 		"removed", removed,
+		"removedOld", oldRemoved,
+		"removedMalformed", malformedRemoved,
 	)
 	return nil
 }

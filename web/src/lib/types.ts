@@ -1,4 +1,5 @@
 export type HealthStatus = 'healthy' | 'unhealthy' | 'authBlocked' | 'unknown';
+export type ServiceSource = 'kubernetes' | 'config';
 
 export type ConnectionStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
 
@@ -25,7 +26,7 @@ export interface Service {
 	namespace: string;
 	group: string;
 	url: string;
-	source?: string;
+	source?: ServiceSource;
 	status: HealthStatus;
 	httpCode: number | null;
 	responseTimeMs: number | null;

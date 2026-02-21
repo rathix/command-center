@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -42,7 +43,11 @@ func NewFileWriter(path string, logger *slog.Logger) (*FileWriter, error) {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return nil, err
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +63,7 @@ func NewFileWriter(path string, logger *slog.Logger) (*FileWriter, error) {
 // Must be called while mu is held.
 func (w *FileWriter) reopen() error {
 	w.file.Close()
-	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
