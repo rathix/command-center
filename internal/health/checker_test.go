@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/state"
 )
 
@@ -55,7 +56,7 @@ func TestCheckService_Healthy(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -86,7 +87,7 @@ func TestCheckService_AuthBlocked401(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -111,7 +112,7 @@ func TestCheckService_AuthBlocked403(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -136,7 +137,7 @@ func TestCheckService_Unhealthy500(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -167,7 +168,7 @@ func TestCheckService_ConnectionError(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -200,7 +201,7 @@ func TestCheckService_StateTransitionUpdatesLastStateChange(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -230,7 +231,7 @@ func TestCheckService_SameStatePreservesLastStateChange(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -259,7 +260,7 @@ func TestCheckService_LastCheckedAlwaysUpdated(t *testing.T) {
 	}
 
 	before := time.Now()
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -285,7 +286,7 @@ func TestCheckService_ConcurrentChecks(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.checkAll(context.Background())
 
 	svc1, _ := store.Get("ns1", "svc1")
@@ -307,7 +308,7 @@ func TestRun_ContextCancellation(t *testing.T) {
 	store := state.NewStore()
 	client := &mockHTTPProber{responses: map[string]mockResponse{}}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -343,7 +344,7 @@ func TestCheckService_ErrorSnippetTruncation(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -369,7 +370,7 @@ func TestCheckService_ErrorSnippetFirstLine(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -397,7 +398,7 @@ func TestCheckService_PreservesNonHealthFields(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -429,7 +430,7 @@ func TestRun_ImmediateCheckOnStart(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 
 	// Subscribe to store events to count updates
 	sub := store.Subscribe()
@@ -472,7 +473,7 @@ func TestCheckService_AuthBlockedNoErrorSnippet(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -494,7 +495,7 @@ func TestCheckService_HealthyNoErrorSnippet(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -516,7 +517,7 @@ func TestCheckAll_ServiceRemovedDuringCheck(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 
 	// Remove the service before checkAll completes
 	store.Remove("ns1", "svc1")
@@ -558,7 +559,7 @@ func TestCheckService_200Range(t *testing.T) {
 				},
 			}
 
-			checker := NewChecker(store, store, client, time.Hour, nil)
+			checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 			svc, _ := store.Get("ns1", "svc1")
 			checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
@@ -586,7 +587,7 @@ func TestCheckAll_HealthURLOverride(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("custom", "truenas")
@@ -611,7 +612,7 @@ func TestCheckAll_ExpectedStatusCodes401Healthy(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("custom", "authsvc")
@@ -636,7 +637,7 @@ func TestCheckAll_ExpectedStatusCodesNotInList(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("custom", "svc")
@@ -662,11 +663,125 @@ func TestCheckAll_HealthURLDifferentHost(t *testing.T) {
 		},
 	}
 
-	checker := NewChecker(store, store, client, time.Hour, nil)
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("custom", "svc")
 	if svc.Status != state.StatusHealthy {
 		t.Errorf("expected %q (probed healthUrl on different host), got %q", state.StatusHealthy, svc.Status)
+	}
+}
+
+// mockHistoryWriter captures Record calls for testing.
+type mockHistoryWriter struct {
+	mu      sync.Mutex
+	records []history.TransitionRecord
+	err     error // if non-nil, Record returns this error
+}
+
+func (m *mockHistoryWriter) Record(rec history.TransitionRecord) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.records = append(m.records, rec)
+	return m.err
+}
+
+func (m *mockHistoryWriter) Close() error { return nil }
+
+func (m *mockHistoryWriter) getRecords() []history.TransitionRecord {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]history.TransitionRecord, len(m.records))
+	copy(cp, m.records)
+	return cp
+}
+
+func TestApplyResult_TransitionRecordsHistory(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
+		Status: state.StatusUnknown,
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://svc1.example.com": {statusCode: 200, body: "OK"},
+		},
+	}
+
+	hw := &mockHistoryWriter{}
+	checker := NewChecker(store, store, client, time.Hour, hw, nil)
+	svc, _ := store.Get("ns1", "svc1")
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
+
+	recs := hw.getRecords()
+	if len(recs) != 1 {
+		t.Fatalf("expected 1 history record, got %d", len(recs))
+	}
+	rec := recs[0]
+	if rec.ServiceKey != "ns1/svc1" {
+		t.Errorf("expected ServiceKey %q, got %q", "ns1/svc1", rec.ServiceKey)
+	}
+	if rec.PrevStatus != state.StatusUnknown {
+		t.Errorf("expected PrevStatus %q, got %q", state.StatusUnknown, rec.PrevStatus)
+	}
+	if rec.NextStatus != state.StatusHealthy {
+		t.Errorf("expected NextStatus %q, got %q", state.StatusHealthy, rec.NextStatus)
+	}
+	if rec.HTTPCode == nil || *rec.HTTPCode != 200 {
+		t.Errorf("expected HTTPCode 200, got %v", rec.HTTPCode)
+	}
+	if rec.ResponseMs == nil || *rec.ResponseMs < 0 {
+		t.Errorf("expected non-negative ResponseMs, got %v", rec.ResponseMs)
+	}
+}
+
+func TestApplyResult_NoTransitionNoHistory(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
+		Status: state.StatusHealthy,
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://svc1.example.com": {statusCode: 200, body: "OK"},
+		},
+	}
+
+	hw := &mockHistoryWriter{}
+	checker := NewChecker(store, store, client, time.Hour, hw, nil)
+	svc, _ := store.Get("ns1", "svc1")
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
+
+	recs := hw.getRecords()
+	if len(recs) != 0 {
+		t.Errorf("expected 0 history records when status unchanged, got %d", len(recs))
+	}
+}
+
+func TestApplyResult_HistoryWriteErrorLogged(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
+		Status: state.StatusUnknown,
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://svc1.example.com": {statusCode: 200, body: "OK"},
+		},
+	}
+
+	hw := &mockHistoryWriter{err: errors.New("disk full")}
+	checker := NewChecker(store, store, client, time.Hour, hw, nil)
+	svc, _ := store.Get("ns1", "svc1")
+
+	// Should not panic or block even when Record returns an error
+	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
+
+	// Status should still be updated despite history write failure
+	if svc.Status != state.StatusHealthy {
+		t.Errorf("expected status %q despite history error, got %q", state.StatusHealthy, svc.Status)
 	}
 }
