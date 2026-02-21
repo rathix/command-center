@@ -16,6 +16,7 @@ import (
 	"time"
 
 	commandcenter "github.com/rathix/command-center"
+	"github.com/rathix/command-center/internal/auth"
 	"github.com/rathix/command-center/internal/certs"
 	appconfig "github.com/rathix/command-center/internal/config"
 	"github.com/rathix/command-center/internal/health"
@@ -197,9 +198,6 @@ func run(ctx context.Context, cfg config) error {
 	} else {
 		slog.Info("No secrets file configured, OIDC disabled")
 	}
-	// creds is passed to auth module in Story 8.2
-	_ = creds
-
 	store := state.NewStore()
 
 	// Load optional YAML config for custom services and overrides
@@ -253,6 +251,24 @@ func run(ctx context.Context, cfg config) error {
 		appconfig.ApplyOverrides(store, lastAppCfg)
 		slog.Info("Config overrides applied", "count", len(lastAppCfg.Overrides))
 	}
+
+	// Create OIDC client if both config and credentials are available.
+	// The client is stored for later wiring to the health checker (Story 8.4).
+	var oidcClient *auth.OIDCClient
+	if lastAppCfg != nil && lastAppCfg.OIDC.IssuerURL != "" && creds != nil {
+		oidcClient = auth.NewOIDCClient(
+			lastAppCfg.OIDC.IssuerURL,
+			creds.ClientID,
+			creds.ClientSecret,
+			lastAppCfg.OIDC.Scopes,
+			logger,
+		)
+		slog.Info("OIDC authentication enabled")
+	} else {
+		slog.Info("OIDC authentication disabled")
+	}
+	// oidcClient will be passed to health checker in Story 8.4
+	_ = oidcClient
 
 	// Initialize history persistence
 	historyWriter, err := history.NewFileWriter(cfg.HistoryFile, logger)
