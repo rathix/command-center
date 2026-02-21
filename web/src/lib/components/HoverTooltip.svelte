@@ -57,6 +57,10 @@
 		return null;
 	});
 
+	const authLine = $derived.by(() => {
+		return service.authMethod === 'oidc' ? 'Auth: OIDC via PocketID' : null;
+	});
+
 	const positionClasses = $derived.by(() => {
 		return position === 'above' ? 'bottom-full mb-1' : 'top-full mt-1';
 	});
@@ -91,6 +95,9 @@
 		{/if}
 		{#if sourceLine}
 			<div>{sourceLine}</div>
+		{/if}
+		{#if authLine}
+			<div>{authLine}</div>
 		{/if}
 	</div>
 {/if}

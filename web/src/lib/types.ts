@@ -34,6 +34,14 @@ export interface Service {
 	lastStateChange: string | null;
 	errorSnippet: string | null;
 	healthUrl?: string | null;
+	authMethod?: string;
+}
+
+export interface OIDCStatus {
+	connected: boolean;
+	providerName: string;
+	tokenState: 'valid' | 'refreshing' | 'expired' | 'error';
+	lastSuccess: string | null;
 }
 
 export interface ServiceGroup {
@@ -56,6 +64,7 @@ export interface StateEventPayload {
 	k8sLastEvent?: string | null;
 	healthCheckIntervalMs?: number;
 	configErrors?: string[];
+	oidcStatus?: OIDCStatus;
 }
 
 export interface K8sStatusPayload {

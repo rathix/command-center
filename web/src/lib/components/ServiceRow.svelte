@@ -134,6 +134,9 @@
 		>
 			<TuiDot status={service.status} />
 			<ServiceIcon name={iconName} />
+			{#if service.authMethod === 'oidc'}
+				<span class="text-subtext-0 text-xs" aria-label="OIDC authenticated">🔒</span>
+			{/if}
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url}</span>
 			{#if service.source === 'kubernetes'}
@@ -151,6 +154,9 @@
 		>
 			<TuiDot status={service.status} />
 			<ServiceIcon name={iconName} />
+			{#if service.authMethod === 'oidc'}
+				<span class="text-subtext-0 text-xs" aria-label="OIDC authenticated">🔒</span>
+			{/if}
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url} (invalid)</span>
 			{#if service.source === 'kubernetes'}

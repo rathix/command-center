@@ -9,6 +9,7 @@ vi.mock('./serviceStore.svelte', () => ({
 	setConnectionStatus: vi.fn(),
 	setK8sStatus: vi.fn(),
 	setConfigErrors: vi.fn(),
+	setOIDCStatus: vi.fn(),
 	getK8sConnected: vi.fn(() => true)
 }));
 
@@ -20,6 +21,7 @@ import {
 	setConnectionStatus,
 	setK8sStatus,
 	setConfigErrors,
+	setOIDCStatus,
 	getK8sConnected
 } from './serviceStore.svelte';
 
@@ -489,6 +491,99 @@ describe('sseClient', () => {
 				expect(setConfigErrors).toHaveBeenCalledWith(configErrors);
 			});
 		});
+
+	describe('isService with authMethod', () => {
+		it('accepts service payload with authMethod: "oidc"', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const service = { ...makeService({ name: 'svc-oidc' }), authMethod: 'oidc' };
+			es.emit('discovered', JSON.stringify(service));
+			expect(addOrUpdate).toHaveBeenCalledWith(service);
+		});
+
+		it('accepts service payload without authMethod (backward compat)', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const service = makeService({ name: 'svc-no-auth' });
+			es.emit('discovered', JSON.stringify(service));
+			expect(addOrUpdate).toHaveBeenCalledWith(service);
+		});
+
+		it('rejects service payload with non-string authMethod', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const service = { ...makeService({ name: 'svc-bad-auth' }), authMethod: 123 };
+			es.emit('discovered', JSON.stringify(service));
+			expect(addOrUpdate).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('isStatePayload with oidcStatus', () => {
+		it('accepts state payload with valid oidcStatus', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+			const oidcStatus = { connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: '2026-02-21T10:00:00Z' };
+			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0', oidcStatus }));
+			expect(replaceAll).toHaveBeenCalledWith(services, 'v1.0.0', undefined);
+			expect(setOIDCStatus).toHaveBeenCalledWith(oidcStatus);
+		});
+
+		it('accepts state payload without oidcStatus (backward compat)', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0' }));
+			expect(replaceAll).toHaveBeenCalled();
+			expect(setOIDCStatus).toHaveBeenCalledWith(null);
+		});
+
+		it('rejects state payload with malformed oidcStatus (missing connected)', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+			const oidcStatus = { providerName: 'PocketID', tokenState: 'valid', lastSuccess: null };
+			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0', oidcStatus }));
+			expect(replaceAll).not.toHaveBeenCalled();
+		});
+
+		it('rejects state payload with oidcStatus where connected is not boolean', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+			const oidcStatus = { connected: 'yes', providerName: 'PocketID', tokenState: 'valid', lastSuccess: null };
+			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0', oidcStatus }));
+			expect(replaceAll).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('state event OIDC wiring', () => {
+		it('calls setOIDCStatus with oidcStatus from state event', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+			const oidcStatus = { connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: '2026-02-21T10:00:00Z' };
+			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0', oidcStatus }));
+			expect(setOIDCStatus).toHaveBeenCalledWith(oidcStatus);
+		});
+
+		it('calls setOIDCStatus(null) when oidcStatus absent from state event', async () => {
+			const { connect } = await import('./sseClient');
+			connect();
+			const es = MockEventSource.instances[0];
+			const services = [makeService({ name: 'svc-a' })];
+			es.emit('state', JSON.stringify({ services, appVersion: 'v1.0.0' }));
+			expect(setOIDCStatus).toHaveBeenCalledWith(null);
+		});
+	});
 
 	describe('disconnect', () => {
 		it('closes the EventSource', async () => {
