@@ -2,7 +2,7 @@
 
 A Kubernetes service dashboard for homelab operators. Single Go binary serving a SvelteKit SPA with mTLS security and a Catppuccin Mocha terminal aesthetic.
 
-> **Status:** v0.2.0 — Epics 1–4 complete (project scaffold, service discovery, health monitoring, resilience).
+> **Status:** v1.0.0 — MVP (service discovery, health monitoring, real-time updates, connection resilience).
 
 ## Quick Start
 
