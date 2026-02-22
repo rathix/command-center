@@ -7,7 +7,6 @@ type Config struct {
 	Groups    map[string]GroupConfig   `yaml:"groups"    json:"groups"`
 	Health    HealthConfig             `yaml:"health"    json:"health"`
 	History   HistoryConfig            `yaml:"history"   json:"history"`
-	OIDC      OIDCConfig               `yaml:"oidc"      json:"oidc"`
 }
 
 // CustomService defines a non-Kubernetes service to monitor.
@@ -48,10 +47,3 @@ type HistoryConfig struct {
 	RetentionDays int `yaml:"retentionDays" json:"retentionDays"`
 }
 
-// OIDCConfig controls OIDC authentication for health checks.
-// Credentials (clientId, clientSecret) come from the encrypted secrets file,
-// not from this config — only the provider URL and scopes live here.
-type OIDCConfig struct {
-	IssuerURL string   `yaml:"issuerUrl" json:"issuerUrl"`
-	Scopes    []string `yaml:"scopes"    json:"scopes"`
-}

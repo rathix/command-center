@@ -29,14 +29,12 @@
 	const responseTextColorMap: Record<HealthStatus, string> = {
 		healthy: 'text-subtext-0',
 		unhealthy: 'text-health-error',
-		authBlocked: 'text-health-auth-blocked',
 		unknown: 'text-health-unknown'
 	};
 
 	const tintColorMap: Record<HealthStatus, string | undefined> = {
 		healthy: undefined,
 		unhealthy: 'rgba(243, 139, 168, 0.05)',
-		authBlocked: 'rgba(249, 226, 175, 0.03)',
 		unknown: undefined
 	};
 
@@ -134,9 +132,6 @@
 		>
 			<TuiDot status={service.status} />
 			<ServiceIcon name={iconName} />
-			{#if service.authMethod === 'oidc'}
-				<span class="text-subtext-0 text-xs" aria-label="OIDC authenticated">🔒</span>
-			{/if}
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url}</span>
 			{#if service.source === 'kubernetes'}
@@ -154,9 +149,6 @@
 		>
 			<TuiDot status={service.status} />
 			<ServiceIcon name={iconName} />
-			{#if service.authMethod === 'oidc'}
-				<span class="text-subtext-0 text-xs" aria-label="OIDC authenticated">🔒</span>
-			{/if}
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url} (invalid)</span>
 			{#if service.source === 'kubernetes'}

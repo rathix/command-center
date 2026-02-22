@@ -48,12 +48,6 @@ health:
 
 history:
   retentionDays: 30
-
-oidc:
-  issuerUrl: "https://auth.example.com"
-  scopes:
-    - "openid"
-    - "profile"
 `
 	path := writeTempConfig(t, yaml)
 	cfg, errs := Load(path)
@@ -138,13 +132,6 @@ oidc:
 		t.Errorf("history retentionDays = %d, want %d", cfg.History.RetentionDays, 30)
 	}
 
-	// OIDC
-	if cfg.OIDC.IssuerURL != "https://auth.example.com" {
-		t.Errorf("oidc issuerUrl = %q, want %q", cfg.OIDC.IssuerURL, "https://auth.example.com")
-	}
-	if len(cfg.OIDC.Scopes) != 2 || cfg.OIDC.Scopes[0] != "openid" || cfg.OIDC.Scopes[1] != "profile" {
-		t.Errorf("oidc scopes = %v, want [openid profile]", cfg.OIDC.Scopes)
-	}
 }
 
 // Task 3.2: Test valid config with only required fields
@@ -371,10 +358,6 @@ health:
 		{"only history", `
 history:
   retentionDays: 7
-`},
-		{"only oidc", `
-oidc:
-  issuerUrl: "https://auth.example.com"
 `},
 		{"completely empty sections", `{}`},
 	}

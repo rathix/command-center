@@ -7,8 +7,7 @@
 		getLastUpdated,
 		getHealthCheckIntervalMs,
 		getHasConfigErrors,
-		getConfigErrors,
-		getOIDCStatus
+		getConfigErrors
 	} from '$lib/serviceStore.svelte';
 	import { formatRelativeTime } from '$lib/formatRelativeTime';
 
@@ -17,8 +16,6 @@
 		const parts: { label: string; count: number; color: string }[] = [];
 		if (c.unhealthy > 0)
 			parts.push({ label: 'unhealthy', count: c.unhealthy, color: 'text-health-error' });
-		if (c.authBlocked > 0)
-			parts.push({ label: 'auth-blocked', count: c.authBlocked, color: 'text-health-auth-blocked' });
 		if (c.unknown > 0)
 			parts.push({ label: 'unknown', count: c.unknown, color: 'text-health-unknown' });
 		if (c.healthy > 0) parts.push({ label: 'healthy', count: c.healthy, color: 'text-health-ok' });
@@ -86,46 +83,10 @@
 		return `Config: ${errs.length} error(s)\n${errs.map((e) => `- ${e}`).join('\n')}`;
 	});
 
-	const oidcIndicatorColor = $derived.by(() => {
-		const status = getOIDCStatus();
-		if (!status) return null;
-		if (!status.connected) return 'text-health-error';
-		switch (status.tokenState) {
-			case 'valid':
-				return 'text-health-ok';
-			case 'refreshing':
-				return 'text-health-auth-blocked';
-			case 'expired':
-			case 'error':
-				return 'text-health-error';
-			default:
-				return 'text-health-error';
-		}
-	});
-
-	const oidcTooltipTitle = $derived.by(() => {
-		const status = getOIDCStatus();
-		if (!status) return '';
-		const lines = [
-			`Provider: ${status.providerName}`,
-			`Token: ${status.tokenState}`
-		];
-		if (status.lastSuccess) {
-			lines.push(`Last auth: ${formatRelativeTime(status.lastSuccess)}`);
-		}
-		return lines.join('\n');
-	});
-	</script>
+</script>
 <div class="mx-auto max-w-[1200px]">
 	<div class="flex items-center justify-between" role="status" aria-live="polite">
 		<div class="flex items-center gap-2">
-			{#if getOIDCStatus()}
-				<span
-					class="text-sm {oidcIndicatorColor}"
-					title={oidcTooltipTitle}
-					aria-label="OIDC status"
-				>🔒</span>
-			{/if}
 			{#if isInitialLoad}
 				<span class="text-sm font-semibold text-subtext-0">Discovering services...</span>
 			{:else if getCounts().total === 0 && getConnectionStatus() === 'connected'}

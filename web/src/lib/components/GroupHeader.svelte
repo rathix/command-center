@@ -13,8 +13,6 @@
 			parts.push({ count: group.counts.healthy, label: 'healthy', colorClass: 'text-health-ok' });
 		if (group.counts.unhealthy > 0)
 			parts.push({ count: group.counts.unhealthy, label: 'unhealthy', colorClass: 'text-health-error' });
-		if (group.counts.authBlocked > 0)
-			parts.push({ count: group.counts.authBlocked, label: 'auth-blocked', colorClass: 'text-health-auth-blocked' });
 		if (group.counts.unknown > 0)
 			parts.push({ count: group.counts.unknown, label: 'unknown', colorClass: 'text-health-unknown' });
 		return parts;

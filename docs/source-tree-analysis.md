@@ -12,12 +12,7 @@ command-center/
 │   ├── command-center/
 │   │   ├── main.go              # ★ Entry point: config, K8s watcher, SSE broker, HTTP server
 │   │   └── main_test.go         # Server lifecycle tests
-│   └── encrypt-secrets/
-│       └── main.go              # CLI tool for encrypting secrets files
 ├── internal/
-│   ├── auth/
-│   │   ├── oidc.go              # OIDC client and endpoint discovery
-│   │   └── oidc_test.go
 │   ├── certs/
 │   │   ├── generator.go         # Auto-generated mTLS certificates (CA, server, client)
 │   │   └── generator_test.go
@@ -25,7 +20,7 @@ command-center/
 │   │   ├── loader.go            # YAML config loader with hot-reload watcher
 │   │   └── loader_test.go
 │   ├── health/
-│   │   ├── checker.go           # HTTP health checker for discovered services
+│   │   ├── checker.go           # HTTP health checker with InternalURL support
 │   │   └── checker_test.go
 │   ├── history/
 │   │   ├── writer.go            # JSONL health history persistence (write, read, prune)
@@ -33,9 +28,6 @@ command-center/
 │   ├── k8s/
 │   │   ├── watcher.go           # Kubernetes Ingress watcher (informer-based)
 │   │   └── watcher_test.go
-│   ├── secrets/
-│   │   ├── secrets.go           # Encrypted secrets file decryption
-│   │   └── secrets_test.go
 │   ├── server/
 │   │   ├── static.go            # SPA static file handler (serves embedded frontend)
 │   │   ├── static_test.go
@@ -132,14 +124,11 @@ command-center/
 | Folder | Purpose | Part |
 |-|-|-|
 | `cmd/command-center/` | Application entry point, config parsing, server lifecycle | server |
-| `cmd/encrypt-secrets/` | CLI tool for encrypting secrets files | server |
-| `internal/auth/` | OIDC client and endpoint discovery | server |
 | `internal/certs/` | mTLS certificate generation and management | server |
 | `internal/config/` | YAML config loader with hot-reload watcher | server |
 | `internal/health/` | HTTP health checking for discovered K8s services | server |
 | `internal/history/` | JSONL health history persistence | server |
 | `internal/k8s/` | Kubernetes Ingress watcher (informer pattern) | server |
-| `internal/secrets/` | Encrypted secrets file decryption | server |
 | `internal/server/` | HTTP handlers — SPA serving (prod) and Vite proxy (dev) | server |
 | `internal/session/` | SSE session tracking | server |
 | `internal/sse/` | Server-Sent Events broker and event types | server |

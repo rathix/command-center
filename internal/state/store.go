@@ -9,10 +9,9 @@ import (
 type HealthStatus string
 
 const (
-	StatusHealthy     HealthStatus = "healthy"
-	StatusUnhealthy   HealthStatus = "unhealthy"
-	StatusAuthBlocked HealthStatus = "authBlocked"
-	StatusUnknown     HealthStatus = "unknown"
+	StatusHealthy   HealthStatus = "healthy"
+	StatusUnhealthy HealthStatus = "unhealthy"
+	StatusUnknown   HealthStatus = "unknown"
 )
 
 // Service source constants.
@@ -29,6 +28,7 @@ type Service struct {
         Namespace           string       `json:"namespace"`
         Group               string       `json:"group"`
         URL                 string       `json:"url"`
+        InternalURL         string       `json:"internalUrl,omitempty"`
         Icon                string       `json:"icon,omitempty"`
         Source              string       `json:"source"`
         Status              HealthStatus `json:"status"`
@@ -37,7 +37,6 @@ type Service struct {
         LastChecked         *time.Time   `json:"lastChecked"`
         LastStateChange     *time.Time   `json:"lastStateChange"`
         ErrorSnippet        *string      `json:"errorSnippet"`
-        AuthMethod          string       `json:"authMethod,omitempty"`
         HealthURL           string       `json:"healthUrl,omitempty"`
         ExpectedStatusCodes []int        `json:"expectedStatusCodes,omitempty"`
 }

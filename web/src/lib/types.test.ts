@@ -4,11 +4,11 @@ import type { HealthStatus, ConnectionStatus, Service, StateEventPayload, K8sSta
 
 describe('types', () => {
 	it('HEALTH_STATUSES contains all valid status values', () => {
-		expect(HEALTH_STATUSES).toEqual(['healthy', 'unhealthy', 'authBlocked', 'unknown']);
+		expect(HEALTH_STATUSES).toEqual(['healthy', 'unhealthy', 'unknown']);
 	});
 
 	it('HealthStatus type aligns with HEALTH_STATUSES', () => {
-		const statuses: HealthStatus[] = ['healthy', 'unhealthy', 'authBlocked', 'unknown'];
+		const statuses: HealthStatus[] = ['healthy', 'unhealthy', 'unknown'];
 		expect(statuses).toEqual(HEALTH_STATUSES);
 	});
 

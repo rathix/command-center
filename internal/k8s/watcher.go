@@ -159,6 +159,7 @@ func (w *Watcher) onAdd(obj interface{}) {
 	                Namespace:           ingress.Namespace,
 	                Group:               ingress.Namespace,
 	                URL:                 url,
+	                InternalURL:         extractInternalURL(ingress),
 	                Source:              state.SourceKubernetes,
 	                Status:              state.StatusUnknown,
 	        }
@@ -198,6 +199,7 @@ func (w *Watcher) onAdd(obj interface{}) {
 	                Namespace:           ingress.Namespace,
 	                Group:               ingress.Namespace,
 	                URL:                 url,
+	                InternalURL:         extractInternalURL(ingress),
 	                Source:              state.SourceKubernetes,
 	                Status:              status,
 	        }
@@ -272,4 +274,27 @@ func extractServiceURL(ingress *networkingv1.Ingress) (string, string, bool) {
 	}
 
 	return scheme + "://" + host, host, true
+}
+
+// extractInternalURL builds a cluster-internal DNS URL from the Ingress backend
+// service reference: http://svc-name.namespace.svc.cluster.local:port.
+// Returns empty string if the Ingress has no backend service or no numeric port.
+func extractInternalURL(ingress *networkingv1.Ingress) string {
+	if len(ingress.Spec.Rules) == 0 {
+		return ""
+	}
+	rule := ingress.Spec.Rules[0]
+	if rule.HTTP == nil || len(rule.HTTP.Paths) == 0 {
+		return ""
+	}
+	backend := rule.HTTP.Paths[0].Backend
+	if backend.Service == nil {
+		return ""
+	}
+	name := backend.Service.Name
+	port := backend.Service.Port.Number
+	if name == "" || port == 0 {
+		return ""
+	}
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", name, ingress.Namespace, port)
 }

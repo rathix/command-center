@@ -10,8 +10,6 @@ import {
 	getK8sConnected,
 	getK8sLastEvent,
 	getHealthCheckIntervalMs,
-	getOIDCStatus,
-	setOIDCStatus,
 	replaceAll,
 	addOrUpdate,
 	remove,
@@ -117,16 +115,14 @@ describe('serviceStore', () => {
 	});
 
 	describe('sortedServices', () => {
-		it('sorts problems first: unhealthy → authBlocked → unknown → healthy', () => {
+		it('sorts problems first: unhealthy → unknown → healthy', () => {
 			replaceAll([
 				makeService({ name: 'healthy-svc', status: 'healthy' }),
 				makeService({ name: 'unknown-svc', status: 'unknown' }),
-				makeService({ name: 'blocked-svc', status: 'authBlocked' }),
 				makeService({ name: 'unhealthy-svc', status: 'unhealthy' })
 			], 'v1.0.0');
 			expect(getSortedServices().map((s) => s.status)).toEqual([
 				'unhealthy',
-				'authBlocked',
 				'unknown',
 				'healthy'
 			]);
@@ -156,14 +152,12 @@ describe('serviceStore', () => {
 				makeService({ name: 'h1', status: 'healthy' }),
 				makeService({ name: 'h2', status: 'healthy' }),
 				makeService({ name: 'u1', status: 'unhealthy' }),
-				makeService({ name: 'a1', status: 'authBlocked' }),
 				makeService({ name: 'k1', status: 'unknown' })
 			], 'v1.0.0');
 			expect(getCounts()).toEqual({
-				total: 5,
+				total: 4,
 				healthy: 2,
 				unhealthy: 1,
-				authBlocked: 1,
 				unknown: 1
 			});
 		});
@@ -173,7 +167,6 @@ describe('serviceStore', () => {
 				total: 0,
 				healthy: 0,
 				unhealthy: 0,
-				authBlocked: 0,
 				unknown: 0
 			});
 		});
@@ -182,11 +175,6 @@ describe('serviceStore', () => {
 	describe('hasProblems', () => {
 		it('is true when unhealthy services exist', () => {
 			replaceAll([makeService({ name: 'bad', status: 'unhealthy' })], 'v1.0.0');
-			expect(getHasProblems()).toBe(true);
-		});
-
-		it('is true when authBlocked services exist', () => {
-			replaceAll([makeService({ name: 'blocked', status: 'authBlocked' })], 'v1.0.0');
 			expect(getHasProblems()).toBe(true);
 		});
 
@@ -339,17 +327,17 @@ describe('serviceStore', () => {
 			], 'v1.0.0');
 			const groups = getServiceGroups();
 			const media = groups.find(g => g.name === 'media')!;
-			expect(media.counts).toEqual({ healthy: 7, unhealthy: 1, authBlocked: 0, unknown: 0 });
+			expect(media.counts).toEqual({ healthy: 7, unhealthy: 1, unknown: 0 });
 		});
 
-		it('hasProblems is true when group has unhealthy/authBlocked/unknown services', () => {
+		it('hasProblems is true when group has unhealthy/unknown services', () => {
 			replaceAll([
 				makeService({ name: 'a', group: 'good', status: 'healthy' }),
 				makeService({ name: 'b', group: 'good', status: 'healthy' }),
 				makeService({ name: 'c', group: 'bad', status: 'healthy' }),
 				makeService({ name: 'd', group: 'bad', status: 'unhealthy' }),
 				makeService({ name: 'e', group: 'mixed', status: 'healthy' }),
-				makeService({ name: 'f', group: 'mixed', status: 'authBlocked' })
+				makeService({ name: 'f', group: 'mixed', status: 'unknown' })
 			], 'v1.0.0');
 			const groups = getServiceGroups();
 			expect(groups.find(g => g.name === 'good')!.hasProblems).toBe(false);
@@ -370,14 +358,13 @@ describe('serviceStore', () => {
 		it('group sorting is 3-tier: unhealthy first, then other problem groups, then healthy alphabetical', () => {
 			replaceAll([
 				makeService({ name: 'a', group: 'alpha', status: 'healthy' }),
-				makeService({ name: 'b', group: 'beta', status: 'authBlocked' }),
 				makeService({ name: 'c', group: 'gamma', status: 'unhealthy' }),
 				makeService({ name: 'd', group: 'delta', status: 'unknown' }),
 				makeService({ name: 'e', group: 'epsilon', status: 'healthy' })
 			], 'v1.0.0');
 
 			const groups = getServiceGroups();
-			expect(groups.map(g => g.name)).toEqual(['gamma', 'beta', 'delta', 'alpha', 'epsilon']);
+			expect(groups.map(g => g.name)).toEqual(['gamma', 'delta', 'alpha', 'epsilon']);
 		});
 
 		it('groups with more unhealthy services sort higher', () => {
@@ -397,12 +384,11 @@ describe('serviceStore', () => {
 				makeService({ name: 'zebra', group: 'ns', status: 'healthy' }),
 				makeService({ name: 'alpha', group: 'ns', status: 'healthy' }),
 				makeService({ name: 'delta', group: 'ns', status: 'unknown' }),
-				makeService({ name: 'bravo', group: 'ns', status: 'authBlocked' }),
 				makeService({ name: 'echo', group: 'ns', status: 'unhealthy' })
 			], 'v1.0.0');
 			const group = getServiceGroups().find(g => g.name === 'ns')!;
 			expect(group.services.map(s => s.name)).toEqual([
-				'echo', 'bravo', 'delta', 'alpha', 'zebra'
+				'echo', 'delta', 'alpha', 'zebra'
 			]);
 		});
 
@@ -452,17 +438,6 @@ describe('serviceStore', () => {
 			expect(groups.find(g => g.name === 'problem-group')!.expanded).toBe(true);
 		});
 
-		it('authBlocked-only groups are expanded by default', () => {
-			replaceAll([
-				makeService({ name: 'a', group: 'healthy-group', status: 'healthy' }),
-				makeService({ name: 'b', group: 'auth-group', status: 'authBlocked' })
-			], 'v1.0.0');
-
-			const groups = getServiceGroups();
-			expect(groups.find(g => g.name === 'healthy-group')!.expanded).toBe(false);
-			expect(groups.find(g => g.name === 'auth-group')!.expanded).toBe(true);
-		});
-
 		it('prunes stale collapse overrides when groups disappear', () => {
 			replaceAll([
 				makeService({ name: 'a', group: 'healthy-group', status: 'healthy' }),
@@ -508,7 +483,6 @@ describe('serviceStore', () => {
 				total: 2,
 				healthy: 1,
 				unhealthy: 1,
-				authBlocked: 0,
 				unknown: 0
 			});
 		});
@@ -560,27 +534,4 @@ describe('serviceStore', () => {
 		});
 	});
 
-	describe('oidcStatus', () => {
-		it('defaults to null', () => {
-			expect(getOIDCStatus()).toBeNull();
-		});
-
-		it('setOIDCStatus stores value and getOIDCStatus returns it', () => {
-			const status = { connected: true, providerName: 'PocketID', tokenState: 'valid' as const, lastSuccess: '2026-02-21T10:00:00Z' };
-			setOIDCStatus(status);
-			expect(getOIDCStatus()).toEqual(status);
-		});
-
-		it('setOIDCStatus(null) clears stored value', () => {
-			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: null });
-			setOIDCStatus(null);
-			expect(getOIDCStatus()).toBeNull();
-		});
-
-		it('_resetForTesting clears oidcStatus back to null', () => {
-			setOIDCStatus({ connected: true, providerName: 'PocketID', tokenState: 'valid', lastSuccess: null });
-			_resetForTesting();
-			expect(getOIDCStatus()).toBeNull();
-		});
-	});
 });

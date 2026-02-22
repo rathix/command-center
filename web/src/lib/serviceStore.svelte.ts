@@ -1,11 +1,10 @@
-import type { Service, ServiceGroup, HealthStatus, ConnectionStatus, OIDCStatus } from './types';
+import type { Service, ServiceGroup, HealthStatus, ConnectionStatus } from './types';
 import { DEFAULT_HEALTH_CHECK_INTERVAL_MS } from './types';
 
 const statusPriority: Record<HealthStatus, number> = {
 	unhealthy: 0,
-	authBlocked: 1,
-	unknown: 2,
-	healthy: 3
+	unknown: 1,
+	healthy: 2
 };
 
 // Internal reactive state
@@ -18,7 +17,6 @@ let k8sLastEvent = $state<Date | null>(null);
 let healthCheckIntervalMs = $state<number>(DEFAULT_HEALTH_CHECK_INTERVAL_MS);
 let groupCollapseOverrides = $state(new Map<string, boolean>());
 let configErrors = $state<string[]>([]);
-let oidcStatus = $state<OIDCStatus | null>(null);
 
 function pruneGroupCollapseOverrides(nextServices: Map<string, Service>): void {
 	if (groupCollapseOverrides.size === 0) return;
@@ -90,12 +88,11 @@ const serviceGroups = $derived.by<ServiceGroup[]>(() => {
 		const groupCounts = {
 			healthy: svcs.filter((s) => s.status === 'healthy').length,
 			unhealthy: svcs.filter((s) => s.status === 'unhealthy').length,
-			authBlocked: svcs.filter((s) => s.status === 'authBlocked').length,
 			unknown: svcs.filter((s) => s.status === 'unknown').length
 		};
 
 		const hasProblems =
-			groupCounts.unhealthy > 0 || groupCounts.authBlocked > 0 || groupCounts.unknown > 0;
+			groupCounts.unhealthy > 0 || groupCounts.unknown > 0;
 
 		const override = groupCollapseOverrides.get(name);
 		const expanded = override !== undefined ? override : hasProblems;
@@ -109,7 +106,7 @@ const serviceGroups = $derived.by<ServiceGroup[]>(() => {
 			return b.counts.unhealthy - a.counts.unhealthy;
 		}
 
-		// Tier 2: Any other problems (auth-blocked, unknown)?
+		// Tier 2: Any other problems (unknown)?
 		if (a.hasProblems !== b.hasProblems) {
 			return a.hasProblems ? -1 : 1;
 		}
@@ -127,14 +124,13 @@ const counts = $derived.by(() => {
 		total: services.size,
 		healthy: vals.filter((s) => s.status === 'healthy').length,
 		unhealthy: vals.filter((s) => s.status === 'unhealthy').length,
-		authBlocked: vals.filter((s) => s.status === 'authBlocked').length,
 		unknown: vals.filter((s) => s.status === 'unknown').length
 	};
 });
 
 const hasProblems = $derived.by(() => {
 	return [...services.values()].some(
-		(s) => s.status === 'unhealthy' || s.status === 'authBlocked' || s.status === 'unknown'
+		(s) => s.status === 'unhealthy' || s.status === 'unknown'
 	);
 });
 
@@ -177,10 +173,6 @@ export function getConfigErrors(): string[] {
 export function getHasConfigErrors(): boolean {
 	return hasConfigErrors;
 }
-export function getOIDCStatus(): OIDCStatus | null {
-	return oidcStatus;
-}
-
 // Mutation functions (called by sseClient only)
 export function replaceAll(newServices: Service[], newAppVersion: string, newHealthCheckIntervalMs?: number): void {
 	const nextServices = new Map(newServices.map((s) => [`${s.namespace}/${s.name}`, s]));
@@ -231,10 +223,6 @@ export function setK8sStatus(connected: boolean, lastEvent: string | null): void
 	k8sLastEvent = lastEvent ? new Date(lastEvent) : null;
 }
 
-export function setOIDCStatus(status: OIDCStatus | null): void {
-	oidcStatus = status;
-}
-
 // Test helper — resets all state to initial values
 export function _resetForTesting(): void {
 	services = new Map();
@@ -246,5 +234,4 @@ export function _resetForTesting(): void {
 	healthCheckIntervalMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 	groupCollapseOverrides = new Map();
 	configErrors = [];
-	oidcStatus = null;
 }

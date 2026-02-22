@@ -18,7 +18,6 @@ describe('app.css design system', () => {
 	it('defines health state tokens in @theme', () => {
 		expect(css).toContain('--color-health-ok: #a6e3a1');
 		expect(css).toContain('--color-health-error: #f38ba8');
-		expect(css).toContain('--color-health-auth-blocked: #f9e2af');
 		expect(css).toContain('--color-health-unknown: #7f849c');
 	});
 

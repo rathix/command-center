@@ -38,11 +38,6 @@ web/ (SvelteKit)                    Go Binary
 │  │ Loader     │  (custom services)        (config-driven checks)  │
 │  └────────────┘                                                   │
 │                                                                   │
-│  ┌────────────┐    ┌────────────┐                                 │
-│  │ Secrets    │───▶│ Auth       │──────────▶ Health Checker        │
-│  │ Decryptor  │    │ (OIDC)     │  (token)   (authenticated retry)│
-│  └────────────┘    └────────────┘                                 │
-│                                                                   │
 │  ┌──────────┐    ┌─────────┐    ┌──────────────┐                  │
 │  │ K8s      │───▶│ State   │───▶│ SSE Broker   │──── /api/events ▶│ Browser
 │  │ Watcher  │    │ Store   │    │              │                  │
@@ -69,25 +64,14 @@ web/ (SvelteKit)                    Go Binary
 **Data flow:**
 
 1. **Config Loader** reads YAML config → registers custom services with Health Checker
-2. **Secrets Decryptor** decrypts secrets file → **Auth (OIDC)** acquires tokens
-3. **K8s Watcher** watches Ingress resources → discovers/removes services
-4. **Health Checker** periodically probes discovered service URLs, with authenticated retry via OIDC tokens when available
-5. Both K8s Watcher and Health Checker feed into **State Store** (thread-safe, mutex-protected)
-6. Health Checker results are also persisted to **History Persistence** (JSONL files in data-dir)
-7. Store emits events → **SSE Broker** broadcasts to all connected clients
-8. Frontend **SSE Client** receives events via `EventSource` at `GET /api/events`
-9. SSE Client updates **Service Store** (Svelte 5 `$state` rune)
-10. Reactive UI re-renders automatically
-
-### OIDC Authentication Flow
-
-When OIDC is configured (via config + encrypted secrets):
-
-1. Secrets decryption resolves OIDC client credentials
-2. OIDC client performs token acquisition from the issuer
-3. Health checker uses acquired tokens for authenticated retries against protected endpoints
-4. OIDC status is included in `state` event payloads (`oidcStatus` field)
-5. Endpoint discovery uses OIDC issuer's well-known configuration
+2. **K8s Watcher** watches Ingress resources → discovers/removes services, extracts InternalURL from backend service refs
+3. **Health Checker** periodically probes discovered service URLs (priority: HealthURL > InternalURL > URL)
+4. Both K8s Watcher and Health Checker feed into **State Store** (thread-safe, mutex-protected)
+5. Health Checker results are also persisted to **History Persistence** (JSONL files in data-dir)
+6. Store emits events → **SSE Broker** broadcasts to all connected clients
+7. Frontend **SSE Client** receives events via `EventSource` at `GET /api/events`
+8. SSE Client updates **Service Store** (Svelte 5 `$state` rune)
+9. Reactive UI re-renders automatically
 
 ### SSE Event Types
 
@@ -98,8 +82,6 @@ When OIDC is configured (via config + encrypted secrets):
 | `removed` | Server → Client | Service identifier | Service removed from K8s |
 | `k8sStatus` | Server → Client | K8s connection status | Watcher health indicator |
 | `update` | Server → Client | Updated service details | Service health or metadata changed |
-
-Note: The `state` event payload includes an optional `oidcStatus` field when OIDC is configured.
 
 ### Connection Resilience
 

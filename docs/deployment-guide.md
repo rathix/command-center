@@ -40,15 +40,12 @@ docker run -d \
   -p 8443:8443 \
   -v /path/to/kubeconfig:/home/nonroot/.kube/config:ro \
   -v command-center-data:/data \
-  -v /path/to/secrets.enc:/etc/command-center/secrets.enc:ro \
-  -e SECRETS_KEY=your-encryption-key \
   ghcr.io/rathix/command-center:latest
 ```
 
 **Volume mounts:**
 - Kubeconfig: Read-only mount for K8s API access
 - Data volume: Persists auto-generated certificates and health history across restarts
-- Secrets file: Optional encrypted secrets for OIDC authentication
 
 ### Docker with Custom Certificates
 
@@ -75,11 +72,8 @@ make build
   --listen-addr :8443 \
   --kubeconfig ~/.kube/config \
   --data-dir /var/lib/command-center \
-  --config /etc/command-center/config.yaml \
-  --secrets /etc/command-center/secrets.enc
+  --config /etc/command-center/config.yaml
 ```
-
-Note: `SECRETS_KEY` must be provided as an environment variable (no CLI flag — CLI args are visible in `/proc/*/cmdline`).
 
 ## Certificate Setup
 
@@ -102,51 +96,6 @@ Import into your browser:
 - **Chrome/Edge:** Settings > Privacy > Security > Manage certificates > Import
 - **Firefox:** Settings > Privacy > Certificates > View Certificates > Import
 - **macOS Safari:** Double-click `.crt` to add to Keychain, then trust it
-
-## Secrets Management
-
-### Encrypting Secrets
-
-Use the `encrypt-secrets` CLI tool to encrypt a plaintext secrets YAML file:
-
-```bash
-bin/encrypt-secrets -in secrets.yaml -out secrets.enc
-```
-
-### secrets.yaml Format
-
-```yaml
-oidc:
-  clientId: my-client-id
-  clientSecret: ${OIDC_CLIENT_SECRET}
-```
-
-Values support `${ENV_VAR}` substitution — environment variables are resolved at load time.
-
-### SECRETS_KEY Environment Variable
-
-The `SECRETS_KEY` environment variable is required for decryption at runtime. It is intentionally **environment-variable only** (no CLI flag) because CLI arguments are visible in `/proc/*/cmdline`.
-
-```bash
-export SECRETS_KEY=your-encryption-key
-./bin/command-center --secrets /path/to/secrets.enc
-```
-
-## OIDC Configuration
-
-OIDC authentication is optional. When configured, the health checker uses OIDC tokens for authenticated retries against protected endpoints.
-
-Configure via YAML config file (`--config` / `CONFIG_FILE`):
-
-```yaml
-oidc:
-  issuerUrl: https://auth.example.com
-  scopes:
-    - openid
-    - profile
-```
-
-When not configured, the system operates without OIDC authentication.
 
 ## Health History Persistence
 

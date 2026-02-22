@@ -29,7 +29,7 @@ Command Center is a Kubernetes service dashboard for homelab operators. It provi
 | Testing | Go test + Vitest | - |
 | Container | Docker (multi-stage → distroless) | - |
 | CI/CD | GitHub Actions → GHCR | - |
-| Security | mTLS (auto-generated certs), secrets encryption (Argon2id + AES-256-GCM), OIDC authentication, Trivy, SLSA | - |
+| Security | mTLS (auto-generated certs), Trivy, SLSA | - |
 
 ## Architecture Overview
 
@@ -76,4 +76,4 @@ Browser ◄──mTLS──► Go Server ◄──► Kubernetes API
 | Epic 5 | Service grouping & icons (group headers, service icons, grouped list) | Complete |
 | Epic 6 | Custom services & configuration (YAML config, file watcher, hot-reload) | Complete |
 | Epic 7 | Health history persistence (JSONL writer/reader/pruner, startup restoration) | Complete |
-| Epic 8 | Authenticated health checks (secrets encryption, OIDC client, endpoint discovery, auth retry, SSE status, frontend indicators) | Complete |
+| Epic 8 | Internal health checks (InternalURL extraction from K8s backends, cluster-internal health probing) | Complete |

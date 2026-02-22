@@ -16,13 +16,11 @@ import (
 	"time"
 
 	commandcenter "github.com/rathix/command-center"
-	"github.com/rathix/command-center/internal/auth"
 	"github.com/rathix/command-center/internal/certs"
 	appconfig "github.com/rathix/command-center/internal/config"
 	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/k8s"
-	"github.com/rathix/command-center/internal/secrets"
 	"github.com/rathix/command-center/internal/server"
 	"github.com/rathix/command-center/internal/session"
 	"github.com/rathix/command-center/internal/sse"
@@ -44,74 +42,11 @@ type config struct {
 	SessionDuration time.Duration
 	DataDir         string
 	HistoryFile     string
-	SecretsFile     string
 	LogFormat       string
 	TLSCACert       string
 	TLSCert         string
 	TLSKey          string
 	ConfigFile      string
-}
-
-type oidcStatusProviderAdapter struct {
-	client *auth.OIDCClient
-}
-
-func (a oidcStatusProviderAdapter) GetOIDCStatus() *sse.OIDCStatus {
-	if a.client == nil {
-		return nil
-	}
-	status := a.client.GetStatus()
-	if status == nil {
-		return nil
-	}
-	return &sse.OIDCStatus{
-		Connected:    status.Connected,
-		ProviderName: status.ProviderName,
-		TokenState:   status.TokenState,
-		LastSuccess:  status.LastSuccess,
-	}
-}
-
-type endpointDiscovererAdapter struct {
-	discoverer *auth.EndpointDiscoverer
-}
-
-func (a endpointDiscovererAdapter) GetStrategy(serviceKey string) *health.EndpointStrategy {
-	if a.discoverer == nil {
-		return nil
-	}
-	strategy := a.discoverer.GetStrategy(serviceKey)
-	if strategy == nil {
-		return nil
-	}
-	return &health.EndpointStrategy{
-		Type:     strategy.Type,
-		Endpoint: strategy.Endpoint,
-	}
-}
-
-func (a endpointDiscovererAdapter) Discover(ctx context.Context, serviceKey string, baseURL string) (*health.EndpointStrategy, error) {
-	if a.discoverer == nil {
-		return nil, fmt.Errorf("endpoint discoverer is not configured")
-	}
-	strategy, err := a.discoverer.Discover(ctx, serviceKey, baseURL)
-	if err != nil {
-		return nil, err
-	}
-	if strategy == nil {
-		return nil, nil
-	}
-	return &health.EndpointStrategy{
-		Type:     strategy.Type,
-		Endpoint: strategy.Endpoint,
-	}, nil
-}
-
-func (a endpointDiscovererAdapter) ClearStrategy(serviceKey string) {
-	if a.discoverer == nil {
-		return
-	}
-	a.discoverer.ClearStrategy(serviceKey)
 }
 
 func main() {
@@ -161,7 +96,6 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
 	fs.StringVar(&cfg.ConfigFile, "config", getEnv("CONFIG_FILE", ""), "path to YAML config file for custom services")
 	fs.StringVar(&cfg.HistoryFile, "history-file", getEnv("HISTORY_FILE", ""), "path to history JSONL file")
-	fs.StringVar(&cfg.SecretsFile, "secrets", getEnv("SECRETS_FILE", ""), "path to encrypted secrets file")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -249,17 +183,6 @@ func run(ctx context.Context, cfg config) error {
 
 	slog.Info("Starting Command Center", "version", Version)
 
-	// Load optional encrypted secrets file
-	creds, err := secrets.LoadSecrets(cfg.SecretsFile, logger)
-	if err != nil {
-		slog.Error("secrets file decryption failed")
-		return fmt.Errorf("secrets: %w", err)
-	}
-	if creds != nil {
-		slog.Info("Secrets loaded successfully")
-	} else {
-		slog.Info("No secrets file configured, OIDC disabled")
-	}
 	store := state.NewStore()
 
 	// Load optional YAML config for custom services and overrides
@@ -288,8 +211,7 @@ func run(ctx context.Context, cfg config) error {
 	watcherCtx, watcherCancel := context.WithCancel(ctx)
 	defer watcherCancel()
 
-	var watcher *k8s.Watcher
-	watcher, err = k8s.NewWatcher(cfg.Kubeconfig, store, logger)
+	watcher, err := k8s.NewWatcher(cfg.Kubeconfig, store, logger)
 	if err != nil {
 		slog.Warn("k8s watcher disabled: failed to create watcher", "error", err)
 	} else {
@@ -314,21 +236,6 @@ func run(ctx context.Context, cfg config) error {
 		slog.Info("Config overrides applied", "count", len(lastAppCfg.Overrides))
 	}
 
-	// Create OIDC client if both config and credentials are available.
-	// The client is stored for later wiring to the health checker (Story 8.4).
-	var oidcClient *auth.OIDCClient
-	if lastAppCfg != nil && lastAppCfg.OIDC.IssuerURL != "" && creds != nil {
-		oidcClient = auth.NewOIDCClient(
-			lastAppCfg.OIDC.IssuerURL,
-			creds.ClientID,
-			creds.ClientSecret,
-			lastAppCfg.OIDC.Scopes,
-			logger,
-		)
-		slog.Info("OIDC authentication enabled")
-	} else {
-		slog.Info("OIDC authentication disabled")
-	}
 	// Initialize history persistence
 	historyWriter, err := history.NewFileWriter(cfg.HistoryFile, logger)
 	if err != nil {
@@ -400,11 +307,7 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	// Create and start SSE broker for real-time event streaming
-	var oidcStatusProvider sse.OIDCStatusProvider
-	if oidcClient != nil {
-		oidcStatusProvider = oidcStatusProviderAdapter{client: oidcClient}
-	}
-	broker := sse.NewBroker(store, oidcStatusProvider, logger, Version, cfg.HealthInterval)
+	broker := sse.NewBroker(store, logger, Version, cfg.HealthInterval)
 	go broker.Run(ctx)
 
 	// Create and start HTTP health checker
@@ -417,13 +320,6 @@ func run(ctx context.Context, cfg config) error {
 		},
 	}
 	checker := health.NewChecker(store, store, probeClient, cfg.HealthInterval, historyWriter, logger)
-	if oidcClient != nil {
-		endpointDiscoverer := endpointDiscovererAdapter{
-			discoverer: auth.NewEndpointDiscoverer(probeClient, logger),
-		}
-		checker.WithTokenProvider(oidcClient).WithDiscoverer(endpointDiscoverer)
-		slog.Info("OIDC authentication enabled for health checks")
-	}
 	go checker.Run(ctx)
 
 	retentionDays := 30

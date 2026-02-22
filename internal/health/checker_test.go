@@ -93,7 +93,7 @@ func TestCheckService_Healthy(t *testing.T) {
 	}
 }
 
-func TestCheckService_AuthBlocked401(t *testing.T) {
+func TestCheckService_Unhealthy401(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
 		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
@@ -110,15 +110,15 @@ func TestCheckService_AuthBlocked401(t *testing.T) {
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if svc.Status != state.StatusAuthBlocked {
-		t.Errorf("expected status %q, got %q", state.StatusAuthBlocked, svc.Status)
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected status %q, got %q", state.StatusUnhealthy, svc.Status)
 	}
 	if svc.HTTPCode == nil || *svc.HTTPCode != 401 {
 		t.Errorf("expected HTTPCode 401, got %v", svc.HTTPCode)
 	}
 }
 
-func TestCheckService_AuthBlocked403(t *testing.T) {
+func TestCheckService_Unhealthy403(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
 		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
@@ -135,8 +135,8 @@ func TestCheckService_AuthBlocked403(t *testing.T) {
 	svc, _ := store.Get("ns1", "svc1")
 	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
 
-	if svc.Status != state.StatusAuthBlocked {
-		t.Errorf("expected status %q, got %q", state.StatusAuthBlocked, svc.Status)
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected status %q, got %q", state.StatusUnhealthy, svc.Status)
 	}
 	if svc.HTTPCode == nil || *svc.HTTPCode != 403 {
 		t.Errorf("expected HTTPCode 403, got %v", svc.HTTPCode)
@@ -315,8 +315,8 @@ func TestCheckService_ConcurrentChecks(t *testing.T) {
 	if svc1.Status != state.StatusHealthy {
 		t.Errorf("svc1: expected %q, got %q", state.StatusHealthy, svc1.Status)
 	}
-	if svc2.Status != state.StatusAuthBlocked {
-		t.Errorf("svc2: expected %q, got %q", state.StatusAuthBlocked, svc2.Status)
+	if svc2.Status != state.StatusUnhealthy {
+		t.Errorf("svc2: expected %q, got %q", state.StatusUnhealthy, svc2.Status)
 	}
 	if svc3.Status != state.StatusUnhealthy {
 		t.Errorf("svc3: expected %q, got %q", state.StatusUnhealthy, svc3.Status)
@@ -479,28 +479,6 @@ func TestRun_ImmediateCheckOnStart(t *testing.T) {
 	}
 }
 
-func TestCheckService_AuthBlockedNoErrorSnippet(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 401, body: "Unauthorized"},
-		},
-	}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	svc, _ := store.Get("ns1", "svc1")
-	checker.applyResult(&svc, checker.probeService(context.Background(), svc.URL))
-
-	if svc.ErrorSnippet != nil {
-		t.Errorf("expected nil ErrorSnippet for authBlocked service, got %q", *svc.ErrorSnippet)
-	}
-}
-
 func TestCheckService_HealthyNoErrorSnippet(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
@@ -561,6 +539,8 @@ func TestCheckService_200Range(t *testing.T) {
 		{204, state.StatusHealthy},
 		{299, state.StatusHealthy},
 		{300, state.StatusUnhealthy},
+		{401, state.StatusUnhealthy},
+		{403, state.StatusUnhealthy},
 		{404, state.StatusUnhealthy},
 	}
 
@@ -660,8 +640,8 @@ func TestCheckAll_ExpectedStatusCodesNotInList(t *testing.T) {
 	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("custom", "svc")
-	if svc.Status != state.StatusAuthBlocked {
-		t.Errorf("expected %q (401 not in expected [200]), got %q", state.StatusAuthBlocked, svc.Status)
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected %q (401 not in expected [200]), got %q", state.StatusUnhealthy, svc.Status)
 	}
 }
 
@@ -823,679 +803,133 @@ func TestNewChecker_NilHistoryWriterDefaultsToNoop(t *testing.T) {
 	}
 }
 
-// --- OIDC mock types ---
+// --- Task 3b: InternalURL preference tests ---
 
-// mockTokenProvider is a configurable mock for TokenProvider.
-type mockTokenProvider struct {
-	token string
-	err   error
-	calls atomic.Int32
-}
-
-func (m *mockTokenProvider) GetToken(_ context.Context) (string, error) {
-	m.calls.Add(1)
-	return m.token, m.err
-}
-
-// mockEndpointDiscoverer is a configurable mock for EndpointDiscoverer.
-type mockEndpointDiscoverer struct {
-	mu          sync.Mutex
-	strategies  map[string]*EndpointStrategy
-	discovered  map[string]*EndpointStrategy // keyed by serviceKey
-	discoverErr error
-	cleared     []string
-}
-
-func (m *mockEndpointDiscoverer) GetStrategy(key string) *EndpointStrategy {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.strategies[key]
-}
-
-func (m *mockEndpointDiscoverer) Discover(_ context.Context, serviceKey, _ string) (*EndpointStrategy, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.discoverErr != nil {
-		return nil, m.discoverErr
-	}
-	return m.discovered[serviceKey], nil
-}
-
-func (m *mockEndpointDiscoverer) ClearStrategy(key string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.strategies, key)
-	m.cleared = append(m.cleared, key)
-}
-
-func (m *mockEndpointDiscoverer) getCleared() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	cp := make([]string, len(m.cleared))
-	copy(cp, m.cleared)
-	return cp
-}
-
-// --- Task 7: MVP parity tests ---
-
-func TestCheckAll_401NilTokenProviderStaysAuthBlocked(t *testing.T) {
+func TestCheckAll_InternalURLUsedForK8sService(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
+		Name:        "my-svc",
+		Namespace:   "my-ns",
+		URL:         "https://my-svc.example.com",
+		InternalURL: "http://my-svc.my-ns.svc.cluster.local:8080",
+		Status:      state.StatusUnknown,
 	})
 
 	client := &mockHTTPProber{
 		responses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 401, body: "Unauthorized"},
-		},
-	}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	// No WithTokenProvider — nil tokenProvider = MVP behavior
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusAuthBlocked {
-		t.Errorf("expected %q with nil tokenProvider, got %q", state.StatusAuthBlocked, svc.Status)
-	}
-}
-
-func TestCheckAll_403NilTokenProviderStaysAuthBlocked(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 403, body: "Forbidden"},
+			"http://my-svc.my-ns.svc.cluster.local:8080": {statusCode: 200, body: "OK"},
 		},
 	}
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.checkAll(context.Background())
 
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusAuthBlocked {
-		t.Errorf("expected %q with nil tokenProvider, got %q", state.StatusAuthBlocked, svc.Status)
-	}
-}
-
-// --- Task 8: OIDC retry happy path tests ---
-
-func TestCheckAll_OIDCRetry401BecomesHealthy(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	tp := &mockTokenProvider{token: "test-token-123"}
-	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*EndpointStrategy),
-		discovered: map[string]*EndpointStrategy{
-			"ns1/svc1": {Type: "oidcAuth"},
-		},
-	}
-
-	authClient := &authAwareMockProber{
-		unauthResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 401, body: "Unauthorized"},
-		},
-		authResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
+	svc, _ := store.Get("my-ns", "my-svc")
 	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q after OIDC retry, got %q", state.StatusHealthy, svc.Status)
-	}
-	if tp.calls.Load() != 1 {
-		t.Errorf("expected token provider called once, got %d", tp.calls.Load())
-	}
-}
-
-func TestCheckAll_OIDCRetry403BecomesHealthy(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	authClient := &authAwareMockProber{
-		unauthResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 403, body: "Forbidden"},
-		},
-		authResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 200, body: "OK"},
-		},
+		t.Errorf("expected %q when probing InternalURL, got %q", state.StatusHealthy, svc.Status)
 	}
 
-	tp := &mockTokenProvider{token: "test-token-456"}
-	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*EndpointStrategy),
-		discovered: map[string]*EndpointStrategy{
-			"ns1/svc1": {Type: "oidcAuth"},
-		},
+	// Verify the internal URL was probed, not the external URL
+	reqs := client.getCapturedRequests()
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
 	}
-
-	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q after OIDC retry for 403, got %q", state.StatusHealthy, svc.Status)
+	if reqs[0].url != "http://my-svc.my-ns.svc.cluster.local:8080" {
+		t.Errorf("expected probe to InternalURL, got %q", reqs[0].url)
 	}
 }
 
-func TestCheckAll_OIDCRetryBearerHeaderSent(t *testing.T) {
+func TestCheckAll_HealthURLOverridesInternalURL(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	authClient := &authAwareMockProber{
-		unauthResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 401, body: "Unauthorized"},
-		},
-		authResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	tp := &mockTokenProvider{token: "my-secret-token"}
-	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*EndpointStrategy),
-		discovered: map[string]*EndpointStrategy{
-			"ns1/svc1": {Type: "oidcAuth"},
-		},
-	}
-
-	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
-
-	reqs := authClient.getCapturedRequests()
-	foundAuth := false
-	for _, r := range reqs {
-		if r.header.Get("Authorization") == "Bearer my-secret-token" {
-			foundAuth = true
-			break
-		}
-	}
-	if !foundAuth {
-		t.Error("expected Authorization: Bearer header in retry request")
-	}
-}
-
-func TestCheckAll_200InitialNoOIDCInteraction(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
+		Name:        "my-svc",
+		Namespace:   "my-ns",
+		URL:         "https://my-svc.example.com",
+		InternalURL: "http://my-svc.my-ns.svc.cluster.local:8080",
+		HealthURL:   "https://custom-health.example.com/status",
+		Status:      state.StatusUnknown,
 	})
 
 	client := &mockHTTPProber{
 		responses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	tp := &mockTokenProvider{token: "should-not-be-used"}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q, got %q", state.StatusHealthy, svc.Status)
-	}
-	if tp.calls.Load() != 0 {
-		t.Errorf("expected token provider NOT called for healthy service, got %d calls", tp.calls.Load())
-	}
-}
-
-// --- Task 9: Health endpoint discovery tests ---
-
-func TestCheckAll_DiscoveryFindsHealthEndpointNoTokenNeeded(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://svc1.example.com":         {statusCode: 401, body: "Unauthorized"},
-			"https://svc1.example.com/healthz": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	tp := &mockTokenProvider{token: "should-not-be-used"}
-	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*EndpointStrategy),
-		discovered: map[string]*EndpointStrategy{
-			"ns1/svc1": {Type: "healthEndpoint", Endpoint: "https://svc1.example.com/healthz"},
-		},
-	}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q via health endpoint discovery, got %q", state.StatusHealthy, svc.Status)
-	}
-	if tp.calls.Load() != 0 {
-		t.Errorf("expected token provider NOT called when health endpoint found, got %d calls", tp.calls.Load())
-	}
-}
-
-func TestCheckAll_CachedHealthEndpointWorks(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://svc1.example.com":         {statusCode: 401, body: "Unauthorized"},
-			"https://svc1.example.com/healthz": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	tp := &mockTokenProvider{token: "should-not-be-used"}
-	disc := &mockEndpointDiscoverer{
-		strategies: map[string]*EndpointStrategy{
-			"ns1/svc1": {Type: "healthEndpoint", Endpoint: "https://svc1.example.com/healthz"},
-		},
-	}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q via cached health endpoint, got %q", state.StatusHealthy, svc.Status)
-	}
-	if tp.calls.Load() != 0 {
-		t.Errorf("expected token provider NOT called when cached endpoint works, got %d calls", tp.calls.Load())
-	}
-}
-
-func TestCheckAll_CachedEndpointFailsFallsToOIDC(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	authClient := &authAwareMockProber{
-		unauthResponses: map[string]mockResponse{
-			"https://svc1.example.com":         {statusCode: 401, body: "Unauthorized"},
-			"https://svc1.example.com/healthz": {statusCode: 500, body: "Error"}, // cached endpoint now fails
-		},
-		authResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 200, body: "OK"}, // OIDC retry succeeds
-		},
-	}
-
-	tp := &mockTokenProvider{token: "fallback-token"}
-	disc := &mockEndpointDiscoverer{
-		strategies: map[string]*EndpointStrategy{
-			"ns1/svc1": {Type: "healthEndpoint", Endpoint: "https://svc1.example.com/healthz"},
-		},
-	}
-
-	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q after fallback to OIDC, got %q", state.StatusHealthy, svc.Status)
-	}
-	if tp.calls.Load() != 1 {
-		t.Errorf("expected token provider called once after cached endpoint failed, got %d", tp.calls.Load())
-	}
-	cleared := disc.getCleared()
-	if len(cleared) != 1 || cleared[0] != "ns1/svc1" {
-		t.Errorf("expected ClearStrategy called for ns1/svc1, got %v", cleared)
-	}
-}
-
-func TestCheckAll_DiscoveryFindsNoEndpointsFallsToOIDC(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	authClient := &authAwareMockProber{
-		unauthResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 401, body: "Unauthorized"},
-		},
-		authResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	tp := &mockTokenProvider{token: "oidc-token"}
-	disc := &mockEndpointDiscoverer{
-		strategies: make(map[string]*EndpointStrategy),
-		discovered: map[string]*EndpointStrategy{
-			"ns1/svc1": {Type: "oidcAuth"}, // No health endpoint found
-		},
-	}
-
-	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q after OIDC retry, got %q", state.StatusHealthy, svc.Status)
-	}
-	if tp.calls.Load() != 1 {
-		t.Errorf("expected token provider called once, got %d", tp.calls.Load())
-	}
-}
-
-// --- Task 10: Failure path tests ---
-
-func TestCheckAll_OIDCProviderDownStaysAuthBlocked(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 401, body: "Unauthorized"},
-		},
-	}
-
-	tp := &mockTokenProvider{err: errors.New("OIDC provider unreachable")}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusAuthBlocked {
-		t.Errorf("expected %q when OIDC provider down, got %q", state.StatusAuthBlocked, svc.Status)
-	}
-	if tp.calls.Load() != 1 {
-		t.Errorf("expected token provider called once on retry cycle, got %d", tp.calls.Load())
-	}
-}
-
-func TestCheckAll_OIDCProviderDownHealthyServicesUnaffected(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "healthy-svc", Namespace: "ns1", URL: "https://healthy.example.com",
-		Status: state.StatusUnknown,
-	})
-	store.AddOrUpdate(state.Service{
-		Name: "blocked-svc", Namespace: "ns1", URL: "https://blocked.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://healthy.example.com": {statusCode: 200, body: "OK"},
-			"https://blocked.example.com": {statusCode: 401, body: "Unauthorized"},
-		},
-	}
-
-	tp := &mockTokenProvider{err: errors.New("OIDC provider unreachable")}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp)
-	checker.checkAll(context.Background())
-
-	healthy, _ := store.Get("ns1", "healthy-svc")
-	if healthy.Status != state.StatusHealthy {
-		t.Errorf("healthy service: expected %q, got %q", state.StatusHealthy, healthy.Status)
-	}
-
-	blocked, _ := store.Get("ns1", "blocked-svc")
-	if blocked.Status != state.StatusAuthBlocked {
-		t.Errorf("blocked service: expected %q, got %q", state.StatusAuthBlocked, blocked.Status)
-	}
-	if tp.calls.Load() != 1 {
-		t.Errorf("expected token provider called once for blocked service, got %d", tp.calls.Load())
-	}
-}
-
-func TestCheckAll_DiscoveryErrorFallsToOIDC(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status: state.StatusUnknown,
-	})
-
-	authClient := &authAwareMockProber{
-		unauthResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 401, body: "Unauthorized"},
-		},
-		authResponses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	tp := &mockTokenProvider{token: "fallback-token"}
-	disc := &mockEndpointDiscoverer{
-		strategies:  make(map[string]*EndpointStrategy),
-		discoverErr: errors.New("discovery network error"),
-	}
-
-	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q after discovery error fallback to OIDC, got %q", state.StatusHealthy, svc.Status)
-	}
-	if tp.calls.Load() != 1 {
-		t.Errorf("expected token provider called once after discovery error, got %d", tp.calls.Load())
-	}
-}
-
-func TestProbeServiceWithAuth_ConnectionError(t *testing.T) {
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://svc1.example.com": {err: errors.New("connection refused")},
-		},
-	}
-
-	checker := NewChecker(nil, nil, client, time.Hour, history.NoopWriter{}, nil)
-	result := checker.probeServiceWithAuth(context.Background(), "https://svc1.example.com", "some-token")
-
-	if result.status != state.StatusUnhealthy {
-		t.Errorf("expected %q on connection error, got %q", state.StatusUnhealthy, result.status)
-	}
-	if result.errorSnippet == nil || !strings.Contains(*result.errorSnippet, "connection refused") {
-		t.Errorf("expected error snippet containing 'connection refused'")
-	}
-}
-
-func TestCheckAll_AuthMethodClearedWhenNotUsed(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
-		Status:     state.StatusHealthy,
-		AuthMethod: "oidc",
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://svc1.example.com": {statusCode: 200, body: "OK"},
+			"https://custom-health.example.com/status": {statusCode: 200, body: "OK"},
 		},
 	}
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.checkAll(context.Background())
 
-	svc, _ := store.Get("ns1", "svc1")
-	if svc.AuthMethod != "" {
-		t.Errorf("expected AuthMethod to be cleared, got %q", svc.AuthMethod)
+	svc, _ := store.Get("my-ns", "my-svc")
+	if svc.Status != state.StatusHealthy {
+		t.Errorf("expected %q when probing HealthURL, got %q", state.StatusHealthy, svc.Status)
+	}
+
+	reqs := client.getCapturedRequests()
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if reqs[0].url != "https://custom-health.example.com/status" {
+		t.Errorf("expected probe to HealthURL, got %q", reqs[0].url)
 	}
 }
 
-// --- Task 11: Concurrency tests ---
-
-func TestCheckAll_MultipleAuthBlockedServicesConcurrent(t *testing.T) {
-	store := state.NewStore()
-	numServices := 5
-	for i := 0; i < numServices; i++ {
-		name := "svc" + strings.Repeat("x", i) // unique names
-		store.AddOrUpdate(state.Service{
-			Name: name, Namespace: "ns1",
-			URL:    "https://" + name + ".example.com",
-			Status: state.StatusUnknown,
-		})
-	}
-
-	responses := map[string]mockResponse{}
-	authResponses := map[string]mockResponse{}
-	for i := 0; i < numServices; i++ {
-		name := "svc" + strings.Repeat("x", i)
-		url := "https://" + name + ".example.com"
-		responses[url] = mockResponse{statusCode: 401, body: "Unauthorized"}
-		authResponses[url] = mockResponse{statusCode: 200, body: "OK"}
-	}
-
-	authClient := &authAwareMockProber{
-		unauthResponses: responses,
-		authResponses:   authResponses,
-	}
-
-	tp := &mockTokenProvider{token: "concurrent-token"}
-
-	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp)
-	checker.checkAll(context.Background())
-
-	for i := 0; i < numServices; i++ {
-		name := "svc" + strings.Repeat("x", i)
-		svc, _ := store.Get("ns1", name)
-		if svc.Status != state.StatusHealthy {
-			t.Errorf("service %s: expected %q, got %q", name, state.StatusHealthy, svc.Status)
-		}
-	}
-
-	// All services should have triggered a token call
-	if tp.calls.Load() != int32(numServices) {
-		t.Errorf("expected %d token calls, got %d", numServices, tp.calls.Load())
-	}
-}
-
-func TestCheckAll_ExpectedStatusCodesStillApplyAfterOIDC(t *testing.T) {
-	// A service with expectedCodes: [401] should be healthy even when OIDC is configured.
-	// OIDC retry runs first (resolving the 401 to healthy via auth), but if the
-	// initial probe returned 401 and expectedCodes includes 401, the override applies.
+func TestCheckAll_NoInternalURLFallsBackToURL(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
-		Name:                "authsvc",
-		Namespace:           "custom",
-		URL:                 "https://auth.local",
-		ExpectedStatusCodes: []int{200, 401},
-		Status:              state.StatusUnknown,
+		Name:      "config-svc",
+		Namespace: "custom",
+		URL:       "https://config-svc.example.com",
+		Source:    state.SourceConfig,
+		Status:    state.StatusUnknown,
 	})
 
 	client := &mockHTTPProber{
 		responses: map[string]mockResponse{
-			"https://auth.local": {statusCode: 401, body: "Unauthorized"},
+			"https://config-svc.example.com": {statusCode: 200, body: "OK"},
 		},
 	}
 
-	tp := &mockTokenProvider{err: errors.New("OIDC down")}
-
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	checker.WithTokenProvider(tp)
 	checker.checkAll(context.Background())
 
-	svc, _ := store.Get("custom", "authsvc")
-	// Even though OIDC retry failed (stays authBlocked), ExpectedStatusCodes should override
+	svc, _ := store.Get("custom", "config-svc")
 	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q (401 in expected codes overrides auth-blocked), got %q", state.StatusHealthy, svc.Status)
+		t.Errorf("expected %q when probing URL fallback, got %q", state.StatusHealthy, svc.Status)
+	}
+
+	reqs := client.getCapturedRequests()
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if reqs[0].url != "https://config-svc.example.com" {
+		t.Errorf("expected probe to URL, got %q", reqs[0].url)
 	}
 }
 
-func TestWithTokenProvider_ReturnsChecker(t *testing.T) {
-	checker := NewChecker(nil, nil, nil, time.Hour, history.NoopWriter{}, nil)
-	tp := &mockTokenProvider{}
-	result := checker.WithTokenProvider(tp)
-	if result != checker {
-		t.Error("expected WithTokenProvider to return same checker for chaining")
-	}
-}
-
-func TestWithDiscoverer_ReturnsChecker(t *testing.T) {
-	checker := NewChecker(nil, nil, nil, time.Hour, history.NoopWriter{}, nil)
-	disc := &mockEndpointDiscoverer{}
-	result := checker.WithDiscoverer(disc)
-	if result != checker {
-		t.Error("expected WithDiscoverer to return same checker for chaining")
-	}
-}
-
-// authAwareMockProber returns different responses based on whether an Authorization header is present.
-type authAwareMockProber struct {
-	mu               sync.Mutex
-	unauthResponses  map[string]mockResponse
-	authResponses    map[string]mockResponse
-	capturedRequests []capturedRequest
-}
-
-func (m *authAwareMockProber) Do(req *http.Request) (*http.Response, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.capturedRequests = append(m.capturedRequests, capturedRequest{
-		url:    req.URL.String(),
-		header: req.Header.Clone(),
+func TestCheckAll_InternalURLNon2xxShowsUnhealthy(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name:        "my-svc",
+		Namespace:   "my-ns",
+		URL:         "https://my-svc.example.com",
+		InternalURL: "http://my-svc.my-ns.svc.cluster.local:8080",
+		Status:      state.StatusUnknown,
 	})
 
-	var responses map[string]mockResponse
-	if req.Header.Get("Authorization") != "" {
-		responses = m.authResponses
-	} else {
-		responses = m.unauthResponses
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"http://my-svc.my-ns.svc.cluster.local:8080": {statusCode: 503, body: "Service Unavailable"},
+		},
 	}
 
-	resp, ok := responses[req.URL.String()]
-	if !ok {
-		return nil, errors.New("connection refused")
-	}
-	if resp.err != nil {
-		return nil, resp.err
-	}
-	return &http.Response{
-		StatusCode: resp.statusCode,
-		Body:       io.NopCloser(strings.NewReader(resp.body)),
-	}, nil
-}
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
+	checker.checkAll(context.Background())
 
-func (m *authAwareMockProber) getCapturedRequests() []capturedRequest {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	cp := make([]capturedRequest, len(m.capturedRequests))
-	copy(cp, m.capturedRequests)
-	return cp
+	svc, _ := store.Get("my-ns", "my-svc")
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected %q when InternalURL returns 503, got %q", state.StatusUnhealthy, svc.Status)
+	}
+	if svc.HTTPCode == nil || *svc.HTTPCode != 503 {
+		t.Errorf("expected HTTPCode 503 from internal probe, got %v", svc.HTTPCode)
+	}
 }

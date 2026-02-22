@@ -1,4 +1,4 @@
-export type HealthStatus = 'healthy' | 'unhealthy' | 'authBlocked' | 'unknown';
+export type HealthStatus = 'healthy' | 'unhealthy' | 'unknown';
 export type ServiceSource = 'kubernetes' | 'config';
 
 export type ConnectionStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
@@ -13,7 +13,6 @@ export const CONNECTION_STATUSES: ConnectionStatus[] = [
 export const HEALTH_STATUSES: HealthStatus[] = [
 	'healthy',
 	'unhealthy',
-	'authBlocked',
 	'unknown'
 ];
 
@@ -34,14 +33,6 @@ export interface Service {
 	lastStateChange: string | null;
 	errorSnippet: string | null;
 	healthUrl?: string | null;
-	authMethod?: string;
-}
-
-export interface OIDCStatus {
-	connected: boolean;
-	providerName: string;
-	tokenState: 'valid' | 'refreshing' | 'expired' | 'error';
-	lastSuccess: string | null;
 }
 
 export interface ServiceGroup {
@@ -50,7 +41,6 @@ export interface ServiceGroup {
 	counts: {
 		healthy: number;
 		unhealthy: number;
-		authBlocked: number;
 		unknown: number;
 	};
 	hasProblems: boolean;
@@ -64,7 +54,6 @@ export interface StateEventPayload {
 	k8sLastEvent?: string | null;
 	healthCheckIntervalMs?: number;
 	configErrors?: string[];
-	oidcStatus?: OIDCStatus;
 }
 
 export interface K8sStatusPayload {

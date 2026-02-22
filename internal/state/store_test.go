@@ -43,7 +43,6 @@ func TestHealthStatusConstants(t *testing.T) {
 	}{
 		{"healthy", StatusHealthy, "healthy"},
 		{"unhealthy", StatusUnhealthy, "unhealthy"},
-		{"authBlocked", StatusAuthBlocked, "authBlocked"},
 		{"unknown", StatusUnknown, "unknown"},
 	}
 
@@ -630,6 +629,50 @@ func TestSetConfigErrorsStoresAndReturnsCopies(t *testing.T) {
 	got2 := store.ConfigErrors()
 	if got2[1] != "b" {
 		t.Fatalf("expected ConfigErrors() to return a copy, got %q", got2[1])
+	}
+}
+
+func TestServiceInternalURL(t *testing.T) {
+	store := NewStore()
+
+	svc := Service{
+		Name:        "my-svc",
+		Namespace:   "my-ns",
+		Group:       "my-ns",
+		URL:         "https://my-svc.example.com",
+		InternalURL: "http://my-svc.my-ns.svc.cluster.local:8080",
+		Status:      StatusUnknown,
+	}
+	store.AddOrUpdate(svc)
+
+	got, ok := store.Get("my-ns", "my-svc")
+	if !ok {
+		t.Fatal("expected to find service")
+	}
+	if got.InternalURL != "http://my-svc.my-ns.svc.cluster.local:8080" {
+		t.Errorf("expected InternalURL %q, got %q", "http://my-svc.my-ns.svc.cluster.local:8080", got.InternalURL)
+	}
+}
+
+func TestServiceInternalURLEmptyForConfigServices(t *testing.T) {
+	store := NewStore()
+
+	svc := Service{
+		Name:      "external-svc",
+		Namespace: "config",
+		Group:     "config",
+		URL:       "https://external.example.com",
+		Source:    SourceConfig,
+		Status:    StatusUnknown,
+	}
+	store.AddOrUpdate(svc)
+
+	got, ok := store.Get("config", "external-svc")
+	if !ok {
+		t.Fatal("expected to find service")
+	}
+	if got.InternalURL != "" {
+		t.Errorf("expected empty InternalURL for config service, got %q", got.InternalURL)
 	}
 }
 

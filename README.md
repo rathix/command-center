@@ -35,7 +35,6 @@ make build              # Build frontend + Go binary → bin/command-center
 make docker             # Build multi-stage Docker image
 make test               # Run Go and frontend tests
 make dev                # Dev mode: Vite HMR + Go server with --dev flag
-make encrypt-secrets    # Build encrypt-secrets CLI tool → bin/encrypt-secrets
 make clean              # Remove build artifacts
 ```
 
@@ -58,8 +57,6 @@ All parameters support CLI flags and environment variables. Precedence: CLI flag
 | `--config` | `CONFIG_FILE` | *(none)* | Path to YAML config file for custom services |
 | `--history-file` | `HISTORY_FILE` | *(none)* | Path to history JSONL file |
 | `--session-duration` | `SESSION_DURATION` | `24h` | Browser session cookie duration |
-| `--secrets` | `SECRETS_FILE` | *(none)* | Path to encrypted secrets file |
-| *(none)* | `SECRETS_KEY` | *(none)* | Decryption key for secrets file (env only) |
 | `--dev` | `DEV` | `false` | Dev mode (Vite proxy, no TLS) |
 
 See `.env.example` for a documented template.
@@ -145,50 +142,6 @@ Override any Kubernetes-discovered service by matching its `namespace/name`. Onl
 
 Groups referenced by services are created automatically. The `groups` map adds display metadata: a friendly name, icon, and sort order for the dashboard layout.
 
-## Secrets Management
-
-Sensitive values (e.g. OIDC client secrets) are stored in an encrypted secrets file. Use the `encrypt-secrets` CLI tool to encrypt a plaintext YAML file:
-
-```bash
-make encrypt-secrets
-bin/encrypt-secrets -in secrets.yaml -out secrets.enc
-```
-
-**secrets.yaml format:**
-
-```yaml
-oidc:
-  clientId: my-client-id
-  clientSecret: ${OIDC_CLIENT_SECRET}
-```
-
-Values support `${ENV_VAR}` substitution — environment variables are resolved at load time.
-
-At runtime, provide the encrypted file and decryption key:
-
-```bash
-export SECRETS_KEY=your-encryption-key
-./bin/command-center --secrets secrets.enc
-```
-
-`SECRETS_KEY` is intentionally environment-variable only (no CLI flag) because CLI arguments are visible in `/proc/*/cmdline`.
-
-## OIDC Authentication
-
-OIDC authentication is optional. When configured, the health checker uses OIDC client credentials tokens for authenticated retries against protected endpoints.
-
-Configure via YAML config file:
-
-```yaml
-oidc:
-  issuerUrl: https://auth.example.com
-  scopes:
-    - openid
-    - profile
-```
-
-The OIDC client discovers endpoints via the issuer's `.well-known/openid-configuration`. Token status is included in SSE `state` event payloads for frontend display.
-
 ## mTLS & Certificates
 
 Command Center enforces mutual TLS on all connections. TLS 1.3 minimum.
@@ -250,7 +203,7 @@ docker run -d \
 ```
 
 - Kubeconfig mounted read-only — the server only reads from the Kubernetes API
-- Named volume for `/data` persists certificates and health history across container restarts
+- Named volume for `/data` persists certificates and health history across restarts
 - Graceful shutdown on `docker stop` (SIGTERM handled)
 
 ## Development
@@ -265,14 +218,11 @@ This starts the Vite dev server (port 5173) for frontend hot-reload and the Go s
 
 ```
 cmd/command-center/     Go entrypoint, config, server lifecycle
-cmd/encrypt-secrets/    CLI tool for encrypting secrets files
-internal/auth/          OIDC client credentials authentication
 internal/certs/         TLS certificate generation and management
 internal/config/        YAML config loading with hot-reload (fsnotify)
-internal/health/        HTTP health checker with OIDC-authenticated retries
+internal/health/        HTTP health checker with InternalURL support
 internal/history/       Health check history persistence (JSONL)
 internal/k8s/           Kubernetes Ingress watcher (informer-based)
-internal/secrets/       Encrypted secrets file decryption
 internal/server/        HTTP handlers, SPA serving, dev proxy
 internal/session/       Browser session cookie management
 internal/sse/           Server-Sent Events broker and event types

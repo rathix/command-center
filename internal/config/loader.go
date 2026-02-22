@@ -103,14 +103,5 @@ func Load(path string) (*Config, []error) {
 	}
 	cfg.Overrides = validOverrides
 
-	// Validate OIDC issuer URL when provided.
-	if issuer := strings.TrimSpace(cfg.OIDC.IssuerURL); issuer != "" {
-		parsed, err := url.Parse(issuer)
-		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-			validationErrors = append(validationErrors, fmt.Errorf("oidc.issuerUrl: invalid URL %q", issuer))
-			cfg.OIDC.IssuerURL = ""
-		}
-	}
-
 	return &cfg, validationErrors
 }

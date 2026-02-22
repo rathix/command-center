@@ -16,11 +16,11 @@ Establishes a persistent SSE connection. The server sends an initial full state 
 #### Event Types
 
 **`state` — Full State Snapshot**
-Sent on initial connection, reconnection, and when config errors change. Contains complete service list, K8s status, health check interval, and optional OIDC status.
+Sent on initial connection, reconnection, and when config errors change. Contains complete service list, K8s status, and health check interval.
 
 ```
 event: state
-data: {"appVersion":"0.8.0","services":[{"name":"my-service","displayName":"My Service","namespace":"default","group":"apps","url":"https://my-service.example.com","source":"kubernetes","status":"healthy","httpCode":200,"responseTimeMs":42,"lastChecked":"2026-02-22T10:00:00Z","lastStateChange":"2026-02-22T09:55:00Z","errorSnippet":null,"authMethod":"oidc"}],"k8sConnected":true,"k8sLastEvent":"2026-02-22T09:50:00Z","healthCheckIntervalMs":30000,"configErrors":[],"oidcStatus":{"connected":true,"providerName":"PocketID","tokenState":"valid","lastSuccess":"2026-02-22T09:59:00Z"}}
+data: {"appVersion":"0.8.0","services":[{"name":"my-service","displayName":"My Service","namespace":"default","group":"apps","url":"https://my-service.example.com","source":"kubernetes","status":"healthy","httpCode":200,"responseTimeMs":42,"lastChecked":"2026-02-22T10:00:00Z","lastStateChange":"2026-02-22T09:55:00Z","errorSnippet":null}],"k8sConnected":true,"k8sLastEvent":"2026-02-22T09:50:00Z","healthCheckIntervalMs":30000,"configErrors":[]}
 ```
 
 **`discovered` — Service Discovered**
@@ -28,7 +28,7 @@ Sent when a new Kubernetes Ingress resource is detected or a config service is l
 
 ```
 event: discovered
-data: {"name":"my-service","displayName":"My Service","namespace":"default","group":"apps","url":"https://my-service.example.com","source":"kubernetes","status":"unknown","httpCode":null,"responseTimeMs":null,"lastChecked":null,"lastStateChange":null,"errorSnippet":null,"authMethod":"oidc"}
+data: {"name":"my-service","displayName":"My Service","namespace":"default","group":"apps","url":"https://my-service.example.com","source":"kubernetes","status":"unknown","httpCode":null,"responseTimeMs":null,"lastChecked":null,"lastStateChange":null,"errorSnippet":null}
 ```
 
 **`update` — Service Updated**
@@ -36,7 +36,7 @@ Sent when an existing service's health check completes or its config properties 
 
 ```
 event: update
-data: {"name":"my-service","displayName":"My Service","namespace":"default","group":"apps","url":"https://my-service.example.com","source":"kubernetes","status":"healthy","httpCode":200,"responseTimeMs":42,"lastChecked":"2026-02-22T10:00:00Z","lastStateChange":"2026-02-22T09:55:00Z","errorSnippet":null,"authMethod":"oidc"}
+data: {"name":"my-service","displayName":"My Service","namespace":"default","group":"apps","url":"https://my-service.example.com","source":"kubernetes","status":"healthy","httpCode":200,"responseTimeMs":42,"lastChecked":"2026-02-22T10:00:00Z","lastStateChange":"2026-02-22T09:55:00Z","errorSnippet":null}
 ```
 
 **`removed` — Service Removed**
@@ -59,8 +59,8 @@ data: {"k8sConnected":true,"k8sLastEvent":"2026-02-22T09:50:00Z"}
 
 | Event | Payload Fields |
 |-|-|
-| `state` | `appVersion`, `services[]`, `k8sConnected`, `k8sLastEvent`, `healthCheckIntervalMs`, `configErrors[]`, `oidcStatus?` |
-| `discovered` | `name`, `displayName`, `namespace`, `group`, `url`, `icon?`, `source`, `status`, `httpCode`, `responseTimeMs`, `lastChecked`, `lastStateChange`, `errorSnippet`, `authMethod?` |
+| `state` | `appVersion`, `services[]`, `k8sConnected`, `k8sLastEvent`, `healthCheckIntervalMs`, `configErrors[]` |
+| `discovered` | `name`, `displayName`, `namespace`, `group`, `url`, `icon?`, `source`, `status`, `httpCode`, `responseTimeMs`, `lastChecked`, `lastStateChange`, `errorSnippet` |
 | `update` | Same fields as `discovered` |
 | `removed` | `name`, `namespace` |
 | `k8sStatus` | `k8sConnected`, `k8sLastEvent` |
@@ -82,10 +82,6 @@ In dev mode (`--dev`), this route proxies all requests to the Vite dev server at
 |-|-|-|
 | `--dev` | — | Enable dev mode (Vite proxy, relaxed auth) |
 | `--config` | — | Path to YAML config file |
-| `--secrets` | `SECRETS_FILE` | Path to encrypted secrets file |
-| — | `SECRETS_KEY` | Passphrase to decrypt the secrets file |
-
-The secrets file uses AES-256-GCM encryption with an Argon2id-derived key. It contains OIDC client credentials (`clientId`, `clientSecret`). When `--secrets` is not provided, OIDC authentication is disabled.
 
 ## Connection Behavior
 

@@ -19,7 +19,7 @@
 - **Tech Stack:** Go 1.26, stdlib `net/http`, k8s.io/client-go v0.35.1
 - **Root:** `/` (cmd/, internal/, embed.go)
 - **Entry Point:** `cmd/command-center/main.go`
-- **Packages:** auth, certs, config, health, history, k8s, secrets, server, session, sse, state
+- **Packages:** certs, config, health, history, k8s, server, session, sse, state
 
 ### Web (SvelteKit Frontend)
 

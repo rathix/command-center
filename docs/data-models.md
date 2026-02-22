@@ -5,7 +5,7 @@
 
 ## Overview
 
-Command Center holds all state in-memory in a thread-safe store and streams it to clients via SSE. Data originates from Kubernetes Ingress resources, a YAML config file (custom services), an encrypted secrets file (OIDC credentials), and HTTP health checks. Health-status transitions are persisted to a JSONL history file for startup restoration.
+Command Center holds all state in-memory in a thread-safe store and streams it to clients via SSE. Data originates from Kubernetes Ingress resources, a YAML config file (custom services), and HTTP health checks. Health-status transitions are persisted to a JSONL history file for startup restoration.
 
 ## Go Data Structures (Server)
 
@@ -29,7 +29,6 @@ The core domain entity representing a discovered or configured service.
 | LastChecked | *time.Time | `lastChecked` | Timestamp of last health check (nullable) |
 | LastStateChange | *time.Time | `lastStateChange` | Timestamp of last status transition (nullable) |
 | ErrorSnippet | *string | `errorSnippet` | Truncated error message (nullable) |
-| AuthMethod | string | `authMethod` | Auth strategy: `"oidc"` or empty (omitted if empty) |
 | HealthURL | string | `healthUrl` | Custom health check URL (omitted if empty) |
 | ExpectedStatusCodes | []int | `expectedStatusCodes` | Status codes treated as healthy (omitted if empty) |
 
@@ -39,7 +38,6 @@ The core domain entity representing a discovered or configured service.
 |-|-|
 | `healthy` | HTTP check returned expected status code |
 | `unhealthy` | HTTP check failed (timeout, connection refused, non-expected status) |
-| `authBlocked` | Health check blocked by authentication (OIDC required but unavailable) |
 | `unknown` | Not yet checked |
 
 ### Store (`internal/state`)
@@ -76,48 +74,6 @@ State change event emitted by the store.
 | 3 | EventK8sStatus | K8s connectivity changed |
 | 4 | EventConfigErrors | Config validation errors changed |
 
-### OIDCStatus (`internal/sse`)
-
-OIDC provider status included in state events.
-
-| Field | Type | JSON | Description |
-|-|-|-|-|
-| Connected | bool | `connected` | Whether the provider is reachable |
-| ProviderName | string | `providerName` | Derived provider name (e.g. `"PocketID"`) |
-| TokenState | string | `tokenState` | One of `valid`, `refreshing`, `expired`, `error` |
-| LastSuccess | *time.Time | `lastSuccess` | Last successful token acquisition (nullable) |
-
-### OIDCCredentials (`internal/secrets`)
-
-Decrypted OIDC client credentials loaded from the encrypted secrets file.
-
-| Field | Type | Description |
-|-|-|-|
-| ClientID | string | OIDC client identifier |
-| ClientSecret | string | OIDC client secret |
-
-### OIDCClient (`internal/auth`)
-
-Acquires and caches OIDC access tokens using the client credentials flow. Thread-safe. Key behavior:
-
-- Lazily discovers the token endpoint via `/.well-known/openid-configuration`
-- Caches tokens in memory with proactive refresh 30s before expiry
-- Deduplicates concurrent token fetches via singleflight
-- Exposes `GetStatus() *OIDCStatus` for SSE status snapshots
-
-### EndpointStrategy (`internal/auth`)
-
-Resolved health check approach for a service.
-
-| Field | Type | Description |
-|-|-|-|
-| Type | string | `"healthEndpoint"` (direct probe) or `"oidcAuth"` (token required) |
-| Endpoint | string | Full probe URL (only set when Type is `"healthEndpoint"`) |
-
-### EndpointDiscoverer (`internal/auth`)
-
-Probes common health endpoints (`/healthz`, `/health`, `/ping`, `/api/health`) and caches the result per service. Falls back to `"oidcAuth"` strategy when no unauthenticated health endpoint responds with 2xx.
-
 ### Config Types (`internal/config`)
 
 **Config** — top-level YAML configuration:
@@ -129,14 +85,6 @@ Probes common health endpoints (`/healthz`, `/health`, `/ping`, `/api/health`) a
 | Groups | map[string]GroupConfig | `groups` | Group display metadata |
 | Health | HealthConfig | `health` | Health check interval/timeout |
 | History | HistoryConfig | `history` | History retention settings |
-| OIDC | OIDCConfig | `oidc` | OIDC provider configuration |
-
-**OIDCConfig:**
-
-| Field | Type | YAML key | Description |
-|-|-|-|-|
-| IssuerURL | string | `issuerUrl` | OIDC provider issuer URL |
-| Scopes | []string | `scopes` | Token scopes to request |
 
 **CustomService:**
 
@@ -200,22 +148,12 @@ Implementations: `FileWriter` (append-only JSONL file), `NoopWriter` (discard).
 | lastStateChange | string \| null | ISO timestamp of last status transition |
 | errorSnippet | string \| null | Truncated error message |
 | healthUrl | string \| null (optional) | Custom health check URL |
-| authMethod | string (optional) | Auth strategy (`"oidc"` or absent) |
 
 ### HealthStatus (union type)
 
 ```typescript
-type HealthStatus = 'healthy' | 'unhealthy' | 'authBlocked' | 'unknown';
+type HealthStatus = 'healthy' | 'unhealthy' | 'unknown';
 ```
-
-### OIDCStatus
-
-| Field | Type | Description |
-|-|-|-|
-| connected | boolean | Whether the provider is reachable |
-| providerName | string | Derived provider name |
-| tokenState | `'valid' \| 'refreshing' \| 'expired' \| 'error'` | Current token state |
-| lastSuccess | string \| null | ISO timestamp of last successful acquisition |
 
 ### StateEventPayload
 
@@ -227,7 +165,6 @@ type HealthStatus = 'healthy' | 'unhealthy' | 'authBlocked' | 'unknown';
 | k8sLastEvent | string \| null (optional) | ISO timestamp of last K8s status change |
 | healthCheckIntervalMs | number (optional) | Health check interval in ms |
 | configErrors | string[] (optional) | Config validation errors |
-| oidcStatus | OIDCStatus (optional) | OIDC provider status |
 
 ### SSE Event Types
 
@@ -246,20 +183,12 @@ Kubernetes API                  Config File (YAML)
     |                               |
     v (Ingress events)              v (custom services, overrides, groups)
 K8s Watcher                     Config Loader
-    |                               |
+    |  (extracts InternalURL)       |
     +--------> State Store <--------+
                   ^    |
                   |    |
    Health Checker-+    +---> SSE Broker ---> Frontend Store ($state) ---> UI
-       ^                        ^
-       |                        |
-   Endpoint Discoverer    OIDC Status Provider
-       ^                        ^
-       |                        |
-   OIDC Client <--- Secrets Loader (encrypted file)
-                        ^
-                        |
-                    SECRETS_KEY env var
+   (HealthURL > InternalURL > URL)
 
    History Writer <--- State Store (transitions)
        |

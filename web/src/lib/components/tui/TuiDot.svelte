@@ -6,14 +6,12 @@
 	const colorMap: Record<HealthStatus, string> = {
 		healthy: 'bg-health-ok',
 		unhealthy: 'bg-health-error',
-		authBlocked: 'bg-health-auth-blocked',
 		unknown: 'bg-health-unknown'
 	};
 
 	const labelMap: Record<HealthStatus, string> = {
 		healthy: 'healthy',
 		unhealthy: 'unhealthy',
-		authBlocked: 'authentication blocked',
 		unknown: 'unknown'
 	};
 </script>

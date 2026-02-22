@@ -12,7 +12,7 @@ function makeGroup(overrides: Partial<ServiceGroup> = {}): ServiceGroup {
 	return {
 		name: 'media',
 		services: [],
-		counts: { healthy: 7, unhealthy: 1, authBlocked: 0, unknown: 0 },
+		counts: { healthy: 7, unhealthy: 1, unknown: 0 },
 		hasProblems: true,
 		expanded: true,
 		...overrides
@@ -54,16 +54,6 @@ describe('GroupHeader', () => {
 	it('unhealthy count uses text-health-error class', () => {
 		render(GroupHeader, { props: { group: makeGroup(), controlsId: 'list-1' } });
 		expect(screen.getByText('1 unhealthy')).toHaveClass('text-health-error');
-	});
-
-	it('authBlocked count uses text-health-auth-blocked class', () => {
-		render(GroupHeader, {
-			props: {
-				group: makeGroup({ counts: { healthy: 5, unhealthy: 0, authBlocked: 2, unknown: 0 } }),
-				controlsId: 'list-1'
-			}
-		});
-		expect(screen.getByText('2 auth-blocked')).toHaveClass('text-health-auth-blocked');
 	});
 
 	it('has role="button" attribute', () => {
@@ -134,7 +124,7 @@ describe('GroupHeader', () => {
 	it('all-healthy group shows only healthy count', () => {
 		render(GroupHeader, {
 			props: {
-				group: makeGroup({ counts: { healthy: 8, unhealthy: 0, authBlocked: 0, unknown: 0 } }),
+				group: makeGroup({ counts: { healthy: 8, unhealthy: 0, unknown: 0 } }),
 				controlsId: 'list-1'
 			}
 		});
