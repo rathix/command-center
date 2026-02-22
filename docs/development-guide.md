@@ -69,8 +69,8 @@ make test
 ```
 
 Runs both test suites:
-- **Go tests**: `go test ./...` (10 test files)
-- **Frontend tests**: `cd web && npx vitest run` (14+ test files)
+- **Go tests**: `go test ./...` (14 packages)
+- **Frontend tests**: `cd web && npx vitest run` (15 test files, 297 tests)
 
 Individual test commands:
 ```bash
@@ -109,6 +109,7 @@ npm run format        # Prettier auto-format
 | `dev` | `make dev` | Dev mode with Vite HMR + Go server |
 | `docker` | `make docker` | Build Docker image |
 | `clean` | `make clean` | Remove `bin/`, `web/build/`, `web/.svelte-kit/` |
+| `encrypt-secrets` | `make encrypt-secrets` | Build encrypt-secrets CLI tool → `bin/encrypt-secrets` |
 
 ## Project Conventions
 
@@ -153,6 +154,11 @@ All flags support environment variable equivalents. Precedence: CLI flag > env v
 | `--tls-cert` | `TLS_CERT` | *(auto)* | Custom server certificate |
 | `--tls-key` | `TLS_KEY` | *(auto)* | Custom server key |
 | `--dev` | `DEV` | `false` | Dev mode (Vite proxy, no TLS) |
+| `--config` | `CONFIG_FILE` | *(none)* | Path to YAML config file for custom services |
+| `--history-file` | `HISTORY_FILE` | *(none)* | Path to history JSONL file |
+| `--session-duration` | `SESSION_DURATION` | `24h` | Browser session cookie duration |
+| `--secrets` | `SECRETS_FILE` | *(none)* | Path to encrypted secrets file |
+| *(none)* | `SECRETS_KEY` | *(none)* | Decryption key for secrets file (env only — no CLI flag) |
 
 ## Common Tasks
 
@@ -166,6 +172,13 @@ All flags support environment variable equivalents. Precedence: CLI flag > env v
 1. Create `ComponentName.svelte` in `web/src/lib/components/`
 2. Create co-located `ComponentName.test.ts`
 3. Import and use in parent component
+
+### Adding encrypted secrets
+1. Create a `secrets.yaml` with plaintext values (supports `${ENV_VAR}` substitution)
+2. Build the tool: `make encrypt-secrets`
+3. Encrypt: `bin/encrypt-secrets -in secrets.yaml -out secrets.enc`
+4. Configure at runtime: `--secrets secrets.enc` with `SECRETS_KEY` env var
+5. Note: `SECRETS_KEY` has no CLI flag — environment variable only (CLI args visible in `/proc/*/cmdline`)
 
 ### Adding a new SSE event type
 1. Define Go event struct in `internal/sse/events.go`

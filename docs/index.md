@@ -9,7 +9,7 @@
 - **Primary Languages:** Go 1.26, TypeScript (Svelte 5)
 - **Architecture:** Service/handler pattern (backend) + component-based SPA (frontend)
 - **Deployment:** Single binary, Docker (distroless), mTLS-secured
-- **Version:** v0.2.0 (Epic 4 complete)
+- **Version:** v1.0.0 (MVP — Epic 8 complete)
 
 ## Quick Reference
 
@@ -19,7 +19,7 @@
 - **Tech Stack:** Go 1.26, stdlib `net/http`, k8s.io/client-go v0.35.1
 - **Root:** `/` (cmd/, internal/, embed.go)
 - **Entry Point:** `cmd/command-center/main.go`
-- **Packages:** certs, health, k8s, server, sse, state
+- **Packages:** auth, certs, config, health, history, k8s, secrets, server, session, sse, state
 
 ### Web (SvelteKit Frontend)
 
@@ -27,7 +27,7 @@
 - **Tech Stack:** SvelteKit ^2.50.2, Svelte 5, TypeScript, Tailwind CSS v4, Vite ^7.3.1
 - **Root:** `/web`
 - **Entry Point:** `web/src/routes/+page.svelte`
-- **Components:** ServiceList, ServiceRow, StatusBar, SectionLabel, HoverTooltip, TuiDot
+- **Components:** GroupedServiceList, GroupHeader, ServiceIcon, ServiceRow, StatusBar, HoverTooltip, TuiDot
 
 ## Generated Documentation
 

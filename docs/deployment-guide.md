@@ -103,6 +103,55 @@ Import into your browser:
 - **Firefox:** Settings > Privacy > Certificates > View Certificates > Import
 - **macOS Safari:** Double-click `.crt` to add to Keychain, then trust it
 
+## Secrets Management
+
+### Encrypting Secrets
+
+Use the `encrypt-secrets` CLI tool to encrypt a plaintext secrets YAML file:
+
+```bash
+bin/encrypt-secrets -in secrets.yaml -out secrets.enc
+```
+
+### secrets.yaml Format
+
+```yaml
+oidc:
+  clientId: my-client-id
+  clientSecret: ${OIDC_CLIENT_SECRET}
+```
+
+Values support `${ENV_VAR}` substitution — environment variables are resolved at load time.
+
+### SECRETS_KEY Environment Variable
+
+The `SECRETS_KEY` environment variable is required for decryption at runtime. It is intentionally **environment-variable only** (no CLI flag) because CLI arguments are visible in `/proc/*/cmdline`.
+
+```bash
+export SECRETS_KEY=your-encryption-key
+./bin/command-center --secrets /path/to/secrets.enc
+```
+
+## OIDC Configuration
+
+OIDC authentication is optional. When configured, the health checker uses OIDC tokens for authenticated retries against protected endpoints.
+
+Configure via YAML config file (`--config` / `CONFIG_FILE`):
+
+```yaml
+oidc:
+  issuerUrl: https://auth.example.com
+  scopes:
+    - openid
+    - profile
+```
+
+When not configured, the system operates without OIDC authentication.
+
+## Health History Persistence
+
+Health check results are persisted as JSONL files in `{data-dir}/`. This allows the dashboard to display historical health data across restarts.
+
 ## CI/CD Pipeline
 
 ### GitHub Actions Workflow (`.github/workflows/publish.yml`)

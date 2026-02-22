@@ -57,11 +57,12 @@ Single-page application with one route:
 
 | Component | Purpose | Key Features |
 |-|-|-|
-| `ServiceList.svelte` | Service list container | Problems-first sorting, section labels |
-| `ServiceRow.svelte` | Individual service row | Name, URL, health status dot, hover tooltip trigger |
-| `StatusBar.svelte` | Connection status display | SSE connection state, data freshness/staleness |
-| `SectionLabel.svelte` | Section divider headers | Visual grouping of services by status |
-| `HoverTooltip.svelte` | Diagnostic detail overlay | Health check details, timestamps, error info |
+| `GroupedServiceList.svelte` | Grouped service list container | Groups services by category, problems-first sorting |
+| `GroupHeader.svelte` | Group section header | Collapsible group title with aggregate status |
+| `ServiceIcon.svelte` | Service icon display | Renders per-service icons from config |
+| `ServiceRow.svelte` | Individual service row | Name, URL, health status dot, OIDC auth indicator, hover tooltip trigger |
+| `StatusBar.svelte` | Connection status display | SSE connection state, data freshness/staleness, OIDC status |
+| `HoverTooltip.svelte` | Diagnostic detail overlay | Health check details, timestamps, error info, OIDC auth status |
 | `tui/TuiDot.svelte` | Terminal-style status dot | Color-coded health indicator (green/yellow/red) |
 
 ## State Management
@@ -74,6 +75,7 @@ Uses Svelte 5 `$state` rune for fine-grained reactivity:
 - **Derived values**: Sorted service lists, status counts, freshness indicators
 - **Event handlers**: Process incoming SSE events (state, discovered, removed, health_update)
 - **Connection status**: Tracks SSE connection state (connecting, connected, disconnected)
+- **OIDC status**: `getOIDCStatus()` / `setOIDCStatus()` for tracking authentication state per service
 
 ### Data Flow
 
@@ -125,11 +127,12 @@ Manages the EventSource connection to `GET /api/events`:
 | `app.test.ts` | App-level configuration |
 | `page.test.ts` | Dashboard page rendering |
 | `layout.test.ts` | Layout initialization |
-| `ServiceList.test.ts` | List rendering, sorting, sections |
-| `ServiceRow.test.ts` | Row display, status indicators |
-| `StatusBar.test.ts` | Connection status display |
-| `SectionLabel.test.ts` | Section header rendering |
-| `HoverTooltip.test.ts` | Tooltip behavior |
+| `GroupedServiceList.test.ts` | Grouped list rendering, sorting |
+| `GroupHeader.test.ts` | Group header rendering |
+| `ServiceIcon.test.ts` | Icon display |
+| `ServiceRow.test.ts` | Row display, status indicators, OIDC indicators |
+| `StatusBar.test.ts` | Connection status display, OIDC status |
+| `HoverTooltip.test.ts` | Tooltip behavior, OIDC auth details |
 | `TuiDot.test.ts` | Status dot color mapping |
 | `sseClient.test.ts` | SSE connection management |
 | `serviceStore.svelte.test.ts` | Store mutations, event handling |
