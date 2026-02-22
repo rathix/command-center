@@ -135,6 +135,15 @@ describe('serviceStore', () => {
 			]);
 		});
 
+		it('sorts by compositeStatus rather than raw status', () => {
+			replaceAll([
+				makeService({ name: 'svc-a', status: 'healthy', compositeStatus: 'unhealthy' }),
+				makeService({ name: 'svc-b', status: 'unhealthy', compositeStatus: 'healthy' })
+			], 'v1.0.0');
+
+			expect(getSortedServices().map((s) => s.name)).toEqual(['svc-a', 'svc-b']);
+		});
+
 		it('sorts alphabetically within each status group', () => {
 			replaceAll([
 				makeService({ name: 'zebra', status: 'healthy' }),
@@ -175,6 +184,21 @@ describe('serviceStore', () => {
 				total: 0,
 				healthy: 0,
 				degraded: 0,
+				unhealthy: 0,
+				unknown: 0
+			});
+		});
+
+		it('counts use compositeStatus rather than raw status', () => {
+			replaceAll([
+				makeService({ name: 'svc-a', status: 'healthy', compositeStatus: 'degraded' }),
+				makeService({ name: 'svc-b', status: 'unhealthy', compositeStatus: 'healthy' })
+			], 'v1.0.0');
+
+			expect(getCounts()).toEqual({
+				total: 2,
+				healthy: 1,
+				degraded: 1,
 				unhealthy: 0,
 				unknown: 0
 			});

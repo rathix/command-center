@@ -344,6 +344,7 @@ func run(ctx context.Context, cfg config) error {
 		},
 	}
 	checker := health.NewChecker(store, store, probeClient, cfg.HealthInterval, historyWriter, logger)
+	checker.SetEndpointReader(storeEndpointReadinessReader{store: store})
 	go checker.Run(ctx)
 
 	retentionDays := 30
@@ -488,4 +489,20 @@ func storeConfigErrors(store *state.Store, errs []error) {
 		strs = append(strs, e.Error())
 	}
 	store.SetConfigErrors(strs)
+}
+
+type storeEndpointReadinessReader struct {
+	store *state.Store
+}
+
+func (r storeEndpointReadinessReader) GetEndpointReadiness(namespace, name string) *health.EndpointReadiness {
+	svc, ok := r.store.Get(namespace, name)
+	if !ok || svc.ReadyEndpoints == nil || svc.TotalEndpoints == nil {
+		return nil
+	}
+
+	return &health.EndpointReadiness{
+		Ready: *svc.ReadyEndpoints,
+		Total: *svc.TotalEndpoints,
+	}
 }

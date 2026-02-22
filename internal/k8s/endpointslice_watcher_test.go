@@ -8,6 +8,7 @@ import (
 
 	"github.com/rathix/command-center/internal/state"
 
+	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -149,6 +150,44 @@ func TestAggregateEndpointReadiness(t *testing.T) {
 				t.Errorf("total = %d, want %d", total, tt.wantTotal)
 			}
 		})
+	}
+}
+
+func TestExtractNotReadyPodNames(t *testing.T) {
+	slices := []*discoveryv1.EndpointSlice{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "es-1", Namespace: "ns"},
+			Endpoints: []discoveryv1.Endpoint{
+				{
+					Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(false)},
+					TargetRef:  &corev1.ObjectReference{Kind: "Pod", Name: "pod-a"},
+				},
+				{
+					Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(false)},
+					TargetRef:  &corev1.ObjectReference{Kind: "Pod", Name: "pod-a"}, // duplicate
+				},
+				{
+					Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+					TargetRef:  &corev1.ObjectReference{Kind: "Pod", Name: "pod-ready"},
+				},
+				{
+					Conditions: discoveryv1.EndpointConditions{Ready: nil}, // nil counts as not-ready
+					TargetRef:  &corev1.ObjectReference{Kind: "Pod", Name: "pod-nil"},
+				},
+				{
+					Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(false)},
+					TargetRef:  &corev1.ObjectReference{Kind: "Service", Name: "not-a-pod"},
+				},
+			},
+		},
+	}
+
+	got := extractNotReadyPodNames(slices)
+	if len(got) != 2 {
+		t.Fatalf("extractNotReadyPodNames() len = %d, want 2 (%v)", len(got), got)
+	}
+	if got[0] != "pod-a" || got[1] != "pod-nil" {
+		t.Fatalf("extractNotReadyPodNames() = %v, want [pod-a pod-nil]", got)
 	}
 }
 

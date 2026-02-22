@@ -769,6 +769,115 @@ func TestWatcherPreservesStatusOnUpdate(t *testing.T) {
 	}
 }
 
+func TestWatcherOnUpdatePreservesRuntimeFields(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	updater := &fakeStateUpdater{
+		current: make(map[string]state.Service),
+	}
+	logger := slog.Default()
+	w := NewWatcherWithClient(clientset, updater, logger)
+
+	ready := 2
+	total := 3
+	reason := "CrashLoopBackOff"
+	updater.AddOrUpdate(state.Service{
+		Name:                "my-app",
+		Namespace:           "my-ns",
+		Group:               "custom-group",
+		URL:                 "https://old.example.com",
+		DisplayName:         "Friendly Name",
+		OriginalDisplayName: "old",
+		Source:              state.SourceKubernetes,
+		Status:              state.StatusHealthy,
+		CompositeStatus:     state.StatusDegraded,
+		AuthGuarded:         true,
+		ReadyEndpoints:      &ready,
+		TotalEndpoints:      &total,
+		PodDiagnostic: &state.PodDiagnostic{
+			Reason:       &reason,
+			RestartCount: 4,
+		},
+	})
+
+	updatedIngress := newTestIngressWithBackend("my-app", "my-ns", "new.example.com", true, "backend-svc", 8080)
+	w.onUpdate(nil, updatedIngress)
+
+	got, ok := updater.Get("my-ns", "my-app")
+	if !ok {
+		t.Fatal("expected updated service to exist")
+	}
+
+	if got.Status != state.StatusHealthy {
+		t.Fatalf("Status = %q, want %q", got.Status, state.StatusHealthy)
+	}
+	if got.CompositeStatus != state.StatusDegraded {
+		t.Fatalf("CompositeStatus = %q, want %q", got.CompositeStatus, state.StatusDegraded)
+	}
+	if !got.AuthGuarded {
+		t.Fatal("AuthGuarded = false, want true")
+	}
+	if got.ReadyEndpoints == nil || *got.ReadyEndpoints != 2 {
+		t.Fatalf("ReadyEndpoints = %v, want 2", got.ReadyEndpoints)
+	}
+	if got.TotalEndpoints == nil || *got.TotalEndpoints != 3 {
+		t.Fatalf("TotalEndpoints = %v, want 3", got.TotalEndpoints)
+	}
+	if got.PodDiagnostic == nil || got.PodDiagnostic.Reason == nil || *got.PodDiagnostic.Reason != "CrashLoopBackOff" {
+		t.Fatalf("PodDiagnostic.Reason = %v, want CrashLoopBackOff", got.PodDiagnostic)
+	}
+
+	// Preserve explicit display override, but update discovered original display name.
+	if got.DisplayName != "Friendly Name" {
+		t.Fatalf("DisplayName = %q, want override to be preserved", got.DisplayName)
+	}
+	if got.OriginalDisplayName != "new" {
+		t.Fatalf("OriginalDisplayName = %q, want %q", got.OriginalDisplayName, "new")
+	}
+	if got.Group != "custom-group" {
+		t.Fatalf("Group = %q, want preserved custom-group", got.Group)
+	}
+	if got.URL != "https://new.example.com" {
+		t.Fatalf("URL = %q, want %q", got.URL, "https://new.example.com")
+	}
+}
+
+func TestWatcherOnUpdateUnwatchesWhenBackendRemoved(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	updater := &fakeStateUpdater{
+		current: make(map[string]state.Service),
+	}
+	logger := slog.Default()
+	w := NewWatcherWithClient(clientset, updater, logger)
+
+	updater.AddOrUpdate(state.Service{
+		Name:            "my-app",
+		Namespace:       "my-ns",
+		URL:             "https://my-app.example.com",
+		Status:          state.StatusUnknown,
+		CompositeStatus: state.StatusUnknown,
+	})
+
+	w.endpointSliceWatcher.Watch("my-app", "my-ns", "backend-svc")
+	defer w.endpointSliceWatcher.StopAll()
+
+	w.endpointSliceWatcher.mu.Lock()
+	_, existsBefore := w.endpointSliceWatcher.watches["my-ns/my-app"]
+	w.endpointSliceWatcher.mu.Unlock()
+	if !existsBefore {
+		t.Fatal("expected initial EndpointSlice watch to exist")
+	}
+
+	// Update to an ingress without backend service should clear watch mapping.
+	w.onUpdate(nil, newTestIngress("my-app", "my-ns", "my-app.example.com", true))
+
+	w.endpointSliceWatcher.mu.Lock()
+	_, existsAfter := w.endpointSliceWatcher.watches["my-ns/my-app"]
+	w.endpointSliceWatcher.mu.Unlock()
+	if existsAfter {
+		t.Fatal("expected EndpointSlice watch to be removed when backend is missing")
+	}
+}
+
 func TestExtractBackendServiceName(t *testing.T) {
 	tests := []struct {
 		name          string

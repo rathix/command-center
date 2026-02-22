@@ -80,7 +80,7 @@ func NewWatcherWithClient(clientset kubernetes.Interface, updater StateUpdater, 
 	}
 
 	if err := ingressInformer.Informer().SetWatchErrorHandler(func(r *cache.Reflector, err error) {
-		w.logger.Warn("k8s API watch error", "error", err)
+		w.logger.Warn("k8s API watch error")
 		if w.k8sConnected.CompareAndSwap(true, false) {
 			w.updater.SetK8sConnected(false)
 		}
@@ -158,72 +158,89 @@ func (w *Watcher) onAdd(obj interface{}) {
 		return
 	}
 
-	        svc := state.Service{
-	                Name:                ingress.Name,
-	                DisplayName:         displayName(host),
-	                OriginalDisplayName: displayName(host),
-	                Namespace:           ingress.Namespace,
-	                Group:               ingress.Namespace,
-	                URL:                 url,
-	                Source:              state.SourceKubernetes,
-	                Status:              state.StatusUnknown,
-	                CompositeStatus:     state.StatusUnknown,
-	        }
-	        w.updater.AddOrUpdate(svc)
-	        w.logger.Info("service discovered",
-	                "namespace", ingress.Namespace,
-	                "name", ingress.Name,
-	                "url", url)
-	        if svcName, _, ok := extractBackendServiceName(ingress); ok {
-	                w.endpointSliceWatcher.Watch(ingress.Name, ingress.Namespace, svcName)
-	        }
+	svc := state.Service{
+		Name:                ingress.Name,
+		DisplayName:         displayName(host),
+		OriginalDisplayName: displayName(host),
+		Namespace:           ingress.Namespace,
+		Group:               ingress.Namespace,
+		URL:                 url,
+		Source:              state.SourceKubernetes,
+		Status:              state.StatusUnknown,
+		CompositeStatus:     state.StatusUnknown,
+	}
+	w.updater.AddOrUpdate(svc)
+	w.logger.Info("service discovered",
+		"namespace", ingress.Namespace,
+		"name", ingress.Name,
+		"url", url)
+	if svcName, _, ok := extractBackendServiceName(ingress); ok {
+		w.endpointSliceWatcher.Watch(ingress.Name, ingress.Namespace, svcName)
+	}
+}
+
+func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
+	w.markK8sConnected()
+
+	ingress, ok := newObj.(*networkingv1.Ingress)
+	if !ok {
+		return
 	}
 
-	func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
-	        w.markK8sConnected()
-	
-	        ingress, ok := newObj.(*networkingv1.Ingress)
-	        if !ok {
-	                return
-	        }
-	
-	        url, host, ok := extractServiceURL(ingress)
-	        if !ok {
-	                w.logger.Warn("skipping Ingress with no valid host after update",
-	                        "namespace", ingress.Namespace,
-	                        "name", ingress.Name)
-	                return
-	        }
-	
-	        // Preserve health status if service already exists
-	        status := state.StatusUnknown
-	        if existing, ok := w.updater.Get(ingress.Namespace, ingress.Name); ok {
-	                status = existing.Status
-	        }
-	
-	        svc := state.Service{
-	                Name:                ingress.Name,
-	                DisplayName:         displayName(host),
-	                OriginalDisplayName: displayName(host),
-	                Namespace:           ingress.Namespace,
-	                Group:               ingress.Namespace,
-	                URL:                 url,
-	                Source:              state.SourceKubernetes,
-	                Status:              status,
-	                CompositeStatus:     status,
-	        }
-	        w.updater.AddOrUpdate(svc)
-	        w.logger.Info("service updated",
-	                "namespace", ingress.Namespace,
-	                "name", ingress.Name,
-	                "url", url)
-	        if svcName, _, ok := extractBackendServiceName(ingress); ok {
-	                w.endpointSliceWatcher.Unwatch(ingress.Name, ingress.Namespace)
-	                w.endpointSliceWatcher.Watch(ingress.Name, ingress.Namespace, svcName)
-	        }
+	url, host, ok := extractServiceURL(ingress)
+	if !ok {
+		// Ingress is no longer valid for discovery; stop any EndpointSlice watch.
+		w.endpointSliceWatcher.Unwatch(ingress.Name, ingress.Namespace)
+		w.logger.Warn("skipping Ingress with no valid host after update",
+			"namespace", ingress.Namespace,
+			"name", ingress.Name)
+		return
 	}
 
-	func (w *Watcher) onDelete(obj interface{}) {
+	hostDisplayName := displayName(host)
+	svc := state.Service{
+		Name:                ingress.Name,
+		DisplayName:         hostDisplayName,
+		OriginalDisplayName: hostDisplayName,
+		Namespace:           ingress.Namespace,
+		Group:               ingress.Namespace,
+		URL:                 url,
+		Source:              state.SourceKubernetes,
+		Status:              state.StatusUnknown,
+		CompositeStatus:     state.StatusUnknown,
+	}
+
+	if existing, ok := w.updater.Get(ingress.Namespace, ingress.Name); ok {
+		svc = existing
+		svc.Name = ingress.Name
+		svc.Namespace = ingress.Namespace
+		svc.URL = url
+		svc.Source = state.SourceKubernetes
+
+		// Preserve user override names unless they are still following discovery defaults.
+		if svc.DisplayName == svc.OriginalDisplayName {
+			svc.DisplayName = hostDisplayName
+		}
+		svc.OriginalDisplayName = hostDisplayName
+		if svc.Group == "" {
+			svc.Group = ingress.Namespace
+		}
+	}
+
+	w.updater.AddOrUpdate(svc)
+	w.logger.Info("service updated",
+		"namespace", ingress.Namespace,
+		"name", ingress.Name,
+		"url", url)
+
+	// Always clear prior watch mapping first to avoid stale backend watches.
+	w.endpointSliceWatcher.Unwatch(ingress.Name, ingress.Namespace)
+	if svcName, _, ok := extractBackendServiceName(ingress); ok {
+		w.endpointSliceWatcher.Watch(ingress.Name, ingress.Namespace, svcName)
+	}
+}
+
+func (w *Watcher) onDelete(obj interface{}) {
 	w.markK8sConnected()
 
 	ingress, ok := obj.(*networkingv1.Ingress)

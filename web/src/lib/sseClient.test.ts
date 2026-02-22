@@ -324,7 +324,7 @@ describe('sseClient', () => {
 			expect(addOrUpdate).toHaveBeenCalledWith(service);
 		});
 
-		it('ignores malformed service payloads', async () => {
+			it('ignores malformed service payloads', async () => {
 			const { connect } = await import('./sseClient');
 			connect();
 			const es = MockEventSource.instances[0];
@@ -341,12 +341,34 @@ describe('sseClient', () => {
 			es.emit('discovered', JSON.stringify(makeService({ name: 'bad-time', responseTimeMs: {} as unknown as number })));
 			expect(addOrUpdate).not.toHaveBeenCalled();
 
-			es.emit(
-				'discovered',
-				JSON.stringify(makeService({ name: 'bad-source', source: 'other' as Service['source'] }))
-			);
-			expect(addOrUpdate).not.toHaveBeenCalled();
-		});
+				es.emit(
+					'discovered',
+					JSON.stringify(makeService({ name: 'bad-source', source: 'other' as Service['source'] }))
+				);
+				expect(addOrUpdate).not.toHaveBeenCalled();
+
+				es.emit(
+					'discovered',
+					JSON.stringify(
+						makeService({
+							name: 'bad-poddiag-reason',
+							podDiagnostic: { reason: 7 as unknown as string, restartCount: 2 }
+						})
+					)
+				);
+				expect(addOrUpdate).not.toHaveBeenCalled();
+
+				es.emit(
+					'discovered',
+					JSON.stringify(
+						makeService({
+							name: 'bad-poddiag-restarts',
+							podDiagnostic: { reason: 'CrashLoopBackOff', restartCount: -1 }
+						})
+					)
+				);
+				expect(addOrUpdate).not.toHaveBeenCalled();
+			});
 
 		it('rejects service payloads missing group field', async () => {
 			const { connect } = await import('./sseClient');

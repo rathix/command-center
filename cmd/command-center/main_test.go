@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rathix/command-center/internal/state"
 )
 
 // === Task 1: Configuration Loading Tests (AC #1, #2, #3, #4) ===
@@ -183,6 +185,47 @@ func TestConfigInvalidHealthInterval(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid health interval") {
 		t.Errorf("error should mention invalid health interval, got: %v", err)
+	}
+}
+
+func TestStoreEndpointReadinessReaderReturnsReadiness(t *testing.T) {
+	store := state.NewStore()
+	ready := 4
+	total := 5
+	store.AddOrUpdate(state.Service{
+		Name:            "svc-a",
+		Namespace:       "default",
+		Status:          state.StatusUnknown,
+		CompositeStatus: state.StatusUnknown,
+		ReadyEndpoints:  &ready,
+		TotalEndpoints:  &total,
+	})
+
+	reader := storeEndpointReadinessReader{store: store}
+	got := reader.GetEndpointReadiness("default", "svc-a")
+	if got == nil {
+		t.Fatal("GetEndpointReadiness() = nil, want value")
+	}
+	if got.Ready != 4 || got.Total != 5 {
+		t.Fatalf("GetEndpointReadiness() = %+v, want Ready=4 Total=5", got)
+	}
+}
+
+func TestStoreEndpointReadinessReaderReturnsNilWhenUnavailable(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name:            "svc-a",
+		Namespace:       "default",
+		Status:          state.StatusUnknown,
+		CompositeStatus: state.StatusUnknown,
+	})
+
+	reader := storeEndpointReadinessReader{store: store}
+	if got := reader.GetEndpointReadiness("default", "svc-a"); got != nil {
+		t.Fatalf("GetEndpointReadiness() = %+v, want nil", got)
+	}
+	if got := reader.GetEndpointReadiness("default", "missing"); got != nil {
+		t.Fatalf("GetEndpointReadiness() for missing service = %+v, want nil", got)
 	}
 }
 

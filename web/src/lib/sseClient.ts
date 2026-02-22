@@ -59,6 +59,20 @@ function isNullableISODateString(value: unknown): value is string | null {
 	);
 }
 
+function isPodDiagnostic(value: unknown): value is { reason: string | null; restartCount: number } {
+	if (!isRecord(value)) return false;
+	return (
+		isNullableString(value.reason) &&
+		typeof value.restartCount === 'number' &&
+		Number.isInteger(value.restartCount) &&
+		value.restartCount >= 0
+	);
+}
+
+function isNullablePodDiagnostic(value: unknown): boolean {
+	return value === null || isPodDiagnostic(value);
+}
+
 function isService(value: unknown): value is Service {
 	if (!isRecord(value)) return false;
 
@@ -77,9 +91,10 @@ function isService(value: unknown): value is Service {
 		typeof value.authGuarded === 'boolean' &&
 		isNullableNumber(value.httpCode) &&
 		isNullableNumber(value.responseTimeMs) &&
-		isNullableString(value.lastChecked) &&
-		isNullableString(value.lastStateChange) &&
-		isNullableString(value.errorSnippet)
+			isNullableString(value.lastChecked) &&
+			isNullableString(value.lastStateChange) &&
+			isNullableString(value.errorSnippet) &&
+			isNullablePodDiagnostic(value.podDiagnostic)
 	);
 }
 

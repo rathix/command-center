@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/rathix/command-center/internal/state"
 
@@ -32,20 +33,22 @@ type serviceWatch struct {
 
 // EndpointSliceWatcher manages per-service EndpointSlice informers.
 type EndpointSliceWatcher struct {
-	clientset kubernetes.Interface
-	updater   EndpointStateUpdater
-	logger    *slog.Logger
-	mu        sync.Mutex
-	watches   map[string]*serviceWatch // key: "namespace/ingressName"
+	clientset      kubernetes.Interface
+	updater        EndpointStateUpdater
+	logger         *slog.Logger
+	podDiagQuerier *PodDiagnosticQuerier
+	mu             sync.Mutex
+	watches        map[string]*serviceWatch // key: "namespace/ingressName"
 }
 
 // NewEndpointSliceWatcher creates a new EndpointSliceWatcher.
 func NewEndpointSliceWatcher(clientset kubernetes.Interface, updater EndpointStateUpdater, logger *slog.Logger) *EndpointSliceWatcher {
 	return &EndpointSliceWatcher{
-		clientset: clientset,
-		updater:   updater,
-		logger:    logger,
-		watches:   make(map[string]*serviceWatch),
+		clientset:      clientset,
+		updater:        updater,
+		logger:         logger,
+		podDiagQuerier: NewPodDiagnosticQuerier(clientset, logger),
+		watches:        make(map[string]*serviceWatch),
 	}
 }
 
@@ -147,11 +150,23 @@ func (e *EndpointSliceWatcher) onEndpointSliceEvent(sw *serviceWatch) {
 	}
 
 	ready, total := aggregateEndpointReadiness(slices)
+	notReadyPods := extractNotReadyPodNames(slices)
 
 	e.updater.Update(sw.namespace, sw.ingressName, func(svc *state.Service) {
 		svc.ReadyEndpoints = &ready
 		svc.TotalEndpoints = &total
+		if len(notReadyPods) == 0 {
+			// Clear stale diagnostics once all endpoints are healthy (or no data remains).
+			svc.PodDiagnostic = nil
+		}
 	})
+
+	if len(notReadyPods) == 0 || e.podDiagQuerier == nil {
+		return
+	}
+
+	// Pod diagnostic queries should not block EndpointSlice event handling.
+	go e.queryAndStorePodDiagnostics(sw.namespace, sw.ingressName, notReadyPods)
 }
 
 // aggregateEndpointReadiness counts ready and total endpoints across all slices.
@@ -166,4 +181,38 @@ func aggregateEndpointReadiness(slices []*discoveryv1.EndpointSlice) (ready, tot
 		}
 	}
 	return ready, total
+}
+
+func extractNotReadyPodNames(slices []*discoveryv1.EndpointSlice) []string {
+	seen := make(map[string]struct{})
+	var names []string
+
+	for _, slice := range slices {
+		for _, ep := range slice.Endpoints {
+			isReady := ep.Conditions.Ready != nil && *ep.Conditions.Ready
+			if isReady || ep.TargetRef == nil {
+				continue
+			}
+			if ep.TargetRef.Kind != "Pod" || ep.TargetRef.Name == "" {
+				continue
+			}
+			if _, exists := seen[ep.TargetRef.Name]; exists {
+				continue
+			}
+			seen[ep.TargetRef.Name] = struct{}{}
+			names = append(names, ep.TargetRef.Name)
+		}
+	}
+
+	return names
+}
+
+func (e *EndpointSliceWatcher) queryAndStorePodDiagnostics(namespace, ingressName string, podNames []string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	diag := e.podDiagQuerier.QueryForService(ctx, namespace, podNames)
+	e.updater.Update(namespace, ingressName, func(svc *state.Service) {
+		svc.PodDiagnostic = diag
+	})
 }

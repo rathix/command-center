@@ -65,6 +65,8 @@ spec:
           env:
             - name: KUBECONFIG
               value: /data/kubeconfig
+            - name: HISTORY_FILE
+              value: /data/history.jsonl
             # Uncomment if using config file:
             # - name: CONFIG_FILE
             #   value: /data/config.yaml
@@ -76,9 +78,15 @@ spec:
               subPath: config
               readOnly: true                      # AC5
 
-            # Writable: data volume for certs and history
+            # Writable path: cert directory only
             - name: data
-              mountPath: /data                    # AC4
+              mountPath: /data/certs
+              subPath: certs                      # AC4
+
+            # Writable path: health history file only
+            - name: data
+              mountPath: /data/history.jsonl
+              subPath: history.jsonl              # AC4
 
             # Optional: config file (read-only)
             # - name: config

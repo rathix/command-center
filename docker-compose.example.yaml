@@ -29,14 +29,20 @@ services:
       # Optional: YAML config for custom services, groups, overrides (read-only)
       # - /path/to/config.yaml:/data/config.yaml:ro
 
-      # Required: Writable data volume for auto-generated certs and health history
-      - command-center-data:/data
+      # Required writable path: cert directory only
+      - command-center-certs:/data/certs
+
+      # Required writable path: health history file only
+      # Create this file first (touch /path/to/history.jsonl).
+      - /path/to/history.jsonl:/data/history.jsonl
 
     environment:
       # Override kubeconfig path to match the mount point
       - KUBECONFIG=/data/kubeconfig
+      # Keep writable history scoped to one file mount.
+      - HISTORY_FILE=/data/history.jsonl
       # Uncomment if using config file:
       # - CONFIG_FILE=/data/config.yaml
 
 volumes:
-  command-center-data:
+  command-center-certs:
