@@ -27,6 +27,7 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 		group: 'default',
 		url: 'https://test.example.com',
 		status: overrides.status ?? 'unknown',
+		compositeStatus: overrides.compositeStatus ?? overrides.status ?? 'unknown',
 		readyEndpoints: null,
 		totalEndpoints: null,
 		authGuarded: false,

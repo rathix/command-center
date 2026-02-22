@@ -124,7 +124,10 @@ func (c *Checker) checkAll(ctx context.Context) {
 				er := c.endpointReader.GetEndpointReadiness(s.Namespace, s.Name)
 				composite := CompositeHealth(result.status, result.httpCode, er)
 				result.status = composite.Status
+				result.compositeStatus = composite.Status
 				result.authGuarded = composite.AuthGuarded
+			} else {
+				result.compositeStatus = result.status
 			}
 
 			var transition *history.TransitionRecord
@@ -148,11 +151,12 @@ func (c *Checker) checkAll(ctx context.Context) {
 const maxSnippetLen = 256
 
 type probeResult struct {
-	status         state.HealthStatus
-	httpCode       *int
-	responseTimeMs int64
-	errorSnippet   *string
-	authGuarded    bool
+	status          state.HealthStatus
+	compositeStatus state.HealthStatus
+	httpCode        *int
+	responseTimeMs  int64
+	errorSnippet    *string
+	authGuarded     bool
 }
 
 // probeService performs a single HTTP GET health check against a service URL.
@@ -160,8 +164,9 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return probeResult{
-			status:       state.StatusUnhealthy,
-			errorSnippet: ptrString(err.Error()),
+			status:          state.StatusUnhealthy,
+			compositeStatus: state.StatusUnhealthy,
+			errorSnippet:    ptrString(err.Error()),
 		}
 	}
 
@@ -172,9 +177,10 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 	if err != nil {
 		errMsg := err.Error()
 		return probeResult{
-			status:         state.StatusUnhealthy,
-			responseTimeMs: responseTimeMs,
-			errorSnippet:   &errMsg,
+			status:          state.StatusUnhealthy,
+			compositeStatus: state.StatusUnhealthy,
+			responseTimeMs:  responseTimeMs,
+			errorSnippet:    &errMsg,
 		}
 	}
 	defer resp.Body.Close()
@@ -188,10 +194,11 @@ func (c *Checker) probeService(ctx context.Context, url string) probeResult {
 	}
 
 	return probeResult{
-		status:         newStatus,
-		httpCode:       &code,
-		responseTimeMs: responseTimeMs,
-		errorSnippet:   snippet,
+		status:          newStatus,
+		compositeStatus: newStatus,
+		httpCode:        &code,
+		responseTimeMs:  responseTimeMs,
+		errorSnippet:    snippet,
 	}
 }
 
@@ -207,6 +214,7 @@ func (c *Checker) applyResult(svc *state.Service, res probeResult) *history.Tran
 	previousStatus := svc.Status
 
 	svc.Status = res.status
+	svc.CompositeStatus = res.compositeStatus
 	svc.HTTPCode = res.httpCode
 	svc.ResponseTimeMs = &res.responseTimeMs
 	svc.ErrorSnippet = res.errorSnippet

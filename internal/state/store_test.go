@@ -22,6 +22,7 @@ func TestServiceStructJSONTags(t *testing.T) {
 		Group:           "default",
 		URL:             "https://my-app.example.com",
 		Status:          StatusUnknown,
+		CompositeStatus: StatusUnknown,
 		HTTPCode:        &code,
 		ResponseTimeMs:  &responseTime,
 		LastChecked:     &now,
@@ -789,6 +790,7 @@ func TestServiceNewFieldsJSONSerialization(t *testing.T) {
 		Namespace:       "production",
 		URL:             "https://web.example.com",
 		Status:          StatusHealthy,
+		CompositeStatus: StatusHealthy,
 		ReadyEndpoints:  &ready,
 		TotalEndpoints:  &total,
 		AuthGuarded:     true,
@@ -800,6 +802,9 @@ func TestServiceNewFieldsJSONSerialization(t *testing.T) {
 	}
 	jsonStr := string(data)
 
+	if !strings.Contains(jsonStr, `"compositeStatus":"healthy"`) {
+		t.Errorf("expected compositeStatus in JSON, got: %s", jsonStr)
+	}
 	if !strings.Contains(jsonStr, `"readyEndpoints":3`) {
 		t.Errorf("expected readyEndpoints in JSON, got: %s", jsonStr)
 	}

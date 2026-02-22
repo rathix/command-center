@@ -39,6 +39,7 @@ type Service struct {
         Icon                string       `json:"icon,omitempty"`
         Source              string       `json:"source"`
         Status              HealthStatus    `json:"status"`
+        CompositeStatus     HealthStatus    `json:"compositeStatus"`
         HTTPCode            *int            `json:"httpCode"`
         ResponseTimeMs      *int64       `json:"responseTimeMs"`
         LastChecked         *time.Time   `json:"lastChecked"`
