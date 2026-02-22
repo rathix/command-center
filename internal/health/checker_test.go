@@ -925,12 +925,6 @@ func TestCheckAll_403NilTokenProviderStaysAuthBlocked(t *testing.T) {
 
 // --- Task 8: OIDC retry happy path tests ---
 
-func runCheckCycles(checker *Checker, cycles int) {
-	for i := 0; i < cycles; i++ {
-		checker.checkAll(context.Background())
-	}
-}
-
 func TestCheckAll_OIDCRetry401BecomesHealthy(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
@@ -957,7 +951,7 @@ func TestCheckAll_OIDCRetry401BecomesHealthy(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -994,7 +988,7 @@ func TestCheckAll_OIDCRetry403BecomesHealthy(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1028,7 +1022,7 @@ func TestCheckAll_OIDCRetryBearerHeaderSent(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	reqs := authClient.getCapturedRequests()
 	foundAuth := false
@@ -1097,7 +1091,7 @@ func TestCheckAll_DiscoveryFindsHealthEndpointNoTokenNeeded(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1131,7 +1125,7 @@ func TestCheckAll_CachedHealthEndpointWorks(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1168,7 +1162,7 @@ func TestCheckAll_CachedEndpointFailsFallsToOIDC(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1209,7 +1203,7 @@ func TestCheckAll_DiscoveryFindsNoEndpointsFallsToOIDC(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1239,7 +1233,7 @@ func TestCheckAll_OIDCProviderDownStaysAuthBlocked(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusAuthBlocked {
@@ -1272,7 +1266,7 @@ func TestCheckAll_OIDCProviderDownHealthyServicesUnaffected(t *testing.T) {
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	healthy, _ := store.Get("ns1", "healthy-svc")
 	if healthy.Status != state.StatusHealthy {
@@ -1312,7 +1306,7 @@ func TestCheckAll_DiscoveryErrorFallsToOIDC(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp).WithDiscoverer(disc)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	svc, _ := store.Get("ns1", "svc1")
 	if svc.Status != state.StatusHealthy {
@@ -1338,6 +1332,29 @@ func TestProbeServiceWithAuth_ConnectionError(t *testing.T) {
 	}
 	if result.errorSnippet == nil || !strings.Contains(*result.errorSnippet, "connection refused") {
 		t.Errorf("expected error snippet containing 'connection refused'")
+	}
+}
+
+func TestCheckAll_AuthMethodClearedWhenNotUsed(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "svc1", Namespace: "ns1", URL: "https://svc1.example.com",
+		Status:     state.StatusHealthy,
+		AuthMethod: "oidc",
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://svc1.example.com": {statusCode: 200, body: "OK"},
+		},
+	}
+
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
+	checker.checkAll(context.Background())
+
+	svc, _ := store.Get("ns1", "svc1")
+	if svc.AuthMethod != "" {
+		t.Errorf("expected AuthMethod to be cleared, got %q", svc.AuthMethod)
 	}
 }
 
@@ -1373,7 +1390,7 @@ func TestCheckAll_MultipleAuthBlockedServicesConcurrent(t *testing.T) {
 
 	checker := NewChecker(store, store, authClient, time.Hour, history.NoopWriter{}, nil)
 	checker.WithTokenProvider(tp)
-	runCheckCycles(checker, 2)
+	checker.checkAll(context.Background())
 
 	for i := 0; i < numServices; i++ {
 		name := "svc" + strings.Repeat("x", i)

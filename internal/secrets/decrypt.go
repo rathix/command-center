@@ -128,18 +128,20 @@ func LoadSecrets(secretsFile string, logger *slog.Logger) (*OIDCCredentials, err
 		return nil, fmt.Errorf("load secrets: decryption failed")
 	}
 
-	// Apply env var substitution before YAML parsing
-	substituted := envVarPattern.ReplaceAllStringFunc(string(plaintext), func(match string) string {
-		varName := envVarPattern.FindStringSubmatch(match)[1]
-		return os.Getenv(varName)
+	// Apply env var substitution using []byte to minimize string allocations
+	substituted := envVarPattern.ReplaceAllFunc(plaintext, func(match []byte) []byte {
+		// match is "${VAR_NAME}", extract "VAR_NAME"
+		varName := string(match[2 : len(match)-1])
+		return []byte(os.Getenv(varName))
 	})
 	clear(plaintext)
 
 	// Parse YAML
 	var sf secretsYAML
-	if err := yaml.Unmarshal([]byte(substituted), &sf); err != nil {
+	if err := yaml.Unmarshal(substituted, &sf); err != nil {
 		return nil, fmt.Errorf("load secrets: invalid format")
 	}
+	clear(substituted)
 
 	// Validate required fields
 	if sf.OIDC.ClientID == "" || sf.OIDC.ClientSecret == "" {
