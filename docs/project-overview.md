@@ -13,7 +13,7 @@ Command Center is a Kubernetes service dashboard for homelab operators. It provi
 | Repository Type | Multi-part |
 | Architecture | Go backend + SvelteKit frontend (embedded SPA) |
 | Deployment | Single binary, Docker (distroless), mTLS-secured |
-| Status | v1.0.0 — Epic 8 complete (MVP) |
+| Status | v2.0.0 — Epic 10 complete (multi-signal health fusion) |
 
 ## Technology Stack Summary
 

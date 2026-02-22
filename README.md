@@ -2,7 +2,7 @@
 
 A Kubernetes service dashboard for homelab operators. Single Go binary serving a SvelteKit SPA with mTLS security and a Catppuccin Mocha terminal aesthetic.
 
-> **Status:** v1.0.0 — MVP (service discovery, health monitoring, real-time updates, connection resilience).
+> **Status:** v2.0.0 — Multi-signal health fusion (composite health, pod diagnostics, container hardening).
 
 ## Quick Start
 

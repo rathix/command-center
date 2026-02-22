@@ -9,7 +9,7 @@
 - **Primary Languages:** Go 1.26, TypeScript (Svelte 5)
 - **Architecture:** Service/handler pattern (backend) + component-based SPA (frontend)
 - **Deployment:** Single binary, Docker (distroless), mTLS-secured
-- **Version:** v1.0.0 (MVP — Epic 8 complete)
+- **Version:** v2.0.0 (multi-signal health fusion — Epic 10 complete)
 
 ## Quick Reference
 
