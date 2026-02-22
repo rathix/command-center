@@ -40,12 +40,15 @@ docker run -d \
   -p 8443:8443 \
   -v /path/to/kubeconfig:/home/nonroot/.kube/config:ro \
   -v command-center-data:/data \
+  -v /path/to/secrets.enc:/etc/command-center/secrets.enc:ro \
+  -e SECRETS_KEY=your-encryption-key \
   ghcr.io/rathix/command-center:latest
 ```
 
 **Volume mounts:**
 - Kubeconfig: Read-only mount for K8s API access
-- Data volume: Persists auto-generated certificates across restarts
+- Data volume: Persists auto-generated certificates and health history across restarts
+- Secrets file: Optional encrypted secrets for OIDC authentication
 
 ### Docker with Custom Certificates
 
@@ -71,8 +74,12 @@ make build
 ./bin/command-center \
   --listen-addr :8443 \
   --kubeconfig ~/.kube/config \
-  --data-dir /var/lib/command-center
+  --data-dir /var/lib/command-center \
+  --config /etc/command-center/config.yaml \
+  --secrets /etc/command-center/secrets.enc
 ```
+
+Note: `SECRETS_KEY` must be provided as an environment variable (no CLI flag — CLI args are visible in `/proc/*/cmdline`).
 
 ## Certificate Setup
 

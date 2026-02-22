@@ -17,6 +17,8 @@ The server is a Go 1.26 backend that serves as the core of Command Center. It wa
 | HTTP | Standard library `net/http` | - |
 | K8s Client | k8s.io/client-go | v0.35.1 |
 | TLS | crypto/tls, crypto/x509 | stdlib |
+| Crypto | golang.org/x/crypto (Argon2id) | - |
+| Config | gopkg.in/yaml.v3 | v3 |
 | Build | Make + go build | - |
 | Container | Docker (distroless) | - |
 
@@ -24,7 +26,8 @@ The server is a Go 1.26 backend that serves as the core of Command Center. It wa
 
 **Service/Handler pattern** using Go standard library conventions:
 
-- `cmd/` — Application bootstrap and configuration
+- `cmd/command-center/` — Application bootstrap and configuration
+- `cmd/encrypt-secrets/` — CLI tool for encrypting secrets files
 - `internal/` — Domain packages (no external consumers)
 - Each package has a single responsibility with clean interfaces
 - No dependency injection framework — constructor functions with explicit dependencies
@@ -35,6 +38,10 @@ The server is a Go 1.26 backend that serves as the core of Command Center. It wa
 ### cmd/command-center/
 
 Entry point and orchestration. Parses CLI flags and environment variables, initializes all internal components, wires dependencies, and manages graceful shutdown via `context.Context` and OS signal handling.
+
+### cmd/encrypt-secrets/
+
+CLI tool for encrypting secrets files. Takes a plaintext YAML secrets file and a passphrase, produces an encrypted secrets file using Argon2id key derivation and AES-256-GCM encryption.
 
 ### internal/certs/
 
@@ -64,6 +71,26 @@ Server-Sent Events implementation:
 
 Thread-safe service state store using `sync.Mutex`. Stores discovered services with health status. Emits typed events on state changes that the SSE broker subscribes to.
 
+### internal/auth/
+
+OIDC client credentials flow for authenticated health checks. Includes endpoint discovery (`.well-known/openid-configuration`) and token management with caching and refresh.
+
+### internal/config/
+
+YAML configuration loading with file watcher for hot-reload. Supports custom service definitions, service grouping, and icon assignments. File changes trigger live reconfiguration without restart.
+
+### internal/history/
+
+JSONL-based health history persistence. Writer appends health check results, reader restores state on startup, pruner removes stale entries to bound file size. Designed for crash-safe operation.
+
+### internal/secrets/
+
+Encrypted secrets file decryption using Argon2id key derivation and AES-256-GCM authenticated encryption. Decrypts OIDC credentials and other sensitive configuration at startup.
+
+### internal/session/
+
+SSE session tracking. Manages client connection lifecycle, tracks active sessions, and provides middleware for session-aware request handling.
+
 ## API Design
 
 | Endpoint | Method | Handler | Purpose |
@@ -82,13 +109,24 @@ Thread-safe service state store using `sync.Mutex`. Stores discovered services w
 | Event | internal/state | Typed state change event |
 | Broker | internal/sse | SSE client management and broadcasting |
 | Watcher | internal/k8s | K8s Ingress informer wrapper |
+| OIDCClient | internal/auth | Token acquisition via client credentials flow |
+| EndpointDiscoverer | internal/auth | OIDC `.well-known` endpoint resolution |
+| OIDCCredentials | internal/secrets | Decrypted OIDC client ID/secret pair |
+| AppConfig | internal/config | Parsed YAML configuration (services, groups, icons) |
+| HistoryWriter | internal/history | Append-only JSONL health result writer |
+| HistoryReader | internal/history | JSONL health history reader for startup restoration |
 
 ### Data Flow
 
 ```
 Kubernetes API → Watcher → State Store → SSE Broker → Browser (EventSource)
                               ↑
-                    Health Checker ─┘
+Config ──→ Health Checker ────┘
+              ↑
+Secrets ──→ Auth (OIDC)
+
+History Writer ←── Health Checker
+History Reader ──→ State Store (startup)
 ```
 
 ## Security Architecture
@@ -116,6 +154,18 @@ Kubernetes API → Watcher → State Store → SSE Broker → Browser (EventSour
 | events_test.go | sse | Event serialization |
 | store_test.go | state | State mutations, event emission |
 | embed_test.go | root | Embed directive validation |
+| oidc_test.go | auth | OIDC client credentials flow |
+| endpoint_discovery_test.go | auth | OIDC endpoint resolution |
+| loader_test.go | config | YAML config loading |
+| watcher_test.go | config | File watcher hot-reload |
+| registration_test.go | config | Service registration |
+| writer_test.go | history | JSONL append writer |
+| reader_test.go | history | History reader/restore |
+| pruner_test.go | history | Stale entry pruning |
+| decrypt_test.go | secrets | Secrets decryption |
+| session_test.go | session | Session tracking |
+| middleware_test.go | session | Session middleware |
+| main_test.go | encrypt-secrets | Encrypt CLI tool |
 
 ## Configuration
 
@@ -131,6 +181,9 @@ All flags have environment variable equivalents. Precedence: CLI flag > env var 
 | `--tls-ca-cert` | `TLS_CA_CERT` | *(auto)* | Custom CA cert |
 | `--tls-cert` | `TLS_CERT` | *(auto)* | Custom server cert |
 | `--tls-key` | `TLS_KEY` | *(auto)* | Custom server key |
+| `--config` | `CONFIG_FILE` | *(none)* | YAML configuration file path |
+| `--secrets` | `SECRETS_FILE` | *(none)* | Encrypted secrets file path |
+| - | `SECRETS_KEY` | *(none)* | Passphrase for secrets decryption |
 | `--dev` | `DEV` | `false` | Enable dev mode (Vite proxy, no TLS) |
 
 ## Deployment Architecture
