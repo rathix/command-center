@@ -23,8 +23,8 @@ Published to GitHub Container Registry: `ghcr.io/rathix/command-center`
 
 | Property | Value |
 |-|-|
-| Base image | `gcr.io/distroless/static-debian12` |
-| User | `65532:65532` (non-root) |
+| Base image | `gcr.io/distroless/static-debian12:nonroot` |
+| User | `nonroot:nonroot` (UID 65532) |
 | Exposed port | `8443` |
 | Entrypoint | `/command-center` |
 | Architecture | linux/amd64 |
@@ -37,15 +37,24 @@ Published to GitHub Container Registry: `ghcr.io/rathix/command-center`
 docker run -d \
   --name command-center \
   --restart unless-stopped \
+  --read-only \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
   -p 8443:8443 \
-  -v /path/to/kubeconfig:/home/nonroot/.kube/config:ro \
+  -v /path/to/kubeconfig:/data/kubeconfig:ro \
   -v command-center-data:/data \
+  -e KUBECONFIG=/data/kubeconfig \
   ghcr.io/rathix/command-center:latest
 ```
 
 **Volume mounts:**
-- Kubeconfig: Read-only mount for K8s API access
-- Data volume: Persists auto-generated certificates and health history across restarts
+- Kubeconfig (`/data/kubeconfig:ro`): Read-only mount for K8s API access
+- Data volume (`command-center-data:/data`): Writable — persists auto-generated certificates and health history
+
+**Security flags:**
+- `--read-only`: Read-only root filesystem — the container cannot write except to volume mounts
+- `--security-opt no-new-privileges:true`: Prevents privilege escalation via setuid/setgid binaries
+- `--cap-drop ALL`: Drops all Linux capabilities (none are needed — port 8443 > 1024)
 
 ### Docker with Custom Certificates
 
@@ -53,8 +62,12 @@ docker run -d \
 docker run -d \
   --name command-center \
   --restart unless-stopped \
+  --read-only \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
   -p 8443:8443 \
-  -v /path/to/kubeconfig:/home/nonroot/.kube/config:ro \
+  -v /path/to/kubeconfig:/data/kubeconfig:ro \
+  -e KUBECONFIG=/data/kubeconfig \
   -e TLS_CA_CERT=/certs/ca.crt \
   -e TLS_CERT=/certs/server.crt \
   -e TLS_KEY=/certs/server.key \
@@ -63,6 +76,32 @@ docker run -d \
 ```
 
 All three certificate paths must be provided together.
+
+### Container Security
+
+The container is hardened with defense-in-depth:
+
+| Layer | Enforcement | Purpose |
+|-|-|-|
+| Base image | `distroless/static-debian12:nonroot` | No shell, no package manager, minimal attack surface |
+| User | `nonroot:nonroot` (UID 65532) | Non-root process — cannot modify system files |
+| Root filesystem | `--read-only` / `readOnlyRootFilesystem: true` | Prevents runtime file modification |
+| Capabilities | `--cap-drop ALL` / `drop: [ALL]` | No Linux capabilities granted |
+| Privilege escalation | `--security-opt no-new-privileges` / `allowPrivilegeEscalation: false` | No setuid/setgid execution |
+
+**Writable paths** (via volume mounts only):
+
+| Path | Purpose | Mount type |
+|-|-|-|
+| `/data/certs/` | Auto-generated TLS certificates (CA, server, client) | Named volume (read-write) |
+| `/data/history.jsonl` | Health check history persistence | Named volume (read-write) |
+
+**Read-only mounts:**
+
+| Path | Purpose |
+|-|-|
+| `/data/kubeconfig` | Kubernetes API access |
+| `/data/config.yaml` | Optional YAML config file |
 
 ### Binary (Direct)
 

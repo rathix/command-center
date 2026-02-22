@@ -256,8 +256,13 @@ func TestGracefulShutdownViaContext(t *testing.T) {
 	// We test via context cancellation since signal.NotifyContext wires signals to context
 	ctx, cancel := context.WithCancel(context.Background())
 
+	kubeconfigFile := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("not-valid"), 0o400); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
 	addr := getFreeAddr(t)
-	cfg, err := loadConfig([]string{"--listen-addr", addr})
+	cfg, err := loadConfig([]string{"--listen-addr", addr, "--kubeconfig", kubeconfigFile})
 	if err != nil {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
@@ -292,8 +297,13 @@ func TestDevModeUsesPlainHTTP(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	kubeconfigFile := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("not-valid"), 0o400); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
 	addr := getFreeAddr(t)
-	cfg, err := loadConfig([]string{"--listen-addr", addr})
+	cfg, err := loadConfig([]string{"--listen-addr", addr, "--kubeconfig", kubeconfigFile})
 	if err != nil {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
@@ -408,8 +418,13 @@ func TestSSEEndpointReturnsEventStream(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	kubeconfigFile := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("not-valid"), 0o400); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
 	addr := getFreeAddr(t)
-	cfg, err := loadConfig([]string{"--listen-addr", addr})
+	cfg, err := loadConfig([]string{"--listen-addr", addr, "--kubeconfig", kubeconfigFile})
 	if err != nil {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
@@ -442,12 +457,17 @@ func TestSSEEndpointReturnsEventStream(t *testing.T) {
 // === Story 2.1: K8s Watcher Integration Tests ===
 
 func TestRunWithInvalidKubeconfigContinuesServing(t *testing.T) {
-	// When kubeconfig is invalid, run() should warn but continue serving
+	// When kubeconfig is invalid (but file exists with valid perms), run() should warn but continue serving
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	kubeconfigFile := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("not-valid-kubeconfig"), 0o400); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
 	addr := getFreeAddr(t)
-	cfg, err := loadConfig([]string{"--listen-addr", addr, "--kubeconfig", "/nonexistent/kubeconfig"})
+	cfg, err := loadConfig([]string{"--listen-addr", addr, "--kubeconfig", kubeconfigFile})
 	if err != nil {
 		t.Fatalf("loadConfig() error = %v", err)
 	}
@@ -478,6 +498,30 @@ func TestRunWithInvalidKubeconfigContinuesServing(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("run() did not shut down within 5 seconds after cancel")
+	}
+}
+
+func TestRunWithMissingKubeconfigReturnsError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	addr := getFreeAddr(t)
+	cfg, err := loadConfig([]string{"--listen-addr", addr, "--kubeconfig", filepath.Join(t.TempDir(), "nonexistent")})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	cfg.Dev = true
+	cfg.HistoryFile = filepath.Join(t.TempDir(), "history.jsonl")
+
+	err = run(ctx, cfg)
+	if err == nil {
+		t.Fatal("run() should return error for missing kubeconfig")
+	}
+	if !strings.Contains(err.Error(), "kubeconfig") {
+		t.Errorf("error should mention kubeconfig, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "nonexistent") {
+		t.Error("error message must not contain file path (NFR17)")
 	}
 }
 
@@ -551,5 +595,133 @@ func TestConfigSessionDurationZero(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "positive") {
 		t.Errorf("error should mention positive, got: %v", err)
+	}
+}
+
+// === Story 9.1: Kubeconfig Permission Validation Tests ===
+
+func TestValidateKubeconfigPermissions0400NoWarning(t *testing.T) {
+	// AC1: 0400 permissions → no warning logged
+	dir := t.TempDir()
+	kubeconfigFile := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("test"), 0o400); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := setupLoggerWithWriter("json", &buf)
+
+	err := validateKubeconfigPermissions(kubeconfigFile, logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no log output for 0400 perms, got: %s", buf.String())
+	}
+}
+
+func TestValidateKubeconfigPermissions0644Warning(t *testing.T) {
+	// AC2: 0644 permissions → warning logged
+	dir := t.TempDir()
+	kubeconfigFile := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("test"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := setupLoggerWithWriter("json", &buf)
+
+	err := validateKubeconfigPermissions(kubeconfigFile, logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "kubeconfig file permissions are more permissive than recommended (0400)") {
+		t.Errorf("expected warning about permissions, got: %s", buf.String())
+	}
+}
+
+func TestValidateKubeconfigPermissions0777Warning(t *testing.T) {
+	// AC3: 0777 permissions → same generic warning
+	dir := t.TempDir()
+	kubeconfigFile := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("test"), 0o777); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := setupLoggerWithWriter("json", &buf)
+
+	err := validateKubeconfigPermissions(kubeconfigFile, logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "kubeconfig file permissions are more permissive than recommended (0400)") {
+		t.Errorf("expected warning about permissions, got: %s", buf.String())
+	}
+}
+
+func TestValidateKubeconfigPermissions0600Warning(t *testing.T) {
+	// 0600 permissions (owner read+write) → warning logged
+	dir := t.TempDir()
+	kubeconfigFile := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("test"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := setupLoggerWithWriter("json", &buf)
+
+	err := validateKubeconfigPermissions(kubeconfigFile, logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "kubeconfig file permissions are more permissive than recommended (0400)") {
+		t.Errorf("expected warning about permissions, got: %s", buf.String())
+	}
+}
+
+func TestValidateKubeconfigPermissionsFileNotExist(t *testing.T) {
+	// AC4: nonexistent file → error "kubeconfig file not found"
+	var buf bytes.Buffer
+	logger := setupLoggerWithWriter("json", &buf)
+
+	err := validateKubeconfigPermissions(filepath.Join(t.TempDir(), "nonexistent"), logger)
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	if !strings.Contains(err.Error(), "kubeconfig file not found") {
+		t.Errorf("error should mention 'kubeconfig file not found', got: %v", err)
+	}
+}
+
+func TestValidateKubeconfigPermissionsNoPathInWarning(t *testing.T) {
+	// NFR17: log output must NOT contain the temp file path
+	dir := t.TempDir()
+	kubeconfigFile := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfigFile, []byte("test"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := setupLoggerWithWriter("json", &buf)
+
+	_ = validateKubeconfigPermissions(kubeconfigFile, logger)
+	if strings.Contains(buf.String(), kubeconfigFile) {
+		t.Errorf("log output must not contain file path, got: %s", buf.String())
+	}
+}
+
+func TestValidateKubeconfigPermissionsNoPathInError(t *testing.T) {
+	// NFR17: error must NOT contain the file path
+	nonexistent := filepath.Join(t.TempDir(), "nonexistent")
+	var buf bytes.Buffer
+	logger := setupLoggerWithWriter("json", &buf)
+
+	err := validateKubeconfigPermissions(nonexistent, logger)
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	if strings.Contains(err.Error(), "nonexistent") {
+		t.Errorf("error must not contain file path, got: %v", err)
 	}
 }

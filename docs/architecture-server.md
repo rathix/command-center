@@ -43,7 +43,7 @@ Automatic mTLS certificate management. Generates self-signed CA, server, and cli
 
 ### internal/health/
 
-HTTP health checker that periodically probes discovered service URLs. Uses InternalURL (cluster-internal DNS) to bypass auth proxies when available. Probe URL priority: HealthURL > InternalURL > URL. Configurable check interval via `HEALTH_INTERVAL`. Results feed into the state store, which triggers SSE updates.
+HTTP health checker that periodically probes discovered service URLs. Probe URL priority: HealthURL > URL. Configurable check interval via `HEALTH_INTERVAL`. Results feed into the state store, which triggers SSE updates.
 
 ### internal/k8s/
 

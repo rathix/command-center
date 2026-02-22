@@ -59,11 +59,39 @@ func TestFormatSSEEventUnmarshalablePayloadReturnsError(t *testing.T) {
 	}
 }
 
+func TestSSEPayloadNoCredentials(t *testing.T) {
+	payload := StateEventPayload{
+		AppVersion:            "1.0.0",
+		Services:              []state.Service{},
+		K8sConnected:          true,
+		HealthCheckIntervalMs: 30000,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	serialized := string(data)
+	forbidden := []string{
+		"kubeconfig", ".kube/config",
+		"BEGIN CERTIFICATE", "BEGIN EC PRIVATE KEY",
+		"BEGIN RSA PRIVATE KEY",
+	}
+	for _, f := range forbidden {
+		if strings.Contains(serialized, f) {
+			t.Errorf("SSE payload contains credential pattern %q: %s", f, serialized)
+		}
+	}
+}
+
 func TestDiscoveredEventPayloadFromServiceAllFields(t *testing.T) {
 	now := time.Now()
 	code := 200
 	respTime := int64(42)
 	errSnippet := "timeout"
+	ready := 3
+	total := 5
 
 	svc := state.Service{
 		Name:            "web",
@@ -71,6 +99,10 @@ func TestDiscoveredEventPayloadFromServiceAllFields(t *testing.T) {
 		Namespace:       "production",
 		URL:             "https://web.example.com",
 		Status:          state.StatusHealthy,
+		CompositeStatus: state.StatusHealthy,
+		ReadyEndpoints:  &ready,
+		TotalEndpoints:  &total,
+		AuthGuarded:     true,
 		HTTPCode:        &code,
 		ResponseTimeMs:  &respTime,
 		LastChecked:     &now,
@@ -94,6 +126,18 @@ func TestDiscoveredEventPayloadFromServiceAllFields(t *testing.T) {
 	}
 	if payload.Status != state.StatusHealthy {
 		t.Errorf("Status = %q, want %q", payload.Status, state.StatusHealthy)
+	}
+	if payload.CompositeStatus != state.StatusHealthy {
+		t.Errorf("CompositeStatus = %q, want %q", payload.CompositeStatus, state.StatusHealthy)
+	}
+	if payload.ReadyEndpoints == nil || *payload.ReadyEndpoints != 3 {
+		t.Errorf("ReadyEndpoints = %v, want 3", payload.ReadyEndpoints)
+	}
+	if payload.TotalEndpoints == nil || *payload.TotalEndpoints != 5 {
+		t.Errorf("TotalEndpoints = %v, want 5", payload.TotalEndpoints)
+	}
+	if !payload.AuthGuarded {
+		t.Error("AuthGuarded = false, want true")
 	}
 	if payload.HTTPCode == nil || *payload.HTTPCode != 200 {
 		t.Errorf("HTTPCode = %v, want 200", payload.HTTPCode)
@@ -138,7 +182,7 @@ func TestDiscoveredEventPayloadFromServiceNilOptionalFields(t *testing.T) {
 		t.Fatalf("json.Marshal error: %v", err)
 	}
 	jsonStr := string(data)
-	for _, field := range []string{"httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet"} {
+	for _, field := range []string{"httpCode", "responseTimeMs", "lastChecked", "lastStateChange", "errorSnippet", "readyEndpoints", "totalEndpoints"} {
 		if !strings.Contains(jsonStr, `"`+field+`":null`) {
 			t.Errorf("expected %q:null in JSON, got: %s", field, jsonStr)
 		}

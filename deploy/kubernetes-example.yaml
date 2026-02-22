@@ -1,0 +1,121 @@
+# Kubernetes deployment example for Command Center
+# Update namespace, volume paths, and image tag before applying.
+#
+# Usage:
+#   kubectl apply -f deploy/kubernetes-example.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: command-center
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: command-center-data
+  namespace: command-center
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 100Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: command-center
+  namespace: command-center
+  labels:
+    app: command-center
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: command-center
+  template:
+    metadata:
+      labels:
+        app: command-center
+    spec:
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: command-center
+          image: ghcr.io/rathix/command-center:latest
+          ports:
+            - containerPort: 8443
+              name: https
+              protocol: TCP
+
+          # Container-level security context
+          securityContext:
+            runAsNonRoot: true                    # AC2
+            readOnlyRootFilesystem: true          # AC2
+            allowPrivilegeEscalation: false       # AC3
+            capabilities:
+              drop: [ALL]                         # AC3
+
+          env:
+            - name: KUBECONFIG
+              value: /data/kubeconfig
+            # Uncomment if using config file:
+            # - name: CONFIG_FILE
+            #   value: /data/config.yaml
+
+          volumeMounts:
+            # Required: kubeconfig (read-only)
+            - name: kubeconfig
+              mountPath: /data/kubeconfig
+              subPath: config
+              readOnly: true                      # AC5
+
+            # Writable: data volume for certs and history
+            - name: data
+              mountPath: /data                    # AC4
+
+            # Optional: config file (read-only)
+            # - name: config
+            #   mountPath: /data/config.yaml
+            #   subPath: config.yaml
+            #   readOnly: true                    # AC5
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+      volumes:
+        - name: kubeconfig
+          secret:
+            secretName: command-center-kubeconfig
+        - name: data
+          persistentVolumeClaim:
+            claimName: command-center-data
+        # Optional volumes — uncomment as needed:
+        # - name: config
+        #   configMap:
+        #     name: command-center-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: command-center
+  namespace: command-center
+spec:
+  selector:
+    app: command-center
+  ports:
+    - port: 8443
+      targetPort: https
+      protocol: TCP
+  type: ClusterIP

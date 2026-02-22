@@ -37,4 +37,14 @@ describe('TuiDot', () => {
 		render(TuiDot, { props: { status: 'unknown' } });
 		expect(screen.getByRole('img')).toHaveClass('bg-health-unknown');
 	});
+
+	it('renders with aria-label="degraded" when status is degraded', () => {
+		render(TuiDot, { props: { status: 'degraded' } });
+		expect(screen.getByRole('img')).toHaveAttribute('aria-label', 'degraded');
+	});
+
+	it('applies bg-health-degraded class for degraded status', () => {
+		render(TuiDot, { props: { status: 'degraded' } });
+		expect(screen.getByRole('img')).toHaveClass('bg-health-degraded');
+	});
 });

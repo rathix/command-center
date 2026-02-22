@@ -27,11 +27,16 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 		group: 'default',
 		url: 'https://test.example.com',
 		status: 'unknown',
+		compositeStatus: overrides.compositeStatus ?? overrides.status ?? 'unknown',
+		readyEndpoints: null,
+		totalEndpoints: null,
+		authGuarded: false,
 		httpCode: null,
 		responseTimeMs: null,
 		lastChecked: null,
 		lastStateChange: null,
 		errorSnippet: null,
+		podDiagnostic: null,
 		...overrides
 	};
 }
@@ -115,14 +120,16 @@ describe('serviceStore', () => {
 	});
 
 	describe('sortedServices', () => {
-		it('sorts problems first: unhealthy → unknown → healthy', () => {
+		it('sorts problems first: unhealthy → degraded → unknown → healthy', () => {
 			replaceAll([
 				makeService({ name: 'healthy-svc', status: 'healthy' }),
 				makeService({ name: 'unknown-svc', status: 'unknown' }),
+				makeService({ name: 'degraded-svc', status: 'degraded' }),
 				makeService({ name: 'unhealthy-svc', status: 'unhealthy' })
 			], 'v1.0.0');
 			expect(getSortedServices().map((s) => s.status)).toEqual([
 				'unhealthy',
+				'degraded',
 				'unknown',
 				'healthy'
 			]);
@@ -157,6 +164,7 @@ describe('serviceStore', () => {
 			expect(getCounts()).toEqual({
 				total: 4,
 				healthy: 2,
+				degraded: 0,
 				unhealthy: 1,
 				unknown: 1
 			});
@@ -166,6 +174,7 @@ describe('serviceStore', () => {
 			expect(getCounts()).toEqual({
 				total: 0,
 				healthy: 0,
+				degraded: 0,
 				unhealthy: 0,
 				unknown: 0
 			});
@@ -175,6 +184,14 @@ describe('serviceStore', () => {
 	describe('hasProblems', () => {
 		it('is true when unhealthy services exist', () => {
 			replaceAll([makeService({ name: 'bad', status: 'unhealthy' })], 'v1.0.0');
+			expect(getHasProblems()).toBe(true);
+		});
+
+		it('is true when degraded services exist', () => {
+			replaceAll([
+				makeService({ name: 'good', status: 'healthy' }),
+				makeService({ name: 'deg', status: 'degraded' })
+			], 'v1.0.0');
 			expect(getHasProblems()).toBe(true);
 		});
 
@@ -327,22 +344,25 @@ describe('serviceStore', () => {
 			], 'v1.0.0');
 			const groups = getServiceGroups();
 			const media = groups.find(g => g.name === 'media')!;
-			expect(media.counts).toEqual({ healthy: 7, unhealthy: 1, unknown: 0 });
+			expect(media.counts).toEqual({ healthy: 7, degraded: 0, unhealthy: 1, unknown: 0 });
 		});
 
-		it('hasProblems is true when group has unhealthy/unknown services', () => {
+		it('hasProblems is true when group has unhealthy/degraded/unknown services', () => {
 			replaceAll([
 				makeService({ name: 'a', group: 'good', status: 'healthy' }),
 				makeService({ name: 'b', group: 'good', status: 'healthy' }),
 				makeService({ name: 'c', group: 'bad', status: 'healthy' }),
 				makeService({ name: 'd', group: 'bad', status: 'unhealthy' }),
 				makeService({ name: 'e', group: 'mixed', status: 'healthy' }),
-				makeService({ name: 'f', group: 'mixed', status: 'unknown' })
+				makeService({ name: 'f', group: 'mixed', status: 'unknown' }),
+				makeService({ name: 'g', group: 'deg', status: 'healthy' }),
+				makeService({ name: 'h', group: 'deg', status: 'degraded' })
 			], 'v1.0.0');
 			const groups = getServiceGroups();
 			expect(groups.find(g => g.name === 'good')!.hasProblems).toBe(false);
 			expect(groups.find(g => g.name === 'bad')!.hasProblems).toBe(true);
 			expect(groups.find(g => g.name === 'mixed')!.hasProblems).toBe(true);
+			expect(groups.find(g => g.name === 'deg')!.hasProblems).toBe(true);
 		});
 
 		it('groups with problems sort before all-healthy groups', () => {
@@ -355,16 +375,18 @@ describe('serviceStore', () => {
 			expect(groups.map(g => g.name)).toEqual(['beta', 'alpha', 'gamma']);
 		});
 
-		it('group sorting is 3-tier: unhealthy first, then other problem groups, then healthy alphabetical', () => {
+		it('group sorting is 4-tier: unhealthy → degraded → other-problems → healthy alphabetical', () => {
 			replaceAll([
 				makeService({ name: 'a', group: 'alpha', status: 'healthy' }),
 				makeService({ name: 'c', group: 'gamma', status: 'unhealthy' }),
 				makeService({ name: 'd', group: 'delta', status: 'unknown' }),
-				makeService({ name: 'e', group: 'epsilon', status: 'healthy' })
+				makeService({ name: 'e', group: 'epsilon', status: 'healthy' }),
+				makeService({ name: 'f', group: 'foxtrot', status: 'degraded' })
 			], 'v1.0.0');
 
 			const groups = getServiceGroups();
-			expect(groups.map(g => g.name)).toEqual(['gamma', 'delta', 'alpha', 'epsilon']);
+			// gamma (unhealthy) → foxtrot (degraded) → delta (unknown) → alpha/epsilon (healthy alpha)
+			expect(groups.map(g => g.name)).toEqual(['gamma', 'foxtrot', 'delta', 'alpha', 'epsilon']);
 		});
 
 		it('groups with more unhealthy services sort higher', () => {
@@ -379,16 +401,29 @@ describe('serviceStore', () => {
 			expect(groups.map(g => g.name)).toEqual(['group-2', 'group-1', 'group-3']);
 		});
 
+		it('groups with more degraded services sort higher', () => {
+			replaceAll([
+				makeService({ name: 'a', group: 'group-1', status: 'degraded' }),
+				makeService({ name: 'b', group: 'group-2', status: 'degraded' }),
+				makeService({ name: 'c', group: 'group-2', status: 'degraded' }),
+				makeService({ name: 'd', group: 'group-3', status: 'healthy' })
+			], 'v1.0.0');
+			const groups = getServiceGroups();
+			// group-2 (2 degraded) > group-1 (1 degraded) > group-3 (0 degraded)
+			expect(groups.map(g => g.name)).toEqual(['group-2', 'group-1', 'group-3']);
+		});
+
 		it('within-group sorting follows status priority then alphabetical', () => {
 			replaceAll([
 				makeService({ name: 'zebra', group: 'ns', status: 'healthy' }),
 				makeService({ name: 'alpha', group: 'ns', status: 'healthy' }),
 				makeService({ name: 'delta', group: 'ns', status: 'unknown' }),
+				makeService({ name: 'bravo', group: 'ns', status: 'degraded' }),
 				makeService({ name: 'echo', group: 'ns', status: 'unhealthy' })
 			], 'v1.0.0');
 			const group = getServiceGroups().find(g => g.name === 'ns')!;
 			expect(group.services.map(s => s.name)).toEqual([
-				'echo', 'delta', 'alpha', 'zebra'
+				'echo', 'bravo', 'delta', 'alpha', 'zebra'
 			]);
 		});
 
@@ -482,6 +517,7 @@ describe('serviceStore', () => {
 			expect(getCounts()).toEqual({
 				total: 2,
 				healthy: 1,
+				degraded: 0,
 				unhealthy: 1,
 				unknown: 0
 			});

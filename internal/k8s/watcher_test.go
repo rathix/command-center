@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -82,6 +83,17 @@ func (f *fakeStateUpdater) getK8sCalls() []bool {
 	return result
 }
 
+func (f *fakeStateUpdater) Update(namespace, name string, fn func(*state.Service)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := namespace + "/" + name
+	if svc, ok := f.current[key]; ok {
+		fn(&svc)
+		f.current[key] = svc
+		f.added = append(f.added, svc)
+	}
+}
+
 func newTestIngress(name, namespace, host string, tls bool) *networkingv1.Ingress {
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -138,195 +150,6 @@ func newTestIngressWithBackend(name, namespace, host string, tls bool, backendNa
 		}
 	}
 	return ingress
-}
-
-func TestExtractInternalURL(t *testing.T) {
-	tests := []struct {
-		name    string
-		ingress *networkingv1.Ingress
-		want    string
-	}{
-		{
-			name:    "standard backend with port number",
-			ingress: newTestIngressWithBackend("app", "my-ns", "app.example.com", true, "my-svc", 8080),
-			want:    "http://my-svc.my-ns.svc.cluster.local:8080",
-		},
-		{
-			name:    "TLS ingress still uses HTTP for internal URL",
-			ingress: newTestIngressWithBackend("app", "prod", "app.example.com", true, "web", 443),
-			want:    "http://web.prod.svc.cluster.local:443",
-		},
-		{
-			name:    "missing backend service",
-			ingress: newTestIngress("app", "ns", "app.example.com", false),
-			want:    "",
-		},
-		{
-			name: "nil HTTP in rule",
-			ingress: &networkingv1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
-				Spec: networkingv1.IngressSpec{
-					Rules: []networkingv1.IngressRule{{Host: "app.example.com"}},
-				},
-			},
-			want: "",
-		},
-		{
-			name: "empty paths",
-			ingress: &networkingv1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
-				Spec: networkingv1.IngressSpec{
-					Rules: []networkingv1.IngressRule{
-						{
-							Host: "app.example.com",
-							IngressRuleValue: networkingv1.IngressRuleValue{
-								HTTP: &networkingv1.HTTPIngressRuleValue{
-									Paths: []networkingv1.HTTPIngressPath{},
-								},
-							},
-						},
-					},
-				},
-			},
-			want: "",
-		},
-		{
-			name: "zero port number (named port only)",
-			ingress: &networkingv1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
-				Spec: networkingv1.IngressSpec{
-					Rules: []networkingv1.IngressRule{
-						{
-							Host: "app.example.com",
-							IngressRuleValue: networkingv1.IngressRuleValue{
-								HTTP: &networkingv1.HTTPIngressRuleValue{
-									Paths: []networkingv1.HTTPIngressPath{
-										{
-											Backend: networkingv1.IngressBackend{
-												Service: &networkingv1.IngressServiceBackend{
-													Name: "my-svc",
-													Port: networkingv1.ServiceBackendPort{Name: "http"},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			want: "",
-		},
-		{
-			name: "no rules",
-			ingress: &networkingv1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
-				Spec:       networkingv1.IngressSpec{},
-			},
-			want: "",
-		},
-		{
-			name: "nil service in backend",
-			ingress: &networkingv1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
-				Spec: networkingv1.IngressSpec{
-					Rules: []networkingv1.IngressRule{
-						{
-							Host: "app.example.com",
-							IngressRuleValue: networkingv1.IngressRuleValue{
-								HTTP: &networkingv1.HTTPIngressRuleValue{
-									Paths: []networkingv1.HTTPIngressPath{
-										{
-											Backend: networkingv1.IngressBackend{
-												Service: nil,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			want: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractInternalURL(tt.ingress)
-			if got != tt.want {
-				t.Errorf("extractInternalURL() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestWatcherPopulatesInternalURL(t *testing.T) {
-	ingress := newTestIngressWithBackend("my-app", "my-ns", "my-app.example.com", true, "my-svc", 8080)
-
-	clientset := fake.NewSimpleClientset(ingress)
-	updater := &fakeStateUpdater{}
-	logger := slog.Default()
-
-	w := NewWatcherWithClient(clientset, updater, logger)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go w.Run(ctx)
-
-	deadline := time.After(5 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("timed out waiting for service discovery")
-		default:
-			added := updater.getAdded()
-			if len(added) >= 1 {
-				svc := added[0]
-				want := "http://my-svc.my-ns.svc.cluster.local:8080"
-				if svc.InternalURL != want {
-					t.Errorf("expected InternalURL %q, got %q", want, svc.InternalURL)
-				}
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-}
-
-func TestWatcherInternalURLEmptyWithoutBackend(t *testing.T) {
-	ingress := newTestIngress("no-backend", "default", "no-backend.example.com", false)
-
-	clientset := fake.NewSimpleClientset(ingress)
-	updater := &fakeStateUpdater{}
-	logger := slog.Default()
-
-	w := NewWatcherWithClient(clientset, updater, logger)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go w.Run(ctx)
-
-	deadline := time.After(5 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("timed out waiting for service discovery")
-		default:
-			added := updater.getAdded()
-			if len(added) >= 1 {
-				if added[0].InternalURL != "" {
-					t.Errorf("expected empty InternalURL for ingress without backend, got %q", added[0].InternalURL)
-				}
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
 }
 
 func TestStateUpdaterInterface(t *testing.T) {
@@ -868,6 +691,32 @@ func TestWatcherGroupMatchesNamespace(t *testing.T) {
 	}
 }
 
+func TestNewWatcherErrorSanitization(t *testing.T) {
+	// Call NewWatcher with a non-existent kubeconfig path
+	_, err := NewWatcher("/home/user/.kube/nonexistent-config", &fakeStateUpdater{}, slog.Default())
+	if err == nil {
+		t.Fatal("expected error for non-existent kubeconfig")
+	}
+	errMsg := err.Error()
+
+	// The error must NOT contain the kubeconfig file path
+	sensitivePatterns := []string{
+		"/home/user/.kube",
+		"nonexistent-config",
+		".kube/config",
+	}
+	for _, pattern := range sensitivePatterns {
+		if strings.Contains(errMsg, pattern) {
+			t.Errorf("error contains sensitive path info %q: %s", pattern, errMsg)
+		}
+	}
+
+	// The error should be a generic message
+	if !strings.Contains(errMsg, "k8s watcher") {
+		t.Errorf("expected generic k8s watcher error, got: %s", errMsg)
+	}
+}
+
 func TestWatcherPreservesStatusOnUpdate(t *testing.T) {
 	ingress := newTestIngress("status-app", "default", "status.example.com", false)
 
@@ -913,6 +762,187 @@ func TestWatcherPreservesStatusOnUpdate(t *testing.T) {
 
 			if found && latest.Status == state.StatusHealthy {
 				// Success: status was preserved
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func TestExtractBackendServiceName(t *testing.T) {
+	tests := []struct {
+		name          string
+		ingress       *networkingv1.Ingress
+		wantService   string
+		wantNamespace string
+		wantOK        bool
+	}{
+		{
+			name:          "standard ingress with backend",
+			ingress:       newTestIngressWithBackend("app", "my-ns", "app.example.com", true, "my-svc", 8080),
+			wantService:   "my-svc",
+			wantNamespace: "my-ns",
+			wantOK:        true,
+		},
+		{
+			name: "no rules",
+			ingress: &networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
+				Spec:       networkingv1.IngressSpec{},
+			},
+			wantService:   "",
+			wantNamespace: "",
+			wantOK:        false,
+		},
+		{
+			name: "nil HTTP",
+			ingress: &networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
+				Spec: networkingv1.IngressSpec{
+					Rules: []networkingv1.IngressRule{{Host: "app.example.com"}},
+				},
+			},
+			wantService:   "",
+			wantNamespace: "",
+			wantOK:        false,
+		},
+		{
+			name: "empty service name",
+			ingress: &networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
+				Spec: networkingv1.IngressSpec{
+					Rules: []networkingv1.IngressRule{
+						{
+							Host: "app.example.com",
+							IngressRuleValue: networkingv1.IngressRuleValue{
+								HTTP: &networkingv1.HTTPIngressRuleValue{
+									Paths: []networkingv1.HTTPIngressPath{
+										{
+											Backend: networkingv1.IngressBackend{
+												Service: &networkingv1.IngressServiceBackend{
+													Name: "",
+													Port: networkingv1.ServiceBackendPort{Number: 80},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantService:   "",
+			wantNamespace: "",
+			wantOK:        false,
+		},
+		{
+			name: "nil service",
+			ingress: &networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "ns"},
+				Spec: networkingv1.IngressSpec{
+					Rules: []networkingv1.IngressRule{
+						{
+							Host: "app.example.com",
+							IngressRuleValue: networkingv1.IngressRuleValue{
+								HTTP: &networkingv1.HTTPIngressRuleValue{
+									Paths: []networkingv1.HTTPIngressPath{
+										{
+											Backend: networkingv1.IngressBackend{
+												Service: nil,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantService:   "",
+			wantNamespace: "",
+			wantOK:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotService, gotNamespace, gotOK := extractBackendServiceName(tt.ingress)
+			if gotOK != tt.wantOK {
+				t.Errorf("extractBackendServiceName() ok = %v, want %v", gotOK, tt.wantOK)
+			}
+			if gotService != tt.wantService {
+				t.Errorf("extractBackendServiceName() service = %q, want %q", gotService, tt.wantService)
+			}
+			if gotNamespace != tt.wantNamespace {
+				t.Errorf("extractBackendServiceName() namespace = %q, want %q", gotNamespace, tt.wantNamespace)
+			}
+		})
+	}
+}
+
+func TestWatcherStartsEndpointSliceWatchOnIngressAdd(t *testing.T) {
+	ingress := newTestIngressWithBackend("my-app", "my-ns", "my-app.example.com", true, "my-svc", 8080)
+
+	clientset := fake.NewSimpleClientset(ingress)
+	updater := &fakeStateUpdater{current: make(map[string]state.Service)}
+	logger := slog.Default()
+
+	w := NewWatcherWithClient(clientset, updater, logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go w.Run(ctx)
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for service discovery")
+		default:
+			added := updater.getAdded()
+			if len(added) >= 1 && added[0].Name == "my-app" {
+				w.endpointSliceWatcher.mu.Lock()
+				_, exists := w.endpointSliceWatcher.watches["my-ns/my-app"]
+				w.endpointSliceWatcher.mu.Unlock()
+				if exists {
+					return
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func TestWatcherNoEndpointSliceWatchForIngressWithoutBackend(t *testing.T) {
+	ingress := newTestIngress("no-backend", "default", "no-backend.example.com", false)
+
+	clientset := fake.NewSimpleClientset(ingress)
+	updater := &fakeStateUpdater{current: make(map[string]state.Service)}
+	logger := slog.Default()
+
+	w := NewWatcherWithClient(clientset, updater, logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go w.Run(ctx)
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for service discovery")
+		default:
+			added := updater.getAdded()
+			if len(added) >= 1 {
+				w.endpointSliceWatcher.mu.Lock()
+				watchCount := len(w.endpointSliceWatcher.watches)
+				w.endpointSliceWatcher.mu.Unlock()
+				if watchCount != 0 {
+					t.Errorf("expected no EndpointSlice watches, got %d", watchCount)
+				}
 				return
 			}
 			time.Sleep(10 * time.Millisecond)

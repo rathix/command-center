@@ -176,6 +176,25 @@ func setupLoggerWithWriter(format string, writer io.Writer) *slog.Logger {
 	return slog.New(handler)
 }
 
+// validateKubeconfigPermissions checks that the kubeconfig file exists and has
+// restrictive permissions. Returns an error only when the file is missing.
+// WARNING: Do not log file paths or content (NFR17).
+func validateKubeconfigPermissions(path string, logger *slog.Logger) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("kubeconfig file not found")
+		}
+		return fmt.Errorf("unable to check kubeconfig file")
+	}
+
+	mode := info.Mode().Perm()
+	if mode&0o377 != 0 {
+		logger.Warn("kubeconfig file permissions are more permissive than recommended (0400)")
+	}
+	return nil
+}
+
 // run starts the server and handles graceful shutdown.
 func run(ctx context.Context, cfg config) error {
 	logger := setupLogger(cfg.LogFormat)
@@ -184,6 +203,11 @@ func run(ctx context.Context, cfg config) error {
 	slog.Info("Starting Command Center", "version", Version)
 
 	store := state.NewStore()
+
+	// Validate kubeconfig file permissions (FR33)
+	if err := validateKubeconfigPermissions(cfg.Kubeconfig, logger); err != nil {
+		return fmt.Errorf("kubeconfig validation: %w", err)
+	}
 
 	// Load optional YAML config for custom services and overrides
 	var lastAppCfg *appconfig.Config
@@ -213,7 +237,7 @@ func run(ctx context.Context, cfg config) error {
 
 	watcher, err := k8s.NewWatcher(cfg.Kubeconfig, store, logger)
 	if err != nil {
-		slog.Warn("k8s watcher disabled: failed to create watcher", "error", err)
+		slog.Warn("k8s watcher disabled: failed to build kubeconfig")
 	} else {
 		go watcher.Run(watcherCtx)
 	}

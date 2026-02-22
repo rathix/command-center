@@ -12,7 +12,7 @@ function makeGroup(overrides: Partial<ServiceGroup> = {}): ServiceGroup {
 	return {
 		name: 'media',
 		services: [],
-		counts: { healthy: 7, unhealthy: 1, unknown: 0 },
+		counts: { healthy: 7, degraded: 0, unhealthy: 1, unknown: 0 },
 		hasProblems: true,
 		expanded: true,
 		...overrides
@@ -124,13 +124,44 @@ describe('GroupHeader', () => {
 	it('all-healthy group shows only healthy count', () => {
 		render(GroupHeader, {
 			props: {
-				group: makeGroup({ counts: { healthy: 8, unhealthy: 0, unknown: 0 } }),
+				group: makeGroup({ counts: { healthy: 8, degraded: 0, unhealthy: 0, unknown: 0 } }),
 				controlsId: 'list-1'
 			}
 		});
 		expect(screen.getByText('8 healthy')).toBeInTheDocument();
 		expect(screen.queryByText(/unhealthy/)).not.toBeInTheDocument();
-		expect(screen.queryByText(/auth-blocked/)).not.toBeInTheDocument();
 		expect(screen.queryByText(/unknown/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/degraded/)).not.toBeInTheDocument();
+	});
+
+	it('degraded count uses text-health-degraded class', () => {
+		render(GroupHeader, {
+			props: {
+				group: makeGroup({ counts: { healthy: 5, degraded: 2, unhealthy: 1, unknown: 0 } }),
+				controlsId: 'list-1'
+			}
+		});
+		expect(screen.getByText('2 degraded')).toHaveClass('text-health-degraded');
+	});
+
+	it('renders degraded count between healthy and unhealthy', () => {
+		render(GroupHeader, {
+			props: {
+				group: makeGroup({ counts: { healthy: 3, degraded: 1, unhealthy: 1, unknown: 0 } }),
+				controlsId: 'list-1'
+			}
+		});
+		const text = screen.getByRole('button').textContent;
+		expect(text).toMatch(/3 healthy.*1 degraded.*1 unhealthy/);
+	});
+
+	it('hides degraded count when zero', () => {
+		render(GroupHeader, {
+			props: {
+				group: makeGroup({ counts: { healthy: 5, degraded: 0, unhealthy: 1, unknown: 0 } }),
+				controlsId: 'list-1'
+			}
+		});
+		expect(screen.queryByText(/degraded/)).not.toBeInTheDocument();
 	});
 });

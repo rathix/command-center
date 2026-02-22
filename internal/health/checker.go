@@ -30,14 +30,20 @@ type StateWriter interface {
 	Update(namespace, name string, fn func(*state.Service))
 }
 
+// EndpointReader provides read access to K8s endpoint readiness data.
+type EndpointReader interface {
+	GetEndpointReadiness(namespace, name string) *EndpointReadiness
+}
+
 // Checker performs periodic HTTP health checks against discovered services.
 type Checker struct {
-	reader        StateReader
-	writer        StateWriter
-	client        HTTPProber
-	interval      time.Duration
-	historyWriter history.HistoryWriter
-	logger        *slog.Logger
+	reader         StateReader
+	writer         StateWriter
+	client         HTTPProber
+	interval       time.Duration
+	historyWriter  history.HistoryWriter
+	logger         *slog.Logger
+	endpointReader EndpointReader
 }
 
 // NewChecker creates a new health checker. If logger is nil, a no-op logger is used.
@@ -56,6 +62,11 @@ func NewChecker(reader StateReader, writer StateWriter, client HTTPProber, inter
 		historyWriter: historyWriter,
 		logger:        logger,
 	}
+}
+
+// SetEndpointReader sets the endpoint reader for composite health fusion.
+func (c *Checker) SetEndpointReader(er EndpointReader) {
+	c.endpointReader = er
 }
 
 // Run starts the health check loop. It performs an immediate check on start,
@@ -91,11 +102,8 @@ func (c *Checker) checkAll(ctx context.Context) {
 		go func(s state.Service) {
 			defer wg.Done()
 
-			// Determine probe URL: HealthURL > InternalURL > URL
+			// Determine probe URL: HealthURL > URL
 			probeURL := s.URL
-			if s.InternalURL != "" {
-				probeURL = s.InternalURL
-			}
 			if s.HealthURL != "" {
 				probeURL = s.HealthURL
 			}
@@ -109,6 +117,14 @@ func (c *Checker) checkAll(ctx context.Context) {
 					result.status = state.StatusHealthy
 					result.errorSnippet = nil
 				}
+			}
+
+			// Composite health fusion: merge HTTP probe with K8s readiness
+			if c.endpointReader != nil {
+				er := c.endpointReader.GetEndpointReadiness(s.Namespace, s.Name)
+				composite := CompositeHealth(result.status, result.httpCode, er)
+				result.status = composite.Status
+				result.authGuarded = composite.AuthGuarded
 			}
 
 			var transition *history.TransitionRecord
@@ -136,6 +152,7 @@ type probeResult struct {
 	httpCode       *int
 	responseTimeMs int64
 	errorSnippet   *string
+	authGuarded    bool
 }
 
 // probeService performs a single HTTP GET health check against a service URL.
@@ -190,9 +207,11 @@ func (c *Checker) applyResult(svc *state.Service, res probeResult) *history.Tran
 	previousStatus := svc.Status
 
 	svc.Status = res.status
+	svc.CompositeStatus = res.status
 	svc.HTTPCode = res.httpCode
 	svc.ResponseTimeMs = &res.responseTimeMs
 	svc.ErrorSnippet = res.errorSnippet
+	svc.AuthGuarded = res.authGuarded
 
 	now := time.Now()
 	svc.LastChecked = &now

@@ -64,8 +64,8 @@ web/ (SvelteKit)                    Go Binary
 **Data flow:**
 
 1. **Config Loader** reads YAML config → registers custom services with Health Checker
-2. **K8s Watcher** watches Ingress resources → discovers/removes services, extracts InternalURL from backend service refs
-3. **Health Checker** periodically probes discovered service URLs (priority: HealthURL > InternalURL > URL)
+2. **K8s Watcher** watches Ingress resources → discovers/removes services
+3. **Health Checker** periodically probes discovered service URLs (priority: HealthURL > URL)
 4. Both K8s Watcher and Health Checker feed into **State Store** (thread-safe, mutex-protected)
 5. Health Checker results are also persisted to **History Persistence** (JSONL files in data-dir)
 6. Store emits events → **SSE Broker** broadcasts to all connected clients

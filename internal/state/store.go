@@ -10,6 +10,7 @@ type HealthStatus string
 
 const (
 	StatusHealthy   HealthStatus = "healthy"
+	StatusDegraded  HealthStatus = "degraded"
 	StatusUnhealthy HealthStatus = "unhealthy"
 	StatusUnknown   HealthStatus = "unknown"
 )
@@ -20,6 +21,13 @@ const (
 	SourceConfig     = "config"
 )
 
+// PodDiagnostic contains pod-level diagnostic information for K8s services.
+// Nil for non-K8s services or when pod status is unavailable.
+type PodDiagnostic struct {
+	Reason       *string `json:"reason"`
+	RestartCount int     `json:"restartCount"`
+}
+
 // Service represents a discovered service with health information.
 type Service struct {
         Name                string       `json:"name"`
@@ -28,17 +36,21 @@ type Service struct {
         Namespace           string       `json:"namespace"`
         Group               string       `json:"group"`
         URL                 string       `json:"url"`
-        InternalURL         string       `json:"internalUrl,omitempty"`
         Icon                string       `json:"icon,omitempty"`
         Source              string       `json:"source"`
-        Status              HealthStatus `json:"status"`
-        HTTPCode            *int         `json:"httpCode"`
+        Status              HealthStatus    `json:"status"`
+        CompositeStatus     HealthStatus    `json:"compositeStatus"`
+        HTTPCode            *int            `json:"httpCode"`
         ResponseTimeMs      *int64       `json:"responseTimeMs"`
         LastChecked         *time.Time   `json:"lastChecked"`
         LastStateChange     *time.Time   `json:"lastStateChange"`
-        ErrorSnippet        *string      `json:"errorSnippet"`
-        HealthURL           string       `json:"healthUrl,omitempty"`
+        ErrorSnippet        *string         `json:"errorSnippet"`
+        AuthGuarded         bool            `json:"authGuarded"`
+        PodDiagnostic       *PodDiagnostic  `json:"podDiagnostic"`
+        HealthURL           string          `json:"healthUrl,omitempty"`
         ExpectedStatusCodes []int        `json:"expectedStatusCodes,omitempty"`
+        ReadyEndpoints      *int         `json:"readyEndpoints"`
+        TotalEndpoints      *int         `json:"totalEndpoints"`
 }
 // EventType identifies the kind of state mutation.
 type EventType int
@@ -298,9 +310,25 @@ func (s Service) DeepCopy() Service {
 		val := *s.ErrorSnippet
 		cp.ErrorSnippet = &val
 	}
+	if s.PodDiagnostic != nil {
+		pd := *s.PodDiagnostic
+		if pd.Reason != nil {
+			val := *pd.Reason
+			pd.Reason = &val
+		}
+		cp.PodDiagnostic = &pd
+	}
 	if s.ExpectedStatusCodes != nil {
 		cp.ExpectedStatusCodes = make([]int, len(s.ExpectedStatusCodes))
 		copy(cp.ExpectedStatusCodes, s.ExpectedStatusCodes)
+	}
+	if s.ReadyEndpoints != nil {
+		val := *s.ReadyEndpoints
+		cp.ReadyEndpoints = &val
+	}
+	if s.TotalEndpoints != nil {
+		val := *s.TotalEndpoints
+		cp.TotalEndpoints = &val
 	}
 	return cp
 }

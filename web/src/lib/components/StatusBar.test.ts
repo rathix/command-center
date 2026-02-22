@@ -18,11 +18,16 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 		group: 'default',
 		url: 'https://test.example.com',
 		status: 'unknown',
+		compositeStatus: overrides.compositeStatus ?? overrides.status ?? 'unknown',
+		readyEndpoints: null,
+		totalEndpoints: null,
+		authGuarded: false,
 		httpCode: null,
 		responseTimeMs: null,
 		lastChecked: nowIso,
 		lastStateChange: nowIso,
 		errorSnippet: null,
+		podDiagnostic: null,
 		...overrides
 	};
 }
@@ -158,7 +163,6 @@ describe('StatusBar', () => {
 			render(StatusBar);
 			expect(screen.getByText('1 unhealthy')).toBeInTheDocument();
 			expect(screen.getByText('2 healthy')).toBeInTheDocument();
-			expect(screen.queryByText(/auth-blocked/)).not.toBeInTheDocument();
 		});
 
 		it('preserves "Discovering services..." state unchanged', () => {
@@ -171,6 +175,35 @@ describe('StatusBar', () => {
 			setConnectionStatus('reconnecting');
 			render(StatusBar);
 			expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
+		});
+
+		it('shows degraded segment with yellow color in breakdown', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'unhealthy' }),
+				makeService({ name: 'svc-2', status: 'degraded' }),
+				makeService({ name: 'svc-3', status: 'degraded' }),
+				makeService({ name: 'svc-4', status: 'healthy' })
+			], 'v1.0.0');
+			render(StatusBar);
+			const unhealthySegment = screen.getByText('1 unhealthy');
+			expect(unhealthySegment).toHaveClass('text-health-error');
+			const degradedSegment = screen.getByText('2 degraded');
+			expect(degradedSegment).toHaveClass('text-health-degraded');
+			const healthySegment = screen.getByText('1 healthy');
+			expect(healthySegment).toHaveClass('text-health-ok');
+		});
+
+		it('shows breakdown when only healthy and degraded exist (not "all healthy")', () => {
+			setConnectionStatus('connected');
+			replaceAll([
+				makeService({ name: 'svc-1', status: 'healthy' }),
+				makeService({ name: 'svc-2', status: 'degraded' })
+			], 'v1.0.0');
+			render(StatusBar);
+			expect(screen.queryByText(/all healthy/)).not.toBeInTheDocument();
+			expect(screen.getByText('1 degraded')).toBeInTheDocument();
+			expect(screen.getByText('1 healthy')).toBeInTheDocument();
 		});
 
 		it('shows unknown in breakdown and does NOT show "all healthy" when only healthy and unknown exist', () => {
@@ -215,7 +248,7 @@ describe('StatusBar', () => {
 			vi.advanceTimersByTime(61_000);
 			await vi.dynamicImportSettled();
 			const timeEl = screen.getByText(/Last updated/).closest('time');
-			expect(timeEl).toHaveStyle({ color: 'var(--color-health-auth-blocked)' });
+			expect(timeEl).toHaveStyle({ color: 'var(--color-health-warning)' });
 		});
 
 		it('shows stale staleness color (red) when data exceeds 5x interval', async () => {
@@ -301,6 +334,16 @@ describe('StatusBar', () => {
 		});
 	});
 
+	it('does not render any OIDC lock indicator', () => {
+		setConnectionStatus('connected');
+		replaceAll([
+			makeService({ name: 'svc-1', status: 'healthy' })
+		], 'v1.0.0');
+		render(StatusBar);
+		expect(screen.queryByLabelText(/oidc/i)).not.toBeInTheDocument();
+		expect(screen.queryByText('🔒')).not.toBeInTheDocument();
+	});
+
 	describe('config warning indicator', () => {
 		it('does not render ⚠ when there are no config errors', () => {
 			setConnectionStatus('connected');
@@ -323,7 +366,7 @@ describe('StatusBar', () => {
 			setConfigErrors(['some error']);
 			render(StatusBar);
 			const warning = screen.getByText('⚠');
-			expect(warning).toHaveClass('text-health-auth-blocked');
+			expect(warning).toHaveClass('text-health-warning');
 		});
 
 		it('⚠ has title with error count and messages', () => {

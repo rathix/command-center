@@ -12,12 +12,14 @@
 
 	const healthColorMap: Record<HealthStatus, string> = {
 		healthy: 'text-health-ok',
+		degraded: 'text-health-degraded',
 		unhealthy: 'text-health-error',
 		unknown: 'text-health-unknown'
 	};
 
 	const statusLabelMap: Record<HealthStatus, string> = {
 		healthy: 'healthy for',
+		degraded: 'degraded for',
 		unhealthy: 'unhealthy for',
 		unknown: 'unknown for'
 	};
@@ -34,19 +36,43 @@
 
 	const stateDisplay = $derived.by(() => {
 		void now; // force re-evaluation each tick
-		const label = statusLabelMap[service.status];
-		const isUnhealthy = service.status === 'unhealthy';
+		const label = statusLabelMap[service.compositeStatus];
+		const isUnhealthy = service.compositeStatus === 'unhealthy';
 		// Unhealthy uses precise (H M S), others use simple (H or M or S)
 		const time = formatRelativeTime(service.lastStateChange, false, isUnhealthy);
 		return `${label} ${time}`;
 	});
 
-	const stateColor = $derived.by(() => healthColorMap[service.status]);
+	const stateColor = $derived.by(() => healthColorMap[service.compositeStatus]);
 
 	const errorLine = $derived.by(() => {
-		if (service.status !== 'unhealthy' || !service.errorSnippet) return null;
+		if (service.compositeStatus !== 'unhealthy' || !service.errorSnippet) return null;
 		const snippet = service.errorSnippet;
 		return snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet;
+	});
+
+	const podReadinessLine = $derived.by(() => {
+		if (service.readyEndpoints === null || service.totalEndpoints === null) return null;
+		return `Pods: ${service.readyEndpoints}/${service.totalEndpoints} ready`;
+	});
+
+	const authGuardedLine = $derived.by(() => {
+		return service.authGuarded ? 'Auth-guarded (forward auth)' : null;
+	});
+
+	const degradedHint = $derived.by(() => {
+		return service.compositeStatus === 'degraded'
+			? 'Pods are ready but HTTP probe failed — possible routing or proxy issue'
+			: null;
+	});
+
+	const podDiagLine = $derived.by(() => {
+		if (!service.podDiagnostic) return null;
+		const { reason, restartCount } = service.podDiagnostic;
+		const parts: string[] = [];
+		if (reason) parts.push(reason);
+		if (restartCount > 0) parts.push(`${restartCount} restart${restartCount === 1 ? '' : 's'}`);
+		return parts.length > 0 ? parts.join(' · ') : null;
 	});
 
 	const sourceLine = $derived.by(() => {
@@ -86,6 +112,18 @@
 		<div class={stateColor}>{stateDisplay}</div>
 		{#if errorLine}
 			<div class="truncate">{errorLine}</div>
+		{/if}
+		{#if podReadinessLine}
+			<div>{podReadinessLine}</div>
+		{/if}
+		{#if authGuardedLine}
+			<div>{authGuardedLine}</div>
+		{/if}
+		{#if degradedHint}
+			<div class="text-health-degraded">{degradedHint}</div>
+		{/if}
+		{#if podDiagLine}
+			<div class="text-health-error">{podDiagLine}</div>
 		{/if}
 		{#if sourceLine}
 			<div>{sourceLine}</div>

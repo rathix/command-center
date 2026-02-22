@@ -34,12 +34,17 @@ type DiscoveredEventPayload struct {
 	URL             string             `json:"url"`
 	Icon            string             `json:"icon,omitempty"`
 	Source          string             `json:"source"`
-	Status          state.HealthStatus `json:"status"`
-	HTTPCode        *int               `json:"httpCode"`
+	Status          state.HealthStatus   `json:"status"`
+	CompositeStatus state.HealthStatus   `json:"compositeStatus"`
+	AuthGuarded     bool                 `json:"authGuarded"`
+	HTTPCode        *int                 `json:"httpCode"`
 	ResponseTimeMs  *int64             `json:"responseTimeMs"`
 	LastChecked     *time.Time         `json:"lastChecked"`
 	LastStateChange *time.Time         `json:"lastStateChange"`
 	ErrorSnippet    *string            `json:"errorSnippet"`
+	ReadyEndpoints  *int                 `json:"readyEndpoints"`
+	TotalEndpoints  *int                 `json:"totalEndpoints"`
+	PodDiagnostic   *state.PodDiagnostic `json:"podDiagnostic"`
 }
 
 // RemovedEventPayload contains only the identifier fields for a "removed" event.
@@ -58,11 +63,16 @@ func discoveredEventPayloadFromService(svc state.Service) DiscoveredEventPayload
 		Icon:            svc.Icon,
 		Source:          svc.Source,
 		Status:          svc.Status,
+		CompositeStatus: svc.CompositeStatus,
+		AuthGuarded:     svc.AuthGuarded,
 		HTTPCode:        svc.HTTPCode,
 		ResponseTimeMs:  svc.ResponseTimeMs,
 		LastChecked:     svc.LastChecked,
 		LastStateChange: svc.LastStateChange,
 		ErrorSnippet:    svc.ErrorSnippet,
+		ReadyEndpoints:  svc.ReadyEndpoints,
+		TotalEndpoints:  svc.TotalEndpoints,
+		PodDiagnostic:   svc.PodDiagnostic,
 	}
 }
 

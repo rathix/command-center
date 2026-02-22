@@ -12,11 +12,16 @@ function makeService(overrides: Partial<Service> = {}): Service {
 		group: 'monitoring',
 		url: 'https://grafana.example.com',
 		status: 'unknown',
+		compositeStatus: overrides.compositeStatus ?? overrides.status ?? 'unknown',
+		readyEndpoints: null,
+		totalEndpoints: null,
+		authGuarded: false,
 		httpCode: null,
 		responseTimeMs: null,
 		lastChecked: null,
 		lastStateChange: null,
 		errorSnippet: null,
+		podDiagnostic: null,
 		...overrides
 	};
 }
@@ -183,7 +188,7 @@ describe('ServiceRow', () => {
 		it('shows response code and time for healthy service in muted text', () => {
 			render(ServiceRow, {
 				props: {
-					service: makeService({ status: 'healthy', httpCode: 200, responseTimeMs: 142 }),
+					service: makeService({ status: 'healthy', compositeStatus: 'healthy', httpCode: 200, responseTimeMs: 142 }),
 					odd: false
 				}
 			});
@@ -195,7 +200,7 @@ describe('ServiceRow', () => {
 		it('shows response code and time for unhealthy service in red text', () => {
 			render(ServiceRow, {
 				props: {
-					service: makeService({ status: 'unhealthy', httpCode: 503, responseTimeMs: 0 }),
+					service: makeService({ status: 'unhealthy', compositeStatus: 'unhealthy', httpCode: 503, responseTimeMs: 0 }),
 					odd: false
 				}
 			});
@@ -204,11 +209,24 @@ describe('ServiceRow', () => {
 			expect(responseText).toHaveClass('text-health-error');
 		});
 
+		it('shows response code and time for degraded service in yellow text', () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ status: 'degraded', compositeStatus: 'degraded', httpCode: 200, responseTimeMs: 142 }),
+					odd: false
+				}
+			});
+			const responseText = screen.getByText('200 · 142ms');
+			expect(responseText).toBeInTheDocument();
+			expect(responseText).toHaveClass('text-health-degraded');
+		});
+
 		it('shows dash placeholder for unknown status and uses semantic color', () => {
 			render(ServiceRow, {
 				props: {
 					service: makeService({
 						status: 'unknown',
+						compositeStatus: 'unknown',
 						httpCode: 200,
 						responseTimeMs: 50
 					}),
@@ -245,7 +263,7 @@ describe('ServiceRow', () => {
 		it('has faint red background tint for unhealthy service', () => {
 			render(ServiceRow, {
 				props: {
-					service: makeService({ status: 'unhealthy', httpCode: 503, responseTimeMs: 0 }),
+					service: makeService({ status: 'unhealthy', compositeStatus: 'unhealthy', httpCode: 503, responseTimeMs: 0 }),
 					odd: false
 				}
 			});
@@ -253,10 +271,21 @@ describe('ServiceRow', () => {
 			expect(listItem.style.backgroundColor).toBe('rgba(243, 139, 168, 0.05)');
 		});
 
+		it('has faint yellow background tint for degraded service', () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ status: 'degraded', compositeStatus: 'degraded', httpCode: 200, responseTimeMs: 142 }),
+					odd: false
+				}
+			});
+			const listItem = screen.getByRole('listitem');
+			expect(listItem.style.backgroundColor).toBe('rgba(249, 226, 175, 0.03)');
+		});
+
 		it('has no background tint for healthy service', () => {
 			render(ServiceRow, {
 				props: {
-					service: makeService({ status: 'healthy', httpCode: 200, responseTimeMs: 142 }),
+					service: makeService({ status: 'healthy', compositeStatus: 'healthy', httpCode: 200, responseTimeMs: 142 }),
 					odd: false
 				}
 			});
@@ -267,7 +296,7 @@ describe('ServiceRow', () => {
 		it('has no background tint for unknown service', () => {
 			render(ServiceRow, {
 				props: {
-					service: makeService({ status: 'unknown' }),
+					service: makeService({ status: 'unknown', compositeStatus: 'unknown' }),
 					odd: false
 				}
 			});
@@ -278,13 +307,45 @@ describe('ServiceRow', () => {
 		it('preserves bg-surface-0 on odd rows alongside unhealthy tint', () => {
 			render(ServiceRow, {
 				props: {
-					service: makeService({ status: 'unhealthy', httpCode: 503, responseTimeMs: 0 }),
+					service: makeService({ status: 'unhealthy', compositeStatus: 'unhealthy', httpCode: 503, responseTimeMs: 0 }),
 					odd: true
 				}
 			});
 			const listItem = screen.getByRole('listitem');
 			expect(listItem).toHaveClass('bg-surface-0');
 			expect(listItem.style.backgroundColor).toBe('rgba(243, 139, 168, 0.05)');
+		});
+	});
+
+	describe('auth-guarded shield glyph', () => {
+		it('shows shield glyph when authGuarded is true', () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ authGuarded: true, source: 'kubernetes' }),
+					odd: false
+				}
+			});
+			expect(screen.getByText('🛡')).toBeInTheDocument();
+		});
+
+		it('does not show shield glyph when authGuarded is false', () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ authGuarded: false, source: 'kubernetes' }),
+					odd: false
+				}
+			});
+			expect(screen.queryByText('🛡')).not.toBeInTheDocument();
+		});
+
+		it('shield glyph has aria-hidden="true"', () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ authGuarded: true, source: 'kubernetes' }),
+					odd: false
+				}
+			});
+			expect(screen.getByText('🛡')).toHaveAttribute('aria-hidden', 'true');
 		});
 	});
 
@@ -325,7 +386,8 @@ describe('ServiceRow', () => {
 					service: makeService({
 						lastChecked: '2026-02-20T10:00:00Z',
 						lastStateChange: '2026-02-20T08:00:00Z',
-						status: 'healthy'
+						status: 'healthy',
+						compositeStatus: 'healthy'
 					}),
 					odd: false
 				}
@@ -346,7 +408,8 @@ describe('ServiceRow', () => {
 					service: makeService({
 						lastChecked: '2026-02-20T10:00:00Z',
 						lastStateChange: '2026-02-20T08:00:00Z',
-						status: 'healthy'
+						status: 'healthy',
+						compositeStatus: 'healthy'
 					}),
 					odd: false
 				}
@@ -392,7 +455,8 @@ describe('ServiceRow', () => {
 					service: makeService({
 						lastChecked: '2026-02-20T10:00:00Z',
 						lastStateChange: '2026-02-20T08:00:00Z',
-						status: 'healthy'
+						status: 'healthy',
+						compositeStatus: 'healthy'
 					}),
 					odd: false
 				}
@@ -415,7 +479,8 @@ describe('ServiceRow', () => {
 					service: makeService({
 						lastChecked: '2026-02-20T10:00:00Z',
 						lastStateChange: '2026-02-20T08:00:00Z',
-						status: 'healthy'
+						status: 'healthy',
+						compositeStatus: 'healthy'
 					}),
 					odd: false
 				}
@@ -467,7 +532,8 @@ describe('ServiceRow', () => {
 					service: makeService({
 						lastChecked: '2026-02-20T10:00:00Z',
 						lastStateChange: '2026-02-20T08:00:00Z',
-						status: 'healthy'
+						status: 'healthy',
+						compositeStatus: 'healthy'
 					}),
 					odd: false
 				}

@@ -22,13 +22,18 @@ describe('serviceStore structural integrity', () => {
 			displayName: 'Service 1',
 			url: 'http://svc-1',
 			status: 'healthy',
+			compositeStatus: 'healthy',
+			readyEndpoints: null,
+			totalEndpoints: null,
+			authGuarded: false,
 			httpCode: 200,
 			responseTimeMs: 50,
 			lastChecked: '2026-02-20T10:00:00Z',
 			lastStateChange: '2026-02-20T09:00:00Z',
-			errorSnippet: null
+			errorSnippet: null,
+			podDiagnostic: null
 		}], 'v9.9.9', 60000);
-		
+
 		store.addOrUpdate({
 			name: 'svc-2',
 			namespace: 'other',
@@ -36,11 +41,16 @@ describe('serviceStore structural integrity', () => {
 			displayName: 'Service 2',
 			url: 'http://svc-2',
 			status: 'unhealthy',
+			compositeStatus: 'unhealthy',
+			readyEndpoints: null,
+			totalEndpoints: null,
+			authGuarded: false,
 			httpCode: 500,
 			responseTimeMs: 500,
 			lastChecked: '2026-02-20T11:00:00Z',
 			lastStateChange: '2026-02-20T10:30:00Z',
-			errorSnippet: 'CRITICAL FAILURE'
+			errorSnippet: 'CRITICAL FAILURE',
+			podDiagnostic: null
 		});
 
 		store.setConnectionStatus('disconnected');

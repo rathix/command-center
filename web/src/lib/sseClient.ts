@@ -37,7 +37,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isHealthStatus(value: unknown): value is HealthStatus {
-	return value === 'healthy' || value === 'unhealthy' || value === 'unknown';
+	return value === 'healthy' || value === 'degraded' || value === 'unhealthy' || value === 'unknown';
 }
 
 function isNullableNumber(value: unknown): value is number | null {
@@ -71,6 +71,10 @@ function isService(value: unknown): value is Service {
 		isOptionalServiceSource(value.source) &&
 		(value.icon === undefined || isNullableString(value.icon)) &&
 		isHealthStatus(value.status) &&
+		isHealthStatus(value.compositeStatus) &&
+		isNullableNumber(value.readyEndpoints) &&
+		isNullableNumber(value.totalEndpoints) &&
+		typeof value.authGuarded === 'boolean' &&
 		isNullableNumber(value.httpCode) &&
 		isNullableNumber(value.responseTimeMs) &&
 		isNullableString(value.lastChecked) &&

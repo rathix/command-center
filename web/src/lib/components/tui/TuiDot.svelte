@@ -5,12 +5,14 @@
 
 	const colorMap: Record<HealthStatus, string> = {
 		healthy: 'bg-health-ok',
+		degraded: 'bg-health-degraded',
 		unhealthy: 'bg-health-error',
 		unknown: 'bg-health-unknown'
 	};
 
 	const labelMap: Record<HealthStatus, string> = {
 		healthy: 'healthy',
+		degraded: 'degraded',
 		unhealthy: 'unhealthy',
 		unknown: 'unknown'
 	};

@@ -220,7 +220,7 @@ This starts the Vite dev server (port 5173) for frontend hot-reload and the Go s
 cmd/command-center/     Go entrypoint, config, server lifecycle
 internal/certs/         TLS certificate generation and management
 internal/config/        YAML config loading with hot-reload (fsnotify)
-internal/health/        HTTP health checker with InternalURL support
+internal/health/        HTTP health checker
 internal/history/       Health check history persistence (JSONL)
 internal/k8s/           Kubernetes Ingress watcher (informer-based)
 internal/server/        HTTP handlers, SPA serving, dev proxy

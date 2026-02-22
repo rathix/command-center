@@ -803,77 +803,7 @@ func TestNewChecker_NilHistoryWriterDefaultsToNoop(t *testing.T) {
 	}
 }
 
-// --- Task 3b: InternalURL preference tests ---
-
-func TestCheckAll_InternalURLUsedForK8sService(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name:        "my-svc",
-		Namespace:   "my-ns",
-		URL:         "https://my-svc.example.com",
-		InternalURL: "http://my-svc.my-ns.svc.cluster.local:8080",
-		Status:      state.StatusUnknown,
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"http://my-svc.my-ns.svc.cluster.local:8080": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("my-ns", "my-svc")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q when probing InternalURL, got %q", state.StatusHealthy, svc.Status)
-	}
-
-	// Verify the internal URL was probed, not the external URL
-	reqs := client.getCapturedRequests()
-	if len(reqs) != 1 {
-		t.Fatalf("expected 1 request, got %d", len(reqs))
-	}
-	if reqs[0].url != "http://my-svc.my-ns.svc.cluster.local:8080" {
-		t.Errorf("expected probe to InternalURL, got %q", reqs[0].url)
-	}
-}
-
-func TestCheckAll_HealthURLOverridesInternalURL(t *testing.T) {
-	store := state.NewStore()
-	store.AddOrUpdate(state.Service{
-		Name:        "my-svc",
-		Namespace:   "my-ns",
-		URL:         "https://my-svc.example.com",
-		InternalURL: "http://my-svc.my-ns.svc.cluster.local:8080",
-		HealthURL:   "https://custom-health.example.com/status",
-		Status:      state.StatusUnknown,
-	})
-
-	client := &mockHTTPProber{
-		responses: map[string]mockResponse{
-			"https://custom-health.example.com/status": {statusCode: 200, body: "OK"},
-		},
-	}
-
-	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
-	checker.checkAll(context.Background())
-
-	svc, _ := store.Get("my-ns", "my-svc")
-	if svc.Status != state.StatusHealthy {
-		t.Errorf("expected %q when probing HealthURL, got %q", state.StatusHealthy, svc.Status)
-	}
-
-	reqs := client.getCapturedRequests()
-	if len(reqs) != 1 {
-		t.Fatalf("expected 1 request, got %d", len(reqs))
-	}
-	if reqs[0].url != "https://custom-health.example.com/status" {
-		t.Errorf("expected probe to HealthURL, got %q", reqs[0].url)
-	}
-}
-
-func TestCheckAll_NoInternalURLFallsBackToURL(t *testing.T) {
+func TestCheckAll_URLUsedWhenNoHealthURL(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
 		Name:      "config-svc",
@@ -906,30 +836,167 @@ func TestCheckAll_NoInternalURLFallsBackToURL(t *testing.T) {
 	}
 }
 
-func TestCheckAll_InternalURLNon2xxShowsUnhealthy(t *testing.T) {
+// --- Composite health integration tests ---
+
+type mockEndpointReader struct {
+	data map[string]*EndpointReadiness
+}
+
+func (m *mockEndpointReader) GetEndpointReadiness(namespace, name string) *EndpointReadiness {
+	return m.data[namespace+"/"+name]
+}
+
+func TestCheckAll_CompositeHealth_AuthGuardedHealthy(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
-		Name:        "my-svc",
-		Namespace:   "my-ns",
-		URL:         "https://my-svc.example.com",
-		InternalURL: "http://my-svc.my-ns.svc.cluster.local:8080",
-		Status:      state.StatusUnknown,
+		Name: "auth-svc", Namespace: "ns1", URL: "https://auth-svc.example.com",
+		Status: state.StatusUnknown,
 	})
 
 	client := &mockHTTPProber{
 		responses: map[string]mockResponse{
-			"http://my-svc.my-ns.svc.cluster.local:8080": {statusCode: 503, body: "Service Unavailable"},
+			"https://auth-svc.example.com": {statusCode: 401, body: "Unauthorized"},
+		},
+	}
+
+	er := &mockEndpointReader{
+		data: map[string]*EndpointReadiness{
+			"ns1/auth-svc": {Ready: 2, Total: 2},
 		},
 	}
 
 	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
+	checker.SetEndpointReader(er)
 	checker.checkAll(context.Background())
 
-	svc, _ := store.Get("my-ns", "my-svc")
-	if svc.Status != state.StatusUnhealthy {
-		t.Errorf("expected %q when InternalURL returns 503, got %q", state.StatusUnhealthy, svc.Status)
+	svc, _ := store.Get("ns1", "auth-svc")
+	if svc.Status != state.StatusHealthy {
+		t.Errorf("expected %q, got %q", state.StatusHealthy, svc.Status)
 	}
-	if svc.HTTPCode == nil || *svc.HTTPCode != 503 {
-		t.Errorf("expected HTTPCode 503 from internal probe, got %v", svc.HTTPCode)
+	if !svc.AuthGuarded {
+		t.Error("expected AuthGuarded=true for 401 + ready endpoints")
 	}
 }
+
+func TestCheckAll_CompositeHealth_Degraded(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "bad-svc", Namespace: "ns1", URL: "https://bad-svc.example.com",
+		Status: state.StatusUnknown,
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://bad-svc.example.com": {statusCode: 500, body: "Internal Server Error"},
+		},
+	}
+
+	er := &mockEndpointReader{
+		data: map[string]*EndpointReadiness{
+			"ns1/bad-svc": {Ready: 1, Total: 2},
+		},
+	}
+
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
+	checker.SetEndpointReader(er)
+	checker.checkAll(context.Background())
+
+	svc, _ := store.Get("ns1", "bad-svc")
+	if svc.Status != state.StatusDegraded {
+		t.Errorf("expected %q, got %q", state.StatusDegraded, svc.Status)
+	}
+	if svc.AuthGuarded {
+		t.Error("expected AuthGuarded=false for 500 + ready endpoints")
+	}
+}
+
+func TestCheckAll_CompositeHealth_NilEndpointReader(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "svc", Namespace: "ns1", URL: "https://svc.example.com",
+		Status: state.StatusUnknown,
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://svc.example.com": {statusCode: 401, body: "Unauthorized"},
+		},
+	}
+
+	// Do NOT call SetEndpointReader — endpointReader remains nil
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
+	checker.checkAll(context.Background())
+
+	svc, _ := store.Get("ns1", "svc")
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected %q (HTTP-only, no composite), got %q", state.StatusUnhealthy, svc.Status)
+	}
+	if svc.AuthGuarded {
+		t.Error("expected AuthGuarded=false when no endpoint reader")
+	}
+}
+
+func TestCheckAll_CompositeHealth_NoEndpointDataForService(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "svc", Namespace: "ns1", URL: "https://svc.example.com",
+		Status: state.StatusUnknown,
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://svc.example.com": {statusCode: 401, body: "Unauthorized"},
+		},
+	}
+
+	// Endpoint reader exists but has no data for this service
+	er := &mockEndpointReader{
+		data: map[string]*EndpointReadiness{},
+	}
+
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
+	checker.SetEndpointReader(er)
+	checker.checkAll(context.Background())
+
+	svc, _ := store.Get("ns1", "svc")
+	if svc.Status != state.StatusUnhealthy {
+		t.Errorf("expected %q (HTTP-only fallback, no endpoint data), got %q", state.StatusUnhealthy, svc.Status)
+	}
+	if svc.AuthGuarded {
+		t.Error("expected AuthGuarded=false when endpoint reader returns nil")
+	}
+}
+
+func TestCheckAll_CompositeHealth_AuthGuardedClearedWhenPodsRecover(t *testing.T) {
+	store := state.NewStore()
+	store.AddOrUpdate(state.Service{
+		Name: "svc", Namespace: "ns1", URL: "https://svc.example.com",
+		Status:      state.StatusHealthy,
+		AuthGuarded: true, // Previously auth-guarded
+	})
+
+	client := &mockHTTPProber{
+		responses: map[string]mockResponse{
+			"https://svc.example.com": {statusCode: 200, body: "OK"},
+		},
+	}
+
+	er := &mockEndpointReader{
+		data: map[string]*EndpointReadiness{
+			"ns1/svc": {Ready: 2, Total: 2},
+		},
+	}
+
+	checker := NewChecker(store, store, client, time.Hour, history.NoopWriter{}, nil)
+	checker.SetEndpointReader(er)
+	checker.checkAll(context.Background())
+
+	svc, _ := store.Get("ns1", "svc")
+	if svc.Status != state.StatusHealthy {
+		t.Errorf("expected %q, got %q", state.StatusHealthy, svc.Status)
+	}
+	if svc.AuthGuarded {
+		t.Error("expected AuthGuarded=false after pods recover and HTTP returns 200")
+	}
+}
+

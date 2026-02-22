@@ -16,6 +16,8 @@
 		const parts: { label: string; count: number; color: string }[] = [];
 		if (c.unhealthy > 0)
 			parts.push({ label: 'unhealthy', count: c.unhealthy, color: 'text-health-error' });
+		if (c.degraded > 0)
+			parts.push({ label: 'degraded', count: c.degraded, color: 'text-health-degraded' });
 		if (c.unknown > 0)
 			parts.push({ label: 'unknown', count: c.unknown, color: 'text-health-unknown' });
 		if (c.healthy > 0) parts.push({ label: 'healthy', count: c.healthy, color: 'text-health-ok' });
@@ -66,7 +68,7 @@
 	                        case 'stale':
 	                                return 'var(--color-health-error)';
 	                        case 'aging':
-	                                return 'var(--color-health-auth-blocked)';
+	                                return 'var(--color-health-warning)';
 	                        default:
 	                                return 'var(--color-subtext-0)';
 	                }
@@ -115,7 +117,7 @@
 			{/if}
 
 			{#if getHasConfigErrors()}
-				<span class="text-xs text-health-auth-blocked" title={configWarningTitle} aria-label="Config warnings">⚠</span>
+				<span class="text-xs text-health-warning" title={configWarningTitle} aria-label="Config warnings">⚠</span>
 			{/if}
 
 			{#if lastUpdatedIso && timestampText}

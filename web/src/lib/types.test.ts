@@ -4,11 +4,11 @@ import type { HealthStatus, ConnectionStatus, Service, StateEventPayload, K8sSta
 
 describe('types', () => {
 	it('HEALTH_STATUSES contains all valid status values', () => {
-		expect(HEALTH_STATUSES).toEqual(['healthy', 'unhealthy', 'unknown']);
+		expect(HEALTH_STATUSES).toEqual(['healthy', 'degraded', 'unhealthy', 'unknown']);
 	});
 
 	it('HealthStatus type aligns with HEALTH_STATUSES', () => {
-		const statuses: HealthStatus[] = ['healthy', 'unhealthy', 'unknown'];
+		const statuses: HealthStatus[] = ['healthy', 'degraded', 'unhealthy', 'unknown'];
 		expect(statuses).toEqual(HEALTH_STATUSES);
 	});
 
@@ -76,11 +76,16 @@ describe('types', () => {
 			group: 'default',
 			url: 'https://api.example.local',
 			status: 'healthy',
+			compositeStatus: 'healthy',
+			readyEndpoints: 3,
+			totalEndpoints: 5,
+			authGuarded: false,
 			httpCode: 200,
 			responseTimeMs: 42,
 			lastChecked: '2026-02-20T00:00:00Z',
 			lastStateChange: '2026-02-20T00:00:00Z',
-			errorSnippet: null
+			errorSnippet: null,
+			podDiagnostic: null
 		};
 
 		expect(service).toHaveProperty('name');
@@ -89,10 +94,15 @@ describe('types', () => {
 		expect(service).toHaveProperty('group');
 		expect(service).toHaveProperty('url');
 		expect(service).toHaveProperty('status');
+		expect(service).toHaveProperty('compositeStatus');
+		expect(service).toHaveProperty('readyEndpoints');
+		expect(service).toHaveProperty('totalEndpoints');
+		expect(service).toHaveProperty('authGuarded');
 		expect(service).toHaveProperty('httpCode');
 		expect(service).toHaveProperty('responseTimeMs');
 		expect(service).toHaveProperty('lastChecked');
 		expect(service).toHaveProperty('lastStateChange');
 		expect(service).toHaveProperty('errorSnippet');
+		expect(service).toHaveProperty('podDiagnostic');
 	});
 });

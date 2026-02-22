@@ -1,7 +1,9 @@
 package state
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -632,50 +634,6 @@ func TestSetConfigErrorsStoresAndReturnsCopies(t *testing.T) {
 	}
 }
 
-func TestServiceInternalURL(t *testing.T) {
-	store := NewStore()
-
-	svc := Service{
-		Name:        "my-svc",
-		Namespace:   "my-ns",
-		Group:       "my-ns",
-		URL:         "https://my-svc.example.com",
-		InternalURL: "http://my-svc.my-ns.svc.cluster.local:8080",
-		Status:      StatusUnknown,
-	}
-	store.AddOrUpdate(svc)
-
-	got, ok := store.Get("my-ns", "my-svc")
-	if !ok {
-		t.Fatal("expected to find service")
-	}
-	if got.InternalURL != "http://my-svc.my-ns.svc.cluster.local:8080" {
-		t.Errorf("expected InternalURL %q, got %q", "http://my-svc.my-ns.svc.cluster.local:8080", got.InternalURL)
-	}
-}
-
-func TestServiceInternalURLEmptyForConfigServices(t *testing.T) {
-	store := NewStore()
-
-	svc := Service{
-		Name:      "external-svc",
-		Namespace: "config",
-		Group:     "config",
-		URL:       "https://external.example.com",
-		Source:    SourceConfig,
-		Status:    StatusUnknown,
-	}
-	store.AddOrUpdate(svc)
-
-	got, ok := store.Get("config", "external-svc")
-	if !ok {
-		t.Fatal("expected to find service")
-	}
-	if got.InternalURL != "" {
-		t.Errorf("expected empty InternalURL for config service, got %q", got.InternalURL)
-	}
-}
-
 func TestStoreConcurrentAccess(t *testing.T) {
 	store := NewStore()
 	const goroutines = 100
@@ -814,5 +772,92 @@ func TestUpdateDeepCopiesEventPayload(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for event")
+	}
+}
+
+func TestStatusDegradedConstant(t *testing.T) {
+	if StatusDegraded != "degraded" {
+		t.Errorf("StatusDegraded = %q, want %q", StatusDegraded, "degraded")
+	}
+}
+
+func TestServiceNewFieldsJSONSerialization(t *testing.T) {
+	ready := 3
+	total := 5
+	svc := Service{
+		Name:            "web",
+		Namespace:       "production",
+		URL:             "https://web.example.com",
+		Status:          StatusHealthy,
+		CompositeStatus: StatusDegraded,
+		ReadyEndpoints:  &ready,
+		TotalEndpoints:  &total,
+		AuthGuarded:     true,
+	}
+
+	data, err := json.Marshal(svc)
+	if err != nil {
+		t.Fatalf("json.Marshal error: %v", err)
+	}
+	jsonStr := string(data)
+
+	if !strings.Contains(jsonStr, `"compositeStatus":"degraded"`) {
+		t.Errorf("expected compositeStatus in JSON, got: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"readyEndpoints":3`) {
+		t.Errorf("expected readyEndpoints in JSON, got: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"totalEndpoints":5`) {
+		t.Errorf("expected totalEndpoints in JSON, got: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"authGuarded":true`) {
+		t.Errorf("expected authGuarded in JSON, got: %s", jsonStr)
+	}
+}
+
+func TestServiceNullEndpointsForConfigServices(t *testing.T) {
+	svc := Service{
+		Name:            "custom-app",
+		Namespace:       "config",
+		URL:             "https://custom.example.com",
+		Source:          SourceConfig,
+		Status:          StatusHealthy,
+		CompositeStatus: StatusHealthy,
+	}
+
+	data, err := json.Marshal(svc)
+	if err != nil {
+		t.Fatalf("json.Marshal error: %v", err)
+	}
+	jsonStr := string(data)
+
+	if !strings.Contains(jsonStr, `"readyEndpoints":null`) {
+		t.Errorf("expected readyEndpoints:null for config service, got: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"totalEndpoints":null`) {
+		t.Errorf("expected totalEndpoints:null for config service, got: %s", jsonStr)
+	}
+}
+
+func TestDeepCopyNewPointerFields(t *testing.T) {
+	ready := 3
+	total := 5
+	svc := Service{
+		Name:           "test",
+		Namespace:      "default",
+		ReadyEndpoints: &ready,
+		TotalEndpoints: &total,
+	}
+
+	cp := svc.DeepCopy()
+
+	*svc.ReadyEndpoints = 99
+	*svc.TotalEndpoints = 99
+
+	if *cp.ReadyEndpoints != 3 {
+		t.Errorf("DeepCopy ReadyEndpoints not independent: got %d", *cp.ReadyEndpoints)
+	}
+	if *cp.TotalEndpoints != 5 {
+		t.Errorf("DeepCopy TotalEndpoints not independent: got %d", *cp.TotalEndpoints)
 	}
 }

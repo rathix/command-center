@@ -32,7 +32,8 @@
   /* Semantic Health Colors */
   --color-health-ok: #a6e3a1;
   --color-health-error: #f38ba8;
-  --color-health-auth-blocked: #f9e2af;
+  --color-health-degraded: #f9e2af;
+  --color-health-warning: #f9e2af;
   --color-health-unknown: #7f849c;
 
   /* Accent Colors */

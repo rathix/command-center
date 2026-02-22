@@ -28,19 +28,21 @@
 
 	const responseTextColorMap: Record<HealthStatus, string> = {
 		healthy: 'text-subtext-0',
+		degraded: 'text-health-degraded',
 		unhealthy: 'text-health-error',
 		unknown: 'text-health-unknown'
 	};
 
 	const tintColorMap: Record<HealthStatus, string | undefined> = {
 		healthy: undefined,
+		degraded: 'rgba(249, 226, 175, 0.03)',
 		unhealthy: 'rgba(243, 139, 168, 0.05)',
 		unknown: undefined
 	};
 
 	const responseDisplay = $derived.by(() => {
 		if (
-			service.status === 'unknown' ||
+			service.compositeStatus === 'unknown' ||
 			service.httpCode === null ||
 			service.responseTimeMs === null
 		) {
@@ -49,8 +51,8 @@
 		return `${service.httpCode} \u00B7 ${service.responseTimeMs}ms`;
 	});
 
-	const responseTextColor = $derived.by(() => responseTextColorMap[service.status]);
-	const tintColor = $derived.by(() => tintColorMap[service.status]);
+	const responseTextColor = $derived.by(() => responseTextColorMap[service.compositeStatus]);
+	const tintColor = $derived.by(() => tintColorMap[service.compositeStatus]);
 
 	const tooltipId = $derived.by(() => `tooltip-${service.namespace}-${service.name}`);
 
@@ -130,7 +132,7 @@
 			class="flex h-full cursor-pointer items-center gap-3 px-4
 				focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-lavender"
 		>
-			<TuiDot status={service.status} />
+			<TuiDot status={service.compositeStatus} />
 			<ServiceIcon name={iconName} />
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url}</span>
@@ -138,6 +140,9 @@
 				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⎈</span>
 			{:else if service.source === 'config'}
 				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⌂</span>
+			{/if}
+			{#if service.authGuarded}
+				<span class="text-subtext-0 text-[11px]" aria-hidden="true">🛡</span>
 			{/if}
 			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
 		</a>
@@ -147,7 +152,7 @@
 			class="flex h-full items-center gap-3 px-4 opacity-70"
 			title="Invalid URL"
 		>
-			<TuiDot status={service.status} />
+			<TuiDot status={service.compositeStatus} />
 			<ServiceIcon name={iconName} />
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url} (invalid)</span>
@@ -155,6 +160,9 @@
 				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⎈</span>
 			{:else if service.source === 'config'}
 				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⌂</span>
+			{/if}
+			{#if service.authGuarded}
+				<span class="text-subtext-0 text-[11px]" aria-hidden="true">🛡</span>
 			{/if}
 			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
 		</div>

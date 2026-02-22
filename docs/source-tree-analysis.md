@@ -20,7 +20,7 @@ command-center/
 │   │   ├── loader.go            # YAML config loader with hot-reload watcher
 │   │   └── loader_test.go
 │   ├── health/
-│   │   ├── checker.go           # HTTP health checker with InternalURL support
+│   │   ├── checker.go           # HTTP health checker
 │   │   └── checker_test.go
 │   ├── history/
 │   │   ├── writer.go            # JSONL health history persistence (write, read, prune)

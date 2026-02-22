@@ -76,4 +76,4 @@ Browser ◄──mTLS──► Go Server ◄──► Kubernetes API
 | Epic 5 | Service grouping & icons (group headers, service icons, grouped list) | Complete |
 | Epic 6 | Custom services & configuration (YAML config, file watcher, hot-reload) | Complete |
 | Epic 7 | Health history persistence (JSONL writer/reader/pruner, startup restoration) | Complete |
-| Epic 8 | Internal health checks (InternalURL extraction from K8s backends, cluster-internal health probing) | Complete |
+| Epic 8 | Internal health checks (cluster-internal health probing) | Reverted in Epic 10 |

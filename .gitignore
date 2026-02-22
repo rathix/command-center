@@ -23,5 +23,9 @@ web/.svelte-kit/
 *.pem
 /certs/
 
+# Docker Compose user config (not .example)
+docker-compose.yaml
+docker-compose.yml
+
 # OS artifacts
 .DS_Store

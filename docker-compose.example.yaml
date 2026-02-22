@@ -1,0 +1,42 @@
+# Docker Compose example for Command Center
+# Copy to docker-compose.yaml and update paths before use.
+#
+# Usage:
+#   cp docker-compose.example.yaml docker-compose.yaml
+#   # Edit docker-compose.yaml — update volume paths
+#   docker compose up -d
+
+services:
+  command-center:
+    image: ghcr.io/rathix/command-center:latest
+    container_name: command-center
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+
+    # --- Security hardening ---
+    read_only: true                          # AC2: read-only root filesystem
+    security_opt:
+      - no-new-privileges:true               # AC3: no privilege escalation
+    cap_drop:
+      - ALL                                  # AC3: drop all Linux capabilities
+    user: "65532:65532"                      # nonroot user (matches Dockerfile)
+
+    volumes:
+      # Required: Kubernetes API access (read-only)
+      - /path/to/kubeconfig:/data/kubeconfig:ro
+
+      # Optional: YAML config for custom services, groups, overrides (read-only)
+      # - /path/to/config.yaml:/data/config.yaml:ro
+
+      # Required: Writable data volume for auto-generated certs and health history
+      - command-center-data:/data
+
+    environment:
+      # Override kubeconfig path to match the mount point
+      - KUBECONFIG=/data/kubeconfig
+      # Uncomment if using config file:
+      # - CONFIG_FILE=/data/config.yaml
+
+volumes:
+  command-center-data:

@@ -25,6 +25,7 @@ type StateUpdater interface {
 	AddOrUpdate(svc state.Service)
 	Remove(namespace, name string)
 	SetK8sConnected(connected bool)
+	Update(namespace, name string, fn func(*state.Service))
 }
 
 // IngressLister defines the subset of the Kubernetes Ingress lister
@@ -36,12 +37,13 @@ type IngressLister interface {
 
 // Watcher watches Kubernetes Ingress resources and updates the state store.
 type Watcher struct {
-	factory      informers.SharedInformerFactory
-	lister       IngressLister
-	updater      StateUpdater
-	logger       *slog.Logger
-	k8sConnected atomic.Bool
-	syncedCh     chan struct{}
+	factory              informers.SharedInformerFactory
+	lister               IngressLister
+	updater              StateUpdater
+	logger               *slog.Logger
+	k8sConnected         atomic.Bool
+	syncedCh             chan struct{}
+	endpointSliceWatcher *EndpointSliceWatcher
 }
 
 // NewWatcher creates a Watcher from a kubeconfig path. Supports both
@@ -49,12 +51,12 @@ type Watcher struct {
 func NewWatcher(kubeconfigPath string, updater StateUpdater, logger *slog.Logger) (*Watcher, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("k8s watcher: build config: %w", err)
+		return nil, fmt.Errorf("k8s watcher: failed to build configuration from kubeconfig")
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf("k8s watcher: create clientset: %w", err)
+		return nil, fmt.Errorf("k8s watcher: failed to create Kubernetes client")
 	}
 
 	return NewWatcherWithClient(clientset, updater, logger), nil
@@ -66,12 +68,15 @@ func NewWatcherWithClient(clientset kubernetes.Interface, updater StateUpdater, 
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 	ingressInformer := factory.Networking().V1().Ingresses()
 
+	esWatcher := NewEndpointSliceWatcher(clientset, updater, logger)
+
 	w := &Watcher{
-		factory:  factory,
-		lister:   ingressInformer.Lister(),
-		updater:  updater,
-		logger:   logger,
-		syncedCh: make(chan struct{}),
+		factory:              factory,
+		lister:               ingressInformer.Lister(),
+		updater:              updater,
+		logger:               logger,
+		syncedCh:             make(chan struct{}),
+		endpointSliceWatcher: esWatcher,
 	}
 
 	if err := ingressInformer.Informer().SetWatchErrorHandler(func(r *cache.Reflector, err error) {
@@ -115,6 +120,7 @@ func (w *Watcher) Run(ctx context.Context) {
 	}
 
 	<-ctx.Done()
+	w.endpointSliceWatcher.StopAll()
 	w.factory.Shutdown()
 	w.logger.Info("Kubernetes Ingress watcher stopped")
 }
@@ -159,17 +165,20 @@ func (w *Watcher) onAdd(obj interface{}) {
 	                Namespace:           ingress.Namespace,
 	                Group:               ingress.Namespace,
 	                URL:                 url,
-	                InternalURL:         extractInternalURL(ingress),
 	                Source:              state.SourceKubernetes,
 	                Status:              state.StatusUnknown,
+	                CompositeStatus:     state.StatusUnknown,
 	        }
 	        w.updater.AddOrUpdate(svc)
 	        w.logger.Info("service discovered",
 	                "namespace", ingress.Namespace,
 	                "name", ingress.Name,
 	                "url", url)
+	        if svcName, _, ok := extractBackendServiceName(ingress); ok {
+	                w.endpointSliceWatcher.Watch(ingress.Name, ingress.Namespace, svcName)
+	        }
 	}
-	
+
 	func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 	        w.markK8sConnected()
 	
@@ -199,16 +208,21 @@ func (w *Watcher) onAdd(obj interface{}) {
 	                Namespace:           ingress.Namespace,
 	                Group:               ingress.Namespace,
 	                URL:                 url,
-	                InternalURL:         extractInternalURL(ingress),
 	                Source:              state.SourceKubernetes,
 	                Status:              status,
+	                CompositeStatus:     status,
 	        }
 	        w.updater.AddOrUpdate(svc)
 	        w.logger.Info("service updated",
 	                "namespace", ingress.Namespace,
 	                "name", ingress.Name,
 	                "url", url)
+	        if svcName, _, ok := extractBackendServiceName(ingress); ok {
+	                w.endpointSliceWatcher.Unwatch(ingress.Name, ingress.Namespace)
+	                w.endpointSliceWatcher.Watch(ingress.Name, ingress.Namespace, svcName)
+	        }
 	}
+
 	func (w *Watcher) onDelete(obj interface{}) {
 	w.markK8sConnected()
 
@@ -225,6 +239,7 @@ func (w *Watcher) onAdd(obj interface{}) {
 		}
 	}
 
+	w.endpointSliceWatcher.Unwatch(ingress.Name, ingress.Namespace)
 	w.updater.Remove(ingress.Namespace, ingress.Name)
 	w.logger.Info("service removed",
 		"namespace", ingress.Namespace,
@@ -276,25 +291,18 @@ func extractServiceURL(ingress *networkingv1.Ingress) (string, string, bool) {
 	return scheme + "://" + host, host, true
 }
 
-// extractInternalURL builds a cluster-internal DNS URL from the Ingress backend
-// service reference: http://svc-name.namespace.svc.cluster.local:port.
-// Returns empty string if the Ingress has no backend service or no numeric port.
-func extractInternalURL(ingress *networkingv1.Ingress) string {
+// extractBackendServiceName returns (serviceName, namespace, ok) from an Ingress.
+func extractBackendServiceName(ingress *networkingv1.Ingress) (string, string, bool) {
 	if len(ingress.Spec.Rules) == 0 {
-		return ""
+		return "", "", false
 	}
 	rule := ingress.Spec.Rules[0]
 	if rule.HTTP == nil || len(rule.HTTP.Paths) == 0 {
-		return ""
+		return "", "", false
 	}
 	backend := rule.HTTP.Paths[0].Backend
-	if backend.Service == nil {
-		return ""
+	if backend.Service == nil || backend.Service.Name == "" {
+		return "", "", false
 	}
-	name := backend.Service.Name
-	port := backend.Service.Port.Number
-	if name == "" || port == 0 {
-		return ""
-	}
-	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d", name, ingress.Namespace, port)
+	return backend.Service.Name, ingress.Namespace, true
 }

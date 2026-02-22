@@ -83,11 +83,16 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 		group: 'default',
 		url: 'https://test.example.com',
 		status: 'unknown',
+		compositeStatus: overrides.compositeStatus ?? overrides.status ?? 'unknown',
+		readyEndpoints: null,
+		totalEndpoints: null,
+		authGuarded: false,
 		httpCode: null,
 		responseTimeMs: null,
 		lastChecked: null,
 		lastStateChange: null,
 		errorSnippet: null,
+		podDiagnostic: null,
 		...overrides
 	};
 }

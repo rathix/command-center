@@ -3,8 +3,9 @@ import { DEFAULT_HEALTH_CHECK_INTERVAL_MS } from './types';
 
 const statusPriority: Record<HealthStatus, number> = {
 	unhealthy: 0,
-	unknown: 1,
-	healthy: 2
+	degraded: 1,
+	unknown: 2,
+	healthy: 3
 };
 
 // Internal reactive state
@@ -87,12 +88,13 @@ const serviceGroups = $derived.by<ServiceGroup[]>(() => {
 
 		const groupCounts = {
 			healthy: svcs.filter((s) => s.status === 'healthy').length,
+			degraded: svcs.filter((s) => s.status === 'degraded').length,
 			unhealthy: svcs.filter((s) => s.status === 'unhealthy').length,
 			unknown: svcs.filter((s) => s.status === 'unknown').length
 		};
 
 		const hasProblems =
-			groupCounts.unhealthy > 0 || groupCounts.unknown > 0;
+			groupCounts.unhealthy > 0 || groupCounts.degraded > 0 || groupCounts.unknown > 0;
 
 		const override = groupCollapseOverrides.get(name);
 		const expanded = override !== undefined ? override : hasProblems;
@@ -104,6 +106,11 @@ const serviceGroups = $derived.by<ServiceGroup[]>(() => {
 		// Tier 1: Any unhealthy services? Sort by count descending
 		if (a.counts.unhealthy !== b.counts.unhealthy) {
 			return b.counts.unhealthy - a.counts.unhealthy;
+		}
+
+		// Tier 1.5: Any degraded services? Sort by count descending
+		if (a.counts.degraded !== b.counts.degraded) {
+			return b.counts.degraded - a.counts.degraded;
 		}
 
 		// Tier 2: Any other problems (unknown)?
@@ -123,6 +130,7 @@ const counts = $derived.by(() => {
 	return {
 		total: services.size,
 		healthy: vals.filter((s) => s.status === 'healthy').length,
+		degraded: vals.filter((s) => s.status === 'degraded').length,
 		unhealthy: vals.filter((s) => s.status === 'unhealthy').length,
 		unknown: vals.filter((s) => s.status === 'unknown').length
 	};
@@ -130,7 +138,7 @@ const counts = $derived.by(() => {
 
 const hasProblems = $derived.by(() => {
 	return [...services.values()].some(
-		(s) => s.status === 'unhealthy' || s.status === 'unknown'
+		(s) => s.status === 'unhealthy' || s.status === 'degraded' || s.status === 'unknown'
 	);
 });
 

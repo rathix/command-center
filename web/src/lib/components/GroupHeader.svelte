@@ -11,6 +11,8 @@
 		const parts: { count: number; label: string; colorClass: string }[] = [];
 		if (group.counts.healthy > 0)
 			parts.push({ count: group.counts.healthy, label: 'healthy', colorClass: 'text-health-ok' });
+		if (group.counts.degraded > 0)
+			parts.push({ count: group.counts.degraded, label: 'degraded', colorClass: 'text-health-degraded' });
 		if (group.counts.unhealthy > 0)
 			parts.push({ count: group.counts.unhealthy, label: 'unhealthy', colorClass: 'text-health-error' });
 		if (group.counts.unknown > 0)

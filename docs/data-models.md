@@ -183,12 +183,12 @@ Kubernetes API                  Config File (YAML)
     |                               |
     v (Ingress events)              v (custom services, overrides, groups)
 K8s Watcher                     Config Loader
-    |  (extracts InternalURL)       |
+    |                               |
     +--------> State Store <--------+
                   ^    |
                   |    |
    Health Checker-+    +---> SSE Broker ---> Frontend Store ($state) ---> UI
-   (HealthURL > InternalURL > URL)
+   (HealthURL > URL)
 
    History Writer <--- State Store (transitions)
        |

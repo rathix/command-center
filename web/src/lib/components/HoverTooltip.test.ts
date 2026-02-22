@@ -12,11 +12,16 @@ function makeService(overrides: Partial<Service> = {}): Service {
 		group: 'monitoring',
 		url: 'https://grafana.example.com',
 		status: 'healthy',
+		compositeStatus: overrides.compositeStatus ?? overrides.status ?? 'healthy',
+		readyEndpoints: null,
+		totalEndpoints: null,
+		authGuarded: false,
 		httpCode: 200,
 		responseTimeMs: 142,
 		lastChecked: '2026-02-20T10:00:00Z',
 		lastStateChange: '2026-02-20T08:00:00Z',
 		errorSnippet: null,
+		podDiagnostic: null,
 		...overrides
 	};
 }
@@ -252,5 +257,237 @@ describe('HoverTooltip', () => {
 		});
 		expect(screen.getByText(/unknown for unknown/)).toBeInTheDocument();
 		expect(screen.getByRole('tooltip')).toBeInTheDocument();
+	});
+
+	it('shows pod readiness line for K8s service', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ readyEndpoints: 3, totalEndpoints: 3 }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('Pods: 3/3 ready')).toBeInTheDocument();
+	});
+
+	it('shows partial pod readiness', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ readyEndpoints: 1, totalEndpoints: 3 }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('Pods: 1/3 ready')).toBeInTheDocument();
+	});
+
+	it('does not show pod readiness for custom service (null endpoints)', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ readyEndpoints: null, totalEndpoints: null }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/Pods:/)).not.toBeInTheDocument();
+	});
+
+	it('shows auth-guarded line when authGuarded is true', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ authGuarded: true }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('Auth-guarded (forward auth)')).toBeInTheDocument();
+	});
+
+	it('does not show auth-guarded line when authGuarded is false', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ authGuarded: false }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/Auth-guarded/)).not.toBeInTheDocument();
+	});
+
+	it('shows degraded hint for degraded service', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ status: 'degraded', compositeStatus: 'degraded' }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText(/Pods are ready but HTTP probe failed/)).toBeInTheDocument();
+	});
+
+	it('degraded hint has text-health-degraded class', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ status: 'degraded', compositeStatus: 'degraded' }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText(/Pods are ready but HTTP probe failed/)).toHaveClass('text-health-degraded');
+	});
+
+	it('does not show degraded hint for healthy service', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ status: 'healthy', compositeStatus: 'healthy' }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/Pods are ready/)).not.toBeInTheDocument();
+	});
+
+	it('degraded service shows text-health-degraded color on state duration line', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ status: 'degraded', compositeStatus: 'degraded' }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		const durationEl = screen.getByText(/degraded for/);
+		expect(durationEl).toHaveClass('text-health-degraded');
+	});
+});
+
+describe('HoverTooltip pod diagnostics', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-02-20T10:00:12Z'));
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('shows diagnostic reason for unhealthy K8s service', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'unhealthy',
+					source: 'kubernetes',
+					podDiagnostic: { reason: 'CrashLoopBackOff', restartCount: 5 }
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('CrashLoopBackOff · 5 restarts')).toBeInTheDocument();
+	});
+
+	it('shows restart count only when no reason', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'unhealthy',
+					source: 'kubernetes',
+					podDiagnostic: { reason: null, restartCount: 3 }
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('3 restarts')).toBeInTheDocument();
+	});
+
+	it('shows singular restart for count of 1', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'unhealthy',
+					source: 'kubernetes',
+					podDiagnostic: { reason: null, restartCount: 1 }
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText('1 restart')).toBeInTheDocument();
+	});
+
+	it('shows no pod diag line when podDiagnostic is null', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'unhealthy',
+					source: 'kubernetes',
+					podDiagnostic: null
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/restart/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/CrashLoopBackOff/)).not.toBeInTheDocument();
+	});
+
+	it('shows no pod diag line for config source services', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'unhealthy',
+					source: 'config',
+					podDiagnostic: null
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/restart/)).not.toBeInTheDocument();
+	});
+
+	it('shows no pod diag line when reason is null and restartCount is 0', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'unhealthy',
+					source: 'kubernetes',
+					podDiagnostic: { reason: null, restartCount: 0 }
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/restart/)).not.toBeInTheDocument();
 	});
 });
