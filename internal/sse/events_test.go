@@ -99,7 +99,6 @@ func TestDiscoveredEventPayloadFromServiceAllFields(t *testing.T) {
 		Namespace:       "production",
 		URL:             "https://web.example.com",
 		Status:          state.StatusHealthy,
-		CompositeStatus: state.StatusHealthy,
 		ReadyEndpoints:  &ready,
 		TotalEndpoints:  &total,
 		AuthGuarded:     true,
@@ -126,9 +125,6 @@ func TestDiscoveredEventPayloadFromServiceAllFields(t *testing.T) {
 	}
 	if payload.Status != state.StatusHealthy {
 		t.Errorf("Status = %q, want %q", payload.Status, state.StatusHealthy)
-	}
-	if payload.CompositeStatus != state.StatusHealthy {
-		t.Errorf("CompositeStatus = %q, want %q", payload.CompositeStatus, state.StatusHealthy)
 	}
 	if payload.ReadyEndpoints == nil || *payload.ReadyEndpoints != 3 {
 		t.Errorf("ReadyEndpoints = %v, want 3", payload.ReadyEndpoints)

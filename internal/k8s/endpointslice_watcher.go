@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,155 +23,199 @@ type EndpointStateUpdater interface {
 	Update(namespace, name string, fn func(*state.Service))
 }
 
-// serviceWatch tracks a single per-service EndpointSlice informer.
-type serviceWatch struct {
-	factory     informers.SharedInformerFactory
-	cancel      context.CancelFunc
-	serviceName string
-	namespace   string
-	ingressName string
-}
-
-// EndpointSliceWatcher manages per-service EndpointSlice informers.
+// EndpointSliceWatcher manages a single cluster-wide EndpointSlice informer
+// and updates state for all registered services.
 type EndpointSliceWatcher struct {
 	clientset      kubernetes.Interface
 	updater        EndpointStateUpdater
 	logger         *slog.Logger
 	podDiagQuerier *PodDiagnosticQuerier
-	mu             sync.Mutex
-	watches        map[string]*serviceWatch // key: "namespace/ingressName"
+	
+	factory        informers.SharedInformerFactory
+	informer       cache.SharedIndexInformer
+	cancel         context.CancelFunc
+
+	mu             sync.RWMutex
+	// serviceToIngress maps "namespace/serviceName" to a set of ingress names
+	serviceToIngress map[string]map[string]struct{}
 }
 
-// NewEndpointSliceWatcher creates a new EndpointSliceWatcher.
+// NewEndpointSliceWatcher creates a new EndpointSliceWatcher with a cluster-wide informer.
 func NewEndpointSliceWatcher(clientset kubernetes.Interface, updater EndpointStateUpdater, logger *slog.Logger) *EndpointSliceWatcher {
-	return &EndpointSliceWatcher{
-		clientset:      clientset,
-		updater:        updater,
-		logger:         logger,
-		podDiagQuerier: NewPodDiagnosticQuerier(clientset, logger),
-		watches:        make(map[string]*serviceWatch),
-	}
+	return NewEndpointSliceWatcherWithTweak(clientset, updater, logger, nil)
 }
 
-// Watch starts an EndpointSlice informer for the given backend service,
-// keyed by the Ingress name (since the state store keys by Ingress).
-func (e *EndpointSliceWatcher) Watch(ingressName, namespace, backendServiceName string) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	key := namespace + "/" + ingressName
-
-	// If already watching, skip.
-	if _, exists := e.watches[key]; exists {
-		return
-	}
-
+// NewEndpointSliceWatcherWithTweak allows providing a tweak function for the informer factory.
+func NewEndpointSliceWatcherWithTweak(clientset kubernetes.Interface, updater EndpointStateUpdater, logger *slog.Logger, tweak func(*metav1.ListOptions)) *EndpointSliceWatcher {
 	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Cluster-wide informer factory
+	factory := informers.NewSharedInformerFactoryWithOptions(clientset, 0, informers.WithTweakListOptions(tweak))
+	informer := factory.Discovery().V1().EndpointSlices().Informer()
 
-	// Create a namespace-scoped factory with a label selector for the specific service.
-	tweakOpts := informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-		opts.LabelSelector = "kubernetes.io/service-name=" + backendServiceName
-	})
-	factory := informers.NewSharedInformerFactoryWithOptions(
-		e.clientset, 0,
-		informers.WithNamespace(namespace),
-		tweakOpts,
-	)
-
-	sw := &serviceWatch{
-		factory:     factory,
-		cancel:      cancel,
-		serviceName: backendServiceName,
-		namespace:   namespace,
-		ingressName: ingressName,
+	e := &EndpointSliceWatcher{
+		clientset:        clientset,
+		updater:          updater,
+		logger:           logger,
+		podDiagQuerier:   NewPodDiagnosticQuerier(clientset, logger),
+		factory:          factory,
+		informer:         informer,
+		cancel:           cancel,
+		serviceToIngress: make(map[string]map[string]struct{}),
 	}
 
-	esInformer := factory.Discovery().V1().EndpointSlices()
-	esInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(_ interface{}) { e.onEndpointSliceEvent(sw) },
-		UpdateFunc: func(_, _ interface{}) { e.onEndpointSliceEvent(sw) },
-		DeleteFunc: func(_ interface{}) { e.onEndpointSliceEvent(sw) },
+	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    e.onAdd,
+		UpdateFunc: e.onUpdate,
+		DeleteFunc: e.onDelete,
 	})
-
-	e.watches[key] = sw
 
 	factory.Start(ctx.Done())
-
-	e.logger.Info("started EndpointSlice watch",
-		"ingress", ingressName,
-		"namespace", namespace,
-		"backendService", backendServiceName)
+	
+	return e
 }
 
-// Unwatch stops and removes an EndpointSlice watch for the given Ingress.
-func (e *EndpointSliceWatcher) Unwatch(ingressName, namespace string) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+func (e *EndpointSliceWatcher) onAdd(obj interface{}) {
+	e.handleEvent(obj)
+}
 
-	key := namespace + "/" + ingressName
-	sw, exists := e.watches[key]
-	if !exists {
+func (e *EndpointSliceWatcher) onUpdate(_, newObj interface{}) {
+	e.handleEvent(newObj)
+}
+
+func (e *EndpointSliceWatcher) onDelete(obj interface{}) {
+	e.handleEvent(obj)
+}
+
+func (e *EndpointSliceWatcher) handleEvent(obj interface{}) {
+	slice, ok := obj.(*discoveryv1.EndpointSlice)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			return
+		}
+		slice, ok = tombstone.Obj.(*discoveryv1.EndpointSlice)
+		if !ok {
+			return
+		}
+	}
+
+	serviceName := slice.Labels["kubernetes.io/service-name"]
+	if serviceName == "" {
 		return
 	}
 
-	sw.cancel()
-	sw.factory.Shutdown()
-	delete(e.watches, key)
-
-	e.logger.Info("stopped EndpointSlice watch",
-		"ingress", ingressName,
-		"namespace", namespace)
+	e.triggerUpdate(slice.Namespace, serviceName)
 }
 
-// StopAll cancels and shuts down all active EndpointSlice watches.
-func (e *EndpointSliceWatcher) StopAll() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	for key, sw := range e.watches {
-		sw.cancel()
-		sw.factory.Shutdown()
-		delete(e.watches, key)
+func (e *EndpointSliceWatcher) triggerUpdate(namespace, serviceName string) {
+	e.mu.RLock()
+	ingresses, ok := e.serviceToIngress[namespace+"/"+serviceName]
+	if !ok || len(ingresses) == 0 {
+		e.mu.RUnlock()
+		return
 	}
 
-	e.logger.Info("stopped all EndpointSlice watches")
-}
+	// Copy ingress names to avoid holding lock during update
+	targets := make([]string, 0, len(ingresses))
+	for name := range ingresses {
+		targets = append(targets, name)
+	}
+	e.mu.RUnlock()
 
-// onEndpointSliceEvent is called whenever an EndpointSlice is added, updated, or deleted.
-// It re-aggregates readiness and updates the state store.
-func (e *EndpointSliceWatcher) onEndpointSliceEvent(sw *serviceWatch) {
-	lister := sw.factory.Discovery().V1().EndpointSlices().Lister()
-	slices, err := lister.EndpointSlices(sw.namespace).List(labels.Everything())
+	// List all slices for this service to aggregate readiness
+	lister := e.factory.Discovery().V1().EndpointSlices().Lister()
+	selector := labels.SelectorFromSet(labels.Set{"kubernetes.io/service-name": serviceName})
+	slices, err := lister.EndpointSlices(namespace).List(selector)
 	if err != nil {
-		e.logger.Warn("failed to list EndpointSlices",
-			"namespace", sw.namespace,
-			"service", sw.serviceName,
-			"error", err)
+		e.logger.Warn("failed to list EndpointSlices for update", "namespace", namespace, "service", serviceName, "error", err)
 		return
 	}
 
 	ready, total := aggregateEndpointReadiness(slices)
 	notReadyPods := extractNotReadyPodNames(slices)
 
-	e.updater.Update(sw.namespace, sw.ingressName, func(svc *state.Service) {
-		svc.ReadyEndpoints = &ready
-		svc.TotalEndpoints = &total
-		if len(notReadyPods) == 0 {
-			// Clear stale diagnostics once all endpoints are healthy (or no data remains).
-			svc.PodDiagnostic = nil
+	for _, ingressName := range targets {
+		e.updater.Update(namespace, ingressName, func(svc *state.Service) {
+			svc.ReadyEndpoints = &ready
+			svc.TotalEndpoints = &total
+			// Only clear pod diagnostics if the service is fully ready.
+			// This prevents clearing diagnostics during informer sync/transient states.
+			if len(notReadyPods) == 0 && ready == total && total > 0 {
+				svc.PodDiagnostic = nil
+			}
+		})
+
+		if len(notReadyPods) > 0 {
+			go e.queryAndStorePodDiagnostics(namespace, ingressName, notReadyPods)
 		}
-	})
-
-	if len(notReadyPods) == 0 || e.podDiagQuerier == nil {
-		return
 	}
+}
 
-	// Pod diagnostic queries should not block EndpointSlice event handling.
-	go e.queryAndStorePodDiagnostics(sw.namespace, sw.ingressName, notReadyPods)
+// Watch registers an interest in EndpointSlices for the given backend service.
+func (e *EndpointSliceWatcher) Watch(ingressName, namespace, backendServiceName string) {
+	e.mu.Lock()
+	key := namespace + "/" + backendServiceName
+	if _, ok := e.serviceToIngress[key]; !ok {
+		e.serviceToIngress[key] = make(map[string]struct{})
+	}
+	e.serviceToIngress[key][ingressName] = struct{}{}
+	e.mu.Unlock()
+
+	e.logger.Info("started EndpointSlice watch",
+		"ingress", ingressName,
+		"namespace", namespace,
+		"backendService", backendServiceName)
+
+	// Trigger immediate update to populate initial readiness if informer is already synced
+	e.triggerUpdate(namespace, backendServiceName)
+}
+
+// Unwatch removes registration for the given Ingress.
+func (e *EndpointSliceWatcher) Unwatch(ingressName, namespace string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// We don't know the serviceName here, so we must scan.
+	// This is infrequent (ingress delete/update).
+	for key, ingresses := range e.serviceToIngress {
+		if strings.HasPrefix(key, namespace+"/") {
+			if _, ok := ingresses[ingressName]; ok {
+				delete(ingresses, ingressName)
+				if len(ingresses) == 0 {
+					delete(e.serviceToIngress, key)
+				}
+				e.logger.Info("stopped EndpointSlice watch", "ingress", ingressName, "namespace", namespace)
+				return
+			}
+		}
+	}
+}
+
+// StopAll shuts down the informer factory.
+func (e *EndpointSliceWatcher) StopAll() {
+	e.cancel()
+	e.factory.Shutdown()
+	
+	e.mu.Lock()
+	e.serviceToIngress = make(map[string]map[string]struct{})
+	e.mu.Unlock()
+
+	e.logger.Info("stopped all EndpointSlice watches")
+}
+
+// WaitForSync waits for the internal informer to sync.
+func (e *EndpointSliceWatcher) WaitForSync(ctx context.Context) bool {
+	syncStatus := e.factory.WaitForCacheSync(ctx.Done())
+	for _, synced := range syncStatus {
+		if !synced {
+			return false
+		}
+	}
+	return len(syncStatus) > 0
 }
 
 // aggregateEndpointReadiness counts ready and total endpoints across all slices.
-// A nil Ready condition is treated as not ready.
 func aggregateEndpointReadiness(slices []*discoveryv1.EndpointSlice) (ready, total int) {
 	for _, slice := range slices {
 		for _, ep := range slice.Endpoints {
@@ -207,6 +252,7 @@ func extractNotReadyPodNames(slices []*discoveryv1.EndpointSlice) []string {
 	return names
 }
 
+// queryAndStorePodDiagnostics ...
 func (e *EndpointSliceWatcher) queryAndStorePodDiagnostics(namespace, ingressName string, podNames []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -215,4 +261,12 @@ func (e *EndpointSliceWatcher) queryAndStorePodDiagnostics(namespace, ingressNam
 	e.updater.Update(namespace, ingressName, func(svc *state.Service) {
 		svc.PodDiagnostic = diag
 	})
+}
+
+// RegisteredServiceCount returns the number of services being watched.
+// Used for internal testing.
+func (e *EndpointSliceWatcher) RegisteredServiceCount() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return len(e.serviceToIngress)
 }

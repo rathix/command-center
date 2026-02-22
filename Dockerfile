@@ -15,7 +15,6 @@ RUN go mod download
 COPY . .
 COPY --from=frontend /app/web/build ./web/build
 RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${VERSION}" -o /command-center ./cmd/command-center
-RUN mkdir -p /data && touch /data/.keep
 
 # Stage 3: Final distroless image
 FROM gcr.io/distroless/static-debian12:nonroot
@@ -24,7 +23,8 @@ LABEL org.opencontainers.image.source=$IMAGE_SOURCE
 LABEL org.opencontainers.image.description="Kubernetes service dashboard"
 LABEL org.opencontainers.image.licenses="MIT"
 COPY --from=backend /command-center /command-center
-COPY --from=backend --chown=nonroot:nonroot /data/ /data/
+# Create /data directory with correct permissions using /dev/null trick
+COPY --from=backend --chown=nonroot:nonroot /dev/null /data/.keep
 EXPOSE 8443
 USER nonroot:nonroot
 ENTRYPOINT ["/command-center"]

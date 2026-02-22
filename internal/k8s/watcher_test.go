@@ -169,7 +169,7 @@ func TestNewWatcherWithFakeClient(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 	if w == nil {
 		t.Fatal("NewWatcherWithClient returned nil")
 	}
@@ -183,7 +183,7 @@ func TestWatcherDiscoverExistingIngresses(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	// Verify IngressLister interface (AC #5)
 	var _ IngressLister = w.lister
@@ -233,7 +233,7 @@ func TestWatcherHTTPIngress(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -282,7 +282,7 @@ func TestWatcherTLSFallbackHost(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -314,7 +314,7 @@ func TestWatcherDeleteIngress(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -368,7 +368,7 @@ func TestWatcherUpdateIngress(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -437,7 +437,7 @@ func TestWatcherSkipsIngressWithNoRules(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -470,7 +470,7 @@ func TestWatcherSkipsIngressWithNoHost(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -490,7 +490,7 @@ func TestWatcherContextCancellation(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -605,7 +605,7 @@ func TestWatcherSetsK8sConnectedOnDiscovery(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -643,7 +643,7 @@ func TestWatcherDoesNotSetK8sConnectedWhenCacheSyncIncomplete(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Force WaitForCacheSync to fail immediately
@@ -662,7 +662,7 @@ func TestWatcherGroupMatchesNamespace(t *testing.T) {
 	updater := &fakeStateUpdater{}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -734,7 +734,7 @@ func TestWatcherPreservesStatusOnUpdate(t *testing.T) {
 		Status:    state.StatusHealthy,
 	})
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -770,12 +770,16 @@ func TestWatcherPreservesStatusOnUpdate(t *testing.T) {
 }
 
 func TestWatcherOnUpdatePreservesRuntimeFields(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	es := newTestEndpointSlice("backend-svc-es", "my-ns", "backend-svc", 2, 1)
+	clientset := fake.NewSimpleClientset(es)
 	updater := &fakeStateUpdater{
 		current: make(map[string]state.Service),
 	}
 	logger := slog.Default()
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
+	if !w.endpointSliceWatcher.WaitForSync(context.Background()) {
+		t.Fatal("EndpointSliceWatcher failed to sync")
+	}
 
 	ready := 2
 	total := 3
@@ -789,7 +793,6 @@ func TestWatcherOnUpdatePreservesRuntimeFields(t *testing.T) {
 		OriginalDisplayName: "old",
 		Source:              state.SourceKubernetes,
 		Status:              state.StatusHealthy,
-		CompositeStatus:     state.StatusDegraded,
 		AuthGuarded:         true,
 		ReadyEndpoints:      &ready,
 		TotalEndpoints:      &total,
@@ -810,22 +813,32 @@ func TestWatcherOnUpdatePreservesRuntimeFields(t *testing.T) {
 	if got.Status != state.StatusHealthy {
 		t.Fatalf("Status = %q, want %q", got.Status, state.StatusHealthy)
 	}
-	if got.CompositeStatus != state.StatusDegraded {
-		t.Fatalf("CompositeStatus = %q, want %q", got.CompositeStatus, state.StatusDegraded)
-	}
 	if !got.AuthGuarded {
 		t.Fatal("AuthGuarded = false, want true")
 	}
 	if got.ReadyEndpoints == nil || *got.ReadyEndpoints != 2 {
-		t.Fatalf("ReadyEndpoints = %v, want 2", got.ReadyEndpoints)
+		t.Fatalf("ReadyEndpoints = %v, want 2", *got.ReadyEndpoints)
 	}
 	if got.TotalEndpoints == nil || *got.TotalEndpoints != 3 {
 		t.Fatalf("TotalEndpoints = %v, want 3", got.TotalEndpoints)
 	}
-	if got.PodDiagnostic == nil || got.PodDiagnostic.Reason == nil || *got.PodDiagnostic.Reason != "CrashLoopBackOff" {
-		t.Fatalf("PodDiagnostic.Reason = %v, want CrashLoopBackOff", got.PodDiagnostic)
+
+	// Wait for async pod diagnostic query to complete
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for pod diagnostics")
+		default:
+			got, _ = updater.Get("my-ns", "my-app")
+			if got.PodDiagnostic != nil && got.PodDiagnostic.Reason != nil && *got.PodDiagnostic.Reason == "CrashLoopBackOff" {
+				goto diagFound
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 
+diagFound:
 	// Preserve explicit display override, but update discovered original display name.
 	if got.DisplayName != "Friendly Name" {
 		t.Fatalf("DisplayName = %q, want override to be preserved", got.DisplayName)
@@ -847,21 +860,23 @@ func TestWatcherOnUpdateUnwatchesWhenBackendRemoved(t *testing.T) {
 		current: make(map[string]state.Service),
 	}
 	logger := slog.Default()
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	updater.AddOrUpdate(state.Service{
 		Name:            "my-app",
 		Namespace:       "my-ns",
 		URL:             "https://my-app.example.com",
 		Status:          state.StatusUnknown,
-		CompositeStatus: state.StatusUnknown,
 	})
 
 	w.endpointSliceWatcher.Watch("my-app", "my-ns", "backend-svc")
 	defer w.endpointSliceWatcher.StopAll()
 
+	// Manually trigger update for fake informer test
+	w.endpointSliceWatcher.triggerUpdate("my-ns", "backend-svc")
+
 	w.endpointSliceWatcher.mu.Lock()
-	_, existsBefore := w.endpointSliceWatcher.watches["my-ns/my-app"]
+	_, existsBefore := w.endpointSliceWatcher.serviceToIngress["my-ns/backend-svc"]["my-app"]
 	w.endpointSliceWatcher.mu.Unlock()
 	if !existsBefore {
 		t.Fatal("expected initial EndpointSlice watch to exist")
@@ -871,7 +886,7 @@ func TestWatcherOnUpdateUnwatchesWhenBackendRemoved(t *testing.T) {
 	w.onUpdate(nil, newTestIngress("my-app", "my-ns", "my-app.example.com", true))
 
 	w.endpointSliceWatcher.mu.Lock()
-	_, existsAfter := w.endpointSliceWatcher.watches["my-ns/my-app"]
+	_, existsAfter := w.endpointSliceWatcher.serviceToIngress["my-ns/backend-svc"]["my-app"]
 	w.endpointSliceWatcher.mu.Unlock()
 	if existsAfter {
 		t.Fatal("expected EndpointSlice watch to be removed when backend is missing")
@@ -997,7 +1012,7 @@ func TestWatcherStartsEndpointSliceWatchOnIngressAdd(t *testing.T) {
 	updater := &fakeStateUpdater{current: make(map[string]state.Service)}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1013,7 +1028,7 @@ func TestWatcherStartsEndpointSliceWatchOnIngressAdd(t *testing.T) {
 			added := updater.getAdded()
 			if len(added) >= 1 && added[0].Name == "my-app" {
 				w.endpointSliceWatcher.mu.Lock()
-				_, exists := w.endpointSliceWatcher.watches["my-ns/my-app"]
+				_, exists := w.endpointSliceWatcher.serviceToIngress["my-ns/my-svc"]["my-app"]
 				w.endpointSliceWatcher.mu.Unlock()
 				if exists {
 					return
@@ -1031,7 +1046,7 @@ func TestWatcherNoEndpointSliceWatchForIngressWithoutBackend(t *testing.T) {
 	updater := &fakeStateUpdater{current: make(map[string]state.Service)}
 	logger := slog.Default()
 
-	w := NewWatcherWithClient(clientset, updater, logger)
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1047,7 +1062,7 @@ func TestWatcherNoEndpointSliceWatchForIngressWithoutBackend(t *testing.T) {
 			added := updater.getAdded()
 			if len(added) >= 1 {
 				w.endpointSliceWatcher.mu.Lock()
-				watchCount := len(w.endpointSliceWatcher.watches)
+				watchCount := len(w.endpointSliceWatcher.serviceToIngress)
 				w.endpointSliceWatcher.mu.Unlock()
 				if watchCount != 0 {
 					t.Errorf("expected no EndpointSlice watches, got %d", watchCount)

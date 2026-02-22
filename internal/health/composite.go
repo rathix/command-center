@@ -20,11 +20,6 @@ func isAuthCode(code int) bool {
 	return code == 401 || code == 403
 }
 
-// isServerError returns true for 5xx codes.
-func isServerError(code int) bool {
-	return code >= 500 && code <= 599
-}
-
 // hasReadyEndpoints returns true if at least one endpoint is ready.
 func hasReadyEndpoints(er *EndpointReadiness) bool {
 	return er != nil && er.Ready > 0

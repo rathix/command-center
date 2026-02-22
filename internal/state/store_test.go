@@ -789,7 +789,6 @@ func TestServiceNewFieldsJSONSerialization(t *testing.T) {
 		Namespace:       "production",
 		URL:             "https://web.example.com",
 		Status:          StatusHealthy,
-		CompositeStatus: StatusDegraded,
 		ReadyEndpoints:  &ready,
 		TotalEndpoints:  &total,
 		AuthGuarded:     true,
@@ -801,9 +800,6 @@ func TestServiceNewFieldsJSONSerialization(t *testing.T) {
 	}
 	jsonStr := string(data)
 
-	if !strings.Contains(jsonStr, `"compositeStatus":"degraded"`) {
-		t.Errorf("expected compositeStatus in JSON, got: %s", jsonStr)
-	}
 	if !strings.Contains(jsonStr, `"readyEndpoints":3`) {
 		t.Errorf("expected readyEndpoints in JSON, got: %s", jsonStr)
 	}
@@ -822,7 +818,6 @@ func TestServiceNullEndpointsForConfigServices(t *testing.T) {
 		URL:             "https://custom.example.com",
 		Source:          SourceConfig,
 		Status:          StatusHealthy,
-		CompositeStatus: StatusHealthy,
 	}
 
 	data, err := json.Marshal(svc)

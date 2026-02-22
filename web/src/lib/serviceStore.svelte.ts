@@ -64,7 +64,7 @@ function newestLastChecked(services: Iterable<Service>): Date | null {
 // Internal derived computations
 const sortedServices = $derived.by(() => {
 	return [...services.values()].sort((a, b) => {
-		const pri = statusPriority[a.compositeStatus] - statusPriority[b.compositeStatus];
+		const pri = statusPriority[a.status] - statusPriority[b.status];
 		if (pri !== 0) return pri;
 		return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
 	});
@@ -81,16 +81,16 @@ const serviceGroups = $derived.by<ServiceGroup[]>(() => {
 	const groups: ServiceGroup[] = [];
 	for (const [name, svcs] of groupMap) {
 		const sorted = [...svcs].sort((a, b) => {
-			const pri = statusPriority[a.compositeStatus] - statusPriority[b.compositeStatus];
+			const pri = statusPriority[a.status] - statusPriority[b.status];
 			if (pri !== 0) return pri;
 			return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
 		});
 
 		const groupCounts = {
-			healthy: svcs.filter((s) => s.compositeStatus === 'healthy').length,
-			degraded: svcs.filter((s) => s.compositeStatus === 'degraded').length,
-			unhealthy: svcs.filter((s) => s.compositeStatus === 'unhealthy').length,
-			unknown: svcs.filter((s) => s.compositeStatus === 'unknown').length
+			healthy: svcs.filter((s) => s.status === 'healthy').length,
+			degraded: svcs.filter((s) => s.status === 'degraded').length,
+			unhealthy: svcs.filter((s) => s.status === 'unhealthy').length,
+			unknown: svcs.filter((s) => s.status === 'unknown').length
 		};
 
 		const hasProblems =
@@ -129,19 +129,19 @@ const counts = $derived.by(() => {
 	const vals = [...services.values()];
 	return {
 		total: services.size,
-		healthy: vals.filter((s) => s.compositeStatus === 'healthy').length,
-		degraded: vals.filter((s) => s.compositeStatus === 'degraded').length,
-		unhealthy: vals.filter((s) => s.compositeStatus === 'unhealthy').length,
-		unknown: vals.filter((s) => s.compositeStatus === 'unknown').length
+		healthy: vals.filter((s) => s.status === 'healthy').length,
+		degraded: vals.filter((s) => s.status === 'degraded').length,
+		unhealthy: vals.filter((s) => s.status === 'unhealthy').length,
+		unknown: vals.filter((s) => s.status === 'unknown').length
 	};
 });
 
 const hasProblems = $derived.by(() => {
 	return [...services.values()].some(
 		(s) =>
-			s.compositeStatus === 'unhealthy' ||
-			s.compositeStatus === 'degraded' ||
-			s.compositeStatus === 'unknown'
+			s.status === 'unhealthy' ||
+			s.status === 'degraded' ||
+			s.status === 'unknown'
 	);
 });
 

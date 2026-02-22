@@ -143,7 +143,6 @@ func customServiceToState(cs CustomService) state.Service {
                 URL:                 cs.URL,
                 Source:              state.SourceConfig,
                 Status:              state.StatusUnknown,
-                CompositeStatus:     state.StatusUnknown,
                 HealthURL:      cs.HealthURL,
                 ExpectedStatusCodes: cs.ExpectedStatusCodes,
                 Icon:                cs.Icon,

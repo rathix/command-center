@@ -196,7 +196,6 @@ func TestStoreEndpointReadinessReaderReturnsReadiness(t *testing.T) {
 		Name:            "svc-a",
 		Namespace:       "default",
 		Status:          state.StatusUnknown,
-		CompositeStatus: state.StatusUnknown,
 		ReadyEndpoints:  &ready,
 		TotalEndpoints:  &total,
 	})
@@ -217,7 +216,6 @@ func TestStoreEndpointReadinessReaderReturnsNilWhenUnavailable(t *testing.T) {
 		Name:            "svc-a",
 		Namespace:       "default",
 		Status:          state.StatusUnknown,
-		CompositeStatus: state.StatusUnknown,
 	})
 
 	reader := storeEndpointReadinessReader{store: store}
@@ -678,7 +676,7 @@ func TestValidateKubeconfigPermissions0644Warning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(buf.String(), "kubeconfig file permissions are more permissive than recommended (0400)") {
+	if !strings.Contains(buf.String(), "kubeconfig file permissions are more permissive than recommended (0400 or 0600)") {
 		t.Errorf("expected warning about permissions, got: %s", buf.String())
 	}
 }
@@ -698,13 +696,13 @@ func TestValidateKubeconfigPermissions0777Warning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(buf.String(), "kubeconfig file permissions are more permissive than recommended (0400)") {
+	if !strings.Contains(buf.String(), "kubeconfig file permissions are more permissive than recommended (0400 or 0600)") {
 		t.Errorf("expected warning about permissions, got: %s", buf.String())
 	}
 }
 
-func TestValidateKubeconfigPermissions0600Warning(t *testing.T) {
-	// 0600 permissions (owner read+write) → warning logged
+func TestValidateKubeconfigPermissions0600NoWarning(t *testing.T) {
+	// 0600 permissions (owner read+write) → no warning logged
 	dir := t.TempDir()
 	kubeconfigFile := filepath.Join(dir, "kubeconfig")
 	if err := os.WriteFile(kubeconfigFile, []byte("test"), 0o600); err != nil {
@@ -718,13 +716,13 @@ func TestValidateKubeconfigPermissions0600Warning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(buf.String(), "kubeconfig file permissions are more permissive than recommended (0400)") {
-		t.Errorf("expected warning about permissions, got: %s", buf.String())
+	if buf.Len() != 0 {
+		t.Errorf("expected no log output for 0600 perms, got: %s", buf.String())
 	}
 }
 
 func TestValidateKubeconfigPermissionsFileNotExist(t *testing.T) {
-	// AC4: nonexistent file → error "kubeconfig file not found"
+	// nonexistent file → error
 	var buf bytes.Buffer
 	logger := setupLoggerWithWriter("json", &buf)
 

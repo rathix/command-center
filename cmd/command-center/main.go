@@ -176,8 +176,9 @@ func setupLoggerWithWriter(format string, writer io.Writer) *slog.Logger {
 	return slog.New(handler)
 }
 
-// validateKubeconfigPermissions checks that the kubeconfig file exists and has
-// restrictive permissions. Returns an error only when the file is missing.
+// validateKubeconfigPermissions checks that the kubeconfig file has restrictive permissions.
+// If the file does not exist, it returns an error to allow the caller to decide 
+// whether to fall back to in-cluster config.
 // WARNING: Do not log file paths or content (NFR17).
 func validateKubeconfigPermissions(path string, logger *slog.Logger) error {
 	info, err := os.Stat(path)
@@ -189,8 +190,9 @@ func validateKubeconfigPermissions(path string, logger *slog.Logger) error {
 	}
 
 	mode := info.Mode().Perm()
-	if mode&0o377 != 0 {
-		logger.Warn("kubeconfig file permissions are more permissive than recommended (0400)")
+	// Warn if group or others have any permissions (0o077) or if owner has execute bit (0o100).
+	if mode&0o177 != 0 {
+		logger.Warn("kubeconfig file permissions are more permissive than recommended (0400 or 0600)")
 	}
 	return nil
 }
@@ -205,8 +207,16 @@ func run(ctx context.Context, cfg config) error {
 	store := state.NewStore()
 
 	// Validate kubeconfig file permissions (FR33)
-	if err := validateKubeconfigPermissions(cfg.Kubeconfig, logger); err != nil {
-		return fmt.Errorf("kubeconfig validation: %w", err)
+	// If the default kubeconfig is missing, we allow it to fall back to in-cluster config.
+	if cfg.Kubeconfig != "" {
+		if err := validateKubeconfigPermissions(cfg.Kubeconfig, logger); err != nil {
+			if os.IsNotExist(err) && cfg.Kubeconfig == defaultKubeconfig() {
+				slog.Info("Default kubeconfig not found, will attempt in-cluster configuration")
+				cfg.Kubeconfig = ""
+			} else {
+				return fmt.Errorf("kubeconfig validation: %w", err)
+			}
+		}
 	}
 
 	// Load optional YAML config for custom services and overrides

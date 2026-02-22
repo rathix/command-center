@@ -42,7 +42,7 @@
 
 	const responseDisplay = $derived.by(() => {
 		if (
-			service.compositeStatus === 'unknown' ||
+			service.status === 'unknown' ||
 			service.httpCode === null ||
 			service.responseTimeMs === null
 		) {
@@ -51,8 +51,8 @@
 		return `${service.httpCode} \u00B7 ${service.responseTimeMs}ms`;
 	});
 
-	const responseTextColor = $derived.by(() => responseTextColorMap[service.compositeStatus]);
-	const tintColor = $derived.by(() => tintColorMap[service.compositeStatus]);
+	const responseTextColor = $derived.by(() => responseTextColorMap[service.status]);
+	const tintColor = $derived.by(() => tintColorMap[service.status]);
 
 	const tooltipId = $derived.by(() => `tooltip-${service.namespace}-${service.name}`);
 
@@ -132,7 +132,7 @@
 			class="flex h-full cursor-pointer items-center gap-3 px-4
 				focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-lavender"
 		>
-			<TuiDot status={service.compositeStatus} />
+			<TuiDot status={service.status} />
 			<ServiceIcon name={iconName} />
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url}</span>
@@ -152,7 +152,7 @@
 			class="flex h-full items-center gap-3 px-4 opacity-70"
 			title="Invalid URL"
 		>
-			<TuiDot status={service.compositeStatus} />
+			<TuiDot status={service.status} />
 			<ServiceIcon name={iconName} />
 			<span class="text-sm font-medium text-text">{service.displayName}</span>
 			<span class="text-xs text-subtext-1">{service.url} (invalid)</span>

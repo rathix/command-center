@@ -207,7 +207,6 @@ func (c *Checker) applyResult(svc *state.Service, res probeResult) *history.Tran
 	previousStatus := svc.Status
 
 	svc.Status = res.status
-	svc.CompositeStatus = res.status
 	svc.HTTPCode = res.httpCode
 	svc.ResponseTimeMs = &res.responseTimeMs
 	svc.ErrorSnippet = res.errorSnippet

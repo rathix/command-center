@@ -35,7 +35,6 @@ type DiscoveredEventPayload struct {
 	Icon            string             `json:"icon,omitempty"`
 	Source          string             `json:"source"`
 	Status          state.HealthStatus   `json:"status"`
-	CompositeStatus state.HealthStatus   `json:"compositeStatus"`
 	AuthGuarded     bool                 `json:"authGuarded"`
 	HTTPCode        *int                 `json:"httpCode"`
 	ResponseTimeMs  *int64             `json:"responseTimeMs"`
@@ -63,7 +62,6 @@ func discoveredEventPayloadFromService(svc state.Service) DiscoveredEventPayload
 		Icon:            svc.Icon,
 		Source:          svc.Source,
 		Status:          svc.Status,
-		CompositeStatus: svc.CompositeStatus,
 		AuthGuarded:     svc.AuthGuarded,
 		HTTPCode:        svc.HTTPCode,
 		ResponseTimeMs:  svc.ResponseTimeMs,

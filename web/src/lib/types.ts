@@ -33,7 +33,6 @@ export interface Service {
 	url: string;
 	source?: ServiceSource;
 	status: HealthStatus;
-	compositeStatus: HealthStatus;
 	authGuarded: boolean;
 	httpCode: number | null;
 	responseTimeMs: number | null;

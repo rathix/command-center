@@ -26,8 +26,7 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 		namespace: 'default',
 		group: 'default',
 		url: 'https://test.example.com',
-		status: 'unknown',
-		compositeStatus: overrides.compositeStatus ?? overrides.status ?? 'unknown',
+		status: overrides.status ?? 'unknown',
 		readyEndpoints: null,
 		totalEndpoints: null,
 		authGuarded: false,
@@ -135,10 +134,10 @@ describe('serviceStore', () => {
 			]);
 		});
 
-		it('sorts by compositeStatus rather than raw status', () => {
+		it('sorts by status', () => {
 			replaceAll([
-				makeService({ name: 'svc-a', status: 'healthy', compositeStatus: 'unhealthy' }),
-				makeService({ name: 'svc-b', status: 'unhealthy', compositeStatus: 'healthy' })
+				makeService({ name: 'svc-a', status: 'unhealthy' }),
+				makeService({ name: 'svc-b', status: 'healthy' })
 			], 'v1.0.0');
 
 			expect(getSortedServices().map((s) => s.name)).toEqual(['svc-a', 'svc-b']);
@@ -189,10 +188,10 @@ describe('serviceStore', () => {
 			});
 		});
 
-		it('counts use compositeStatus rather than raw status', () => {
+		it('counts use status', () => {
 			replaceAll([
-				makeService({ name: 'svc-a', status: 'healthy', compositeStatus: 'degraded' }),
-				makeService({ name: 'svc-b', status: 'unhealthy', compositeStatus: 'healthy' })
+				makeService({ name: 'svc-a', status: 'degraded' }),
+				makeService({ name: 'svc-b', status: 'healthy' })
 			], 'v1.0.0');
 
 			expect(getCounts()).toEqual({

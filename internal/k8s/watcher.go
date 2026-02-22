@@ -65,10 +65,17 @@ func NewWatcher(kubeconfigPath string, updater StateUpdater, logger *slog.Logger
 // NewWatcherWithClient creates a Watcher from an existing Kubernetes clientset.
 // This is primarily used for testing with fake clientsets.
 func NewWatcherWithClient(clientset kubernetes.Interface, updater StateUpdater, logger *slog.Logger) *Watcher {
+	return NewWatcherWithClientAndESWatcher(clientset, updater, logger, nil)
+}
+
+// NewWatcherWithClientAndESWatcher allows injecting a custom EndpointSliceWatcher.
+func NewWatcherWithClientAndESWatcher(clientset kubernetes.Interface, updater StateUpdater, logger *slog.Logger, esWatcher *EndpointSliceWatcher) *Watcher {
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 	ingressInformer := factory.Networking().V1().Ingresses()
 
-	esWatcher := NewEndpointSliceWatcher(clientset, updater, logger)
+	if esWatcher == nil {
+		esWatcher = NewEndpointSliceWatcher(clientset, updater, logger)
+	}
 
 	w := &Watcher{
 		factory:              factory,
@@ -167,7 +174,6 @@ func (w *Watcher) onAdd(obj interface{}) {
 		URL:                 url,
 		Source:              state.SourceKubernetes,
 		Status:              state.StatusUnknown,
-		CompositeStatus:     state.StatusUnknown,
 	}
 	w.updater.AddOrUpdate(svc)
 	w.logger.Info("service discovered",
@@ -207,7 +213,6 @@ func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 		URL:                 url,
 		Source:              state.SourceKubernetes,
 		Status:              state.StatusUnknown,
-		CompositeStatus:     state.StatusUnknown,
 	}
 
 	if existing, ok := w.updater.Get(ingress.Namespace, ingress.Name); ok {

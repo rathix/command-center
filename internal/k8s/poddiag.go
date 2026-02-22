@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/rathix/command-center/internal/state"
 
@@ -103,14 +104,26 @@ func (q *PodDiagnosticQuerier) QueryForService(ctx context.Context, namespace st
 	if len(podNames) == 0 {
 		return nil
 	}
+
+	var mu sync.Mutex
 	var pods []*corev1.Pod
+	var wg sync.WaitGroup
+
 	for _, name := range podNames {
-		pod, err := q.clientset.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			q.logger.Warn("failed to get pod", "pod", name, "namespace", namespace, "error", fmt.Sprintf("%v", err))
-			continue
-		}
-		pods = append(pods, pod)
+		wg.Add(1)
+		go func(podName string) {
+			defer wg.Done()
+			pod, err := q.clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+			if err != nil {
+				q.logger.Warn("failed to get pod", "pod", podName, "namespace", namespace, "error", fmt.Sprintf("%v", err))
+				return
+			}
+			mu.Lock()
+			pods = append(pods, pod)
+			mu.Unlock()
+		}(name)
 	}
+
+	wg.Wait()
 	return DiagFromPods(pods)
 }

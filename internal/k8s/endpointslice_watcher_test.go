@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"testing"
@@ -203,6 +204,9 @@ func TestEndpointSliceWatcher_AllReady(t *testing.T) {
 	logger := slog.Default()
 
 	esw := NewEndpointSliceWatcher(clientset, updater, logger)
+	if !esw.WaitForSync(context.Background()) {
+		t.Fatal("informer cache failed to sync")
+	}
 	esw.Watch("my-app", "my-ns", "my-svc")
 	defer esw.StopAll()
 
@@ -244,6 +248,9 @@ func TestEndpointSliceWatcher_MixedReadiness(t *testing.T) {
 	logger := slog.Default()
 
 	esw := NewEndpointSliceWatcher(clientset, updater, logger)
+	if !esw.WaitForSync(context.Background()) {
+		t.Fatal("informer cache failed to sync")
+	}
 	esw.Watch("my-app", "my-ns", "my-svc")
 	defer esw.StopAll()
 
@@ -305,7 +312,7 @@ unwatchPhase:
 	esw.Unwatch("my-app", "my-ns")
 
 	esw.mu.Lock()
-	watchCount := len(esw.watches)
+	watchCount := len(esw.serviceToIngress)
 	esw.mu.Unlock()
 
 	if watchCount != 0 {
@@ -336,7 +343,7 @@ func TestEndpointSliceWatcher_StopAll(t *testing.T) {
 	esw.StopAll()
 
 	esw.mu.Lock()
-	watchCount := len(esw.watches)
+	watchCount := len(esw.serviceToIngress)
 	esw.mu.Unlock()
 
 	if watchCount != 0 {
@@ -371,6 +378,9 @@ func TestEndpointSliceWatcher_NilReadyCondition(t *testing.T) {
 	logger := slog.Default()
 
 	esw := NewEndpointSliceWatcher(clientset, updater, logger)
+	if !esw.WaitForSync(context.Background()) {
+		t.Fatal("informer cache failed to sync")
+	}
 	esw.Watch("my-app", "my-ns", "my-svc")
 	defer esw.StopAll()
 

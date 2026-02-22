@@ -36,17 +36,17 @@
 
 	const stateDisplay = $derived.by(() => {
 		void now; // force re-evaluation each tick
-		const label = statusLabelMap[service.compositeStatus];
-		const isUnhealthy = service.compositeStatus === 'unhealthy';
+		const label = statusLabelMap[service.status];
+		const isUnhealthy = service.status === 'unhealthy';
 		// Unhealthy uses precise (H M S), others use simple (H or M or S)
 		const time = formatRelativeTime(service.lastStateChange, false, isUnhealthy);
 		return `${label} ${time}`;
 	});
 
-	const stateColor = $derived.by(() => healthColorMap[service.compositeStatus]);
+	const stateColor = $derived.by(() => healthColorMap[service.status]);
 
 	const errorLine = $derived.by(() => {
-		if (service.compositeStatus !== 'unhealthy' || !service.errorSnippet) return null;
+		if (service.status !== 'unhealthy' || !service.errorSnippet) return null;
 		const snippet = service.errorSnippet;
 		return snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet;
 	});
@@ -61,7 +61,7 @@
 	});
 
 	const degradedHint = $derived.by(() => {
-		return service.compositeStatus === 'degraded'
+		return service.status === 'degraded'
 			? 'Pods are ready but HTTP probe failed — possible routing or proxy issue'
 			: null;
 	});
