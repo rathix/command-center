@@ -43,42 +43,6 @@ func (f *fakeEndpointStateUpdater) getUpdates() []state.Service {
 	return result
 }
 
-func boolPtr(b bool) *bool {
-	return &b
-}
-
-func newTestEndpointSlice(name, namespace, serviceName string, readyCount, notReadyCount int) *discoveryv1.EndpointSlice {
-	var endpoints []discoveryv1.Endpoint
-	for i := range readyCount {
-		_ = i
-		endpoints = append(endpoints, discoveryv1.Endpoint{
-			Conditions: discoveryv1.EndpointConditions{
-				Ready: boolPtr(true),
-			},
-		})
-	}
-	for i := range notReadyCount {
-		_ = i
-		endpoints = append(endpoints, discoveryv1.Endpoint{
-			Conditions: discoveryv1.EndpointConditions{
-				Ready: boolPtr(false),
-			},
-		})
-	}
-
-	return &discoveryv1.EndpointSlice{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"kubernetes.io/service-name": serviceName,
-			},
-		},
-		AddressType: discoveryv1.AddressTypeIPv4,
-		Endpoints:   endpoints,
-	}
-}
-
 func TestAggregateEndpointReadiness(t *testing.T) {
 	tests := []struct {
 		name      string

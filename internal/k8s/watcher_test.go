@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/rathix/command-center/internal/state"
 
+	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -87,10 +90,53 @@ func (f *fakeStateUpdater) Update(namespace, name string, fn func(*state.Service
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := namespace + "/" + name
-	if svc, ok := f.current[key]; ok {
-		fn(&svc)
-		f.current[key] = svc
-		f.added = append(f.added, svc)
+	svc, ok := f.current[key]
+	if !ok {
+		return
+	}
+	fn(&svc)
+	f.current[key] = svc
+	f.added = append(f.added, svc)
+}
+
+func (f *fakeStateUpdater) SetConfigErrors(errs []string) {}
+func (f *fakeStateUpdater) ConfigErrors() []string        { return nil }
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+func newTestEndpointSlice(name, namespace, serviceName string, readyCount, notReadyCount int) *discoveryv1.EndpointSlice {
+	var endpoints []discoveryv1.Endpoint
+	for i := 0; i < readyCount; i++ {
+		endpoints = append(endpoints, discoveryv1.Endpoint{
+			Conditions: discoveryv1.EndpointConditions{
+				Ready: boolPtr(true),
+			},
+		})
+	}
+	for i := 0; i < notReadyCount; i++ {
+		endpoints = append(endpoints, discoveryv1.Endpoint{
+			Conditions: discoveryv1.EndpointConditions{
+				Ready: boolPtr(false),
+			},
+			TargetRef: &corev1.ObjectReference{
+				Kind: "Pod",
+				Name: fmt.Sprintf("pod-%d", i),
+			},
+		})
+	}
+
+	return &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"kubernetes.io/service-name": serviceName,
+			},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Endpoints:   endpoints,
 	}
 }
 
@@ -776,7 +822,7 @@ func TestWatcherOnUpdatePreservesRuntimeFields(t *testing.T) {
 		current: make(map[string]state.Service),
 	}
 	logger := slog.Default()
-	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
+	w := NewWatcherWithClient(clientset, updater, logger)
 	if !w.endpointSliceWatcher.WaitForSync(context.Background()) {
 		t.Fatal("EndpointSliceWatcher failed to sync")
 	}
