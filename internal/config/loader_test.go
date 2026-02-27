@@ -495,6 +495,45 @@ services:
 	}
 }
 
+func TestLoad_TalosConfig_ValidSection(t *testing.T) {
+	yaml := `
+talos:
+  endpoint: "https://talos-api.local:50000"
+  pollInterval: "30s"
+`
+	path := writeTempConfig(t, yaml)
+	cfg, errs := Load(path)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got %v", errs)
+	}
+	if cfg.Talos == nil {
+		t.Fatal("expected non-nil Talos config")
+	}
+	if cfg.Talos.Endpoint != "https://talos-api.local:50000" {
+		t.Errorf("talos endpoint = %q, want %q", cfg.Talos.Endpoint, "https://talos-api.local:50000")
+	}
+	if cfg.Talos.PollInterval != "30s" {
+		t.Errorf("talos pollInterval = %q, want %q", cfg.Talos.PollInterval, "30s")
+	}
+}
+
+func TestLoad_TalosConfig_MissingSection(t *testing.T) {
+	yaml := `
+services:
+  - name: "test"
+    url: "https://test.local"
+    group: "infra"
+`
+	path := writeTempConfig(t, yaml)
+	cfg, errs := Load(path)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got %v", errs)
+	}
+	if cfg.Talos != nil {
+		t.Errorf("expected nil Talos config when section absent, got %+v", cfg.Talos)
+	}
+}
+
 func TestLoad_URLValidation(t *testing.T) {
 	tests := []struct {
 		name  string

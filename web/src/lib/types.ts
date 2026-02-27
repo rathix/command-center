@@ -72,3 +72,45 @@ export interface K8sStatusPayload {
 	k8sConnected: boolean;
 	k8sLastEvent: string | null;
 }
+
+// Talos Node types (Epic 15)
+
+export type NodeHealthStatus = 'ready' | 'not-ready' | 'unreachable';
+
+export interface NodeMetrics {
+	cpuPercent: number;
+	memoryPercent: number;
+	diskPercent: number;
+	timestamp: string;
+}
+
+export interface TalosNode {
+	name: string;
+	health: NodeHealthStatus;
+	role: string;
+	lastSeen: string;
+	metrics: NodeMetrics | null;
+}
+
+export interface NodesResponse {
+	nodes: TalosNode[] | null;
+	lastPoll: string;
+	error: string | null;
+	stale: boolean;
+	configured: boolean;
+}
+
+export interface MetricsHistoryResponse {
+	history: NodeMetrics[];
+}
+
+export interface OperationResult {
+	success: boolean;
+	message?: string;
+	error?: string;
+}
+
+export interface UpgradeInfoResult {
+	currentVersion: string;
+	targetVersion: string;
+}
