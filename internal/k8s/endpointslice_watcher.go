@@ -30,12 +30,12 @@ type EndpointSliceWatcher struct {
 	updater        EndpointStateUpdater
 	logger         *slog.Logger
 	podDiagQuerier *PodDiagnosticQuerier
-	
-	factory        informers.SharedInformerFactory
-	informer       cache.SharedIndexInformer
-	cancel         context.CancelFunc
 
-	mu             sync.RWMutex
+	factory  informers.SharedInformerFactory
+	informer cache.SharedIndexInformer
+	cancel   context.CancelFunc
+
+	mu sync.RWMutex
 	// serviceToIngress maps "namespace/serviceName" to a set of ingress names
 	serviceToIngress map[string]map[string]struct{}
 }
@@ -48,7 +48,7 @@ func NewEndpointSliceWatcher(clientset kubernetes.Interface, updater EndpointSta
 // NewEndpointSliceWatcherWithTweak allows providing a tweak function for the informer factory.
 func NewEndpointSliceWatcherWithTweak(clientset kubernetes.Interface, updater EndpointStateUpdater, logger *slog.Logger, tweak func(*metav1.ListOptions)) *EndpointSliceWatcher {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Cluster-wide informer factory
 	factory := informers.NewSharedInformerFactoryWithOptions(clientset, 0, informers.WithTweakListOptions(tweak))
 	informer := factory.Discovery().V1().EndpointSlices().Informer()
@@ -71,7 +71,7 @@ func NewEndpointSliceWatcherWithTweak(clientset kubernetes.Interface, updater En
 	})
 
 	factory.Start(ctx.Done())
-	
+
 	return e
 }
 
@@ -139,9 +139,9 @@ func (e *EndpointSliceWatcher) triggerUpdate(namespace, serviceName string) {
 		e.updater.Update(namespace, ingressName, func(svc *state.Service) {
 			svc.ReadyEndpoints = &ready
 			svc.TotalEndpoints = &total
-			// Only clear pod diagnostics if the service is fully ready.
-			// This prevents clearing diagnostics during informer sync/transient states.
-			if len(notReadyPods) == 0 && ready == total && total > 0 {
+			// Clear stale diagnostics when there are no currently identified not-ready pods.
+			// This also handles 0/0 endpoint transitions where prior pod diagnostics are no longer valid.
+			if len(notReadyPods) == 0 {
 				svc.PodDiagnostic = nil
 			}
 		})
@@ -196,7 +196,7 @@ func (e *EndpointSliceWatcher) Unwatch(ingressName, namespace string) {
 func (e *EndpointSliceWatcher) StopAll() {
 	e.cancel()
 	e.factory.Shutdown()
-	
+
 	e.mu.Lock()
 	e.serviceToIngress = make(map[string]map[string]struct{})
 	e.mu.Unlock()

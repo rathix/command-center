@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -177,14 +178,14 @@ func setupLoggerWithWriter(format string, writer io.Writer) *slog.Logger {
 }
 
 // validateKubeconfigPermissions checks that the kubeconfig file has restrictive permissions.
-// If the file does not exist, it returns an error to allow the caller to decide 
+// If the file does not exist, it returns an error to allow the caller to decide
 // whether to fall back to in-cluster config.
 // WARNING: Do not log file paths or content (NFR17).
 func validateKubeconfigPermissions(path string, logger *slog.Logger) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("kubeconfig file not found")
+			return fmt.Errorf("kubeconfig file not found: %w", os.ErrNotExist)
 		}
 		return fmt.Errorf("unable to check kubeconfig file")
 	}
@@ -210,7 +211,7 @@ func run(ctx context.Context, cfg config) error {
 	// If the default kubeconfig is missing, we allow it to fall back to in-cluster config.
 	if cfg.Kubeconfig != "" {
 		if err := validateKubeconfigPermissions(cfg.Kubeconfig, logger); err != nil {
-			if os.IsNotExist(err) && cfg.Kubeconfig == defaultKubeconfig() {
+			if errors.Is(err, os.ErrNotExist) && cfg.Kubeconfig == defaultKubeconfig() {
 				slog.Info("Default kubeconfig not found, will attempt in-cluster configuration")
 				cfg.Kubeconfig = ""
 			} else {

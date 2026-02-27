@@ -26,6 +26,8 @@
 
 	let now = $state(Date.now());
 
+	const displayStatus = $derived.by(() => service.compositeStatus);
+
 	$effect(() => {
 		if (!visible) return;
 		const id = setInterval(() => {
@@ -36,17 +38,17 @@
 
 	const stateDisplay = $derived.by(() => {
 		void now; // force re-evaluation each tick
-		const label = statusLabelMap[service.status];
-		const isUnhealthy = service.status === 'unhealthy';
+		const label = statusLabelMap[displayStatus];
+		const isUnhealthy = displayStatus === 'unhealthy';
 		// Unhealthy uses precise (H M S), others use simple (H or M or S)
 		const time = formatRelativeTime(service.lastStateChange, false, isUnhealthy);
 		return `${label} ${time}`;
 	});
 
-	const stateColor = $derived.by(() => healthColorMap[service.status]);
+	const stateColor = $derived.by(() => healthColorMap[displayStatus]);
 
 	const errorLine = $derived.by(() => {
-		if (service.status !== 'unhealthy' || !service.errorSnippet) return null;
+		if (displayStatus !== 'unhealthy' || !service.errorSnippet) return null;
 		const snippet = service.errorSnippet;
 		return snippet.length > 80 ? snippet.slice(0, 80) + '…' : snippet;
 	});
@@ -61,7 +63,7 @@
 	});
 
 	const degradedHint = $derived.by(() => {
-		return service.status === 'degraded'
+		return displayStatus === 'degraded'
 			? 'Pods are ready but HTTP probe failed — possible routing or proxy issue'
 			: null;
 	});

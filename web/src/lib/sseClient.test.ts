@@ -368,6 +368,28 @@ describe('sseClient', () => {
 					)
 				);
 				expect(addOrUpdate).not.toHaveBeenCalled();
+
+				es.emit(
+					'discovered',
+					JSON.stringify(
+						makeService({
+							name: 'bad-lastchecked',
+							lastChecked: 'not-a-date'
+						})
+					)
+				);
+				expect(addOrUpdate).not.toHaveBeenCalled();
+
+				es.emit(
+					'discovered',
+					JSON.stringify(
+						makeService({
+							name: 'bad-laststatechange',
+							lastStateChange: 'still-not-a-date'
+						})
+					)
+				);
+				expect(addOrUpdate).not.toHaveBeenCalled();
 			});
 
 		it('rejects service payloads missing group field', async () => {

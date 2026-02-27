@@ -374,6 +374,61 @@ func TestEndpointSliceWatcher_NilReadyCondition(t *testing.T) {
 	}
 }
 
+func TestEndpointSliceWatcher_ClearsStalePodDiagnosticWhenNoNotReadyPods(t *testing.T) {
+	// No endpoints -> no not-ready pods, should clear stale diagnostic data.
+	es := newTestEndpointSlice("my-svc-abc", "my-ns", "my-svc", 0, 0)
+	reason := "CrashLoopBackOff"
+
+	clientset := fake.NewSimpleClientset(es)
+	updater := &fakeEndpointStateUpdater{
+		current: map[string]state.Service{
+			"my-ns/my-app": {
+				Name:      "my-app",
+				Namespace: "my-ns",
+				Status:    state.StatusUnhealthy,
+				PodDiagnostic: &state.PodDiagnostic{
+					Reason:       &reason,
+					RestartCount: 7,
+				},
+			},
+		},
+	}
+	logger := slog.Default()
+
+	esw := NewEndpointSliceWatcher(clientset, updater, logger)
+	if !esw.WaitForSync(context.Background()) {
+		t.Fatal("informer cache failed to sync")
+	}
+	esw.Watch("my-app", "my-ns", "my-svc")
+	defer esw.StopAll()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for endpoint update")
+		default:
+			updates := updater.getUpdates()
+			if len(updates) >= 1 {
+				latest := updates[len(updates)-1]
+				if latest.ReadyEndpoints == nil || latest.TotalEndpoints == nil {
+					time.Sleep(10 * time.Millisecond)
+					continue
+				}
+				if *latest.ReadyEndpoints != 0 || *latest.TotalEndpoints != 0 {
+					time.Sleep(10 * time.Millisecond)
+					continue
+				}
+				if latest.PodDiagnostic != nil {
+					t.Fatalf("PodDiagnostic = %+v, want nil", latest.PodDiagnostic)
+				}
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
 func TestEndpointStateUpdaterInterface(t *testing.T) {
 	// Compile-time check: state.Store satisfies EndpointStateUpdater
 	var _ EndpointStateUpdater = &state.Store{}

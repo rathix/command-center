@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 
@@ -115,7 +114,7 @@ func (q *PodDiagnosticQuerier) QueryForService(ctx context.Context, namespace st
 			defer wg.Done()
 			pod, err := q.clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 			if err != nil {
-				q.logger.Warn("failed to get pod", "pod", podName, "namespace", namespace, "error", fmt.Sprintf("%v", err))
+				q.logger.Warn("failed to get pod for diagnostics", "pod", podName, "namespace", namespace)
 				return
 			}
 			mu.Lock()

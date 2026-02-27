@@ -561,6 +561,71 @@ func TestWatcherContextCancellation(t *testing.T) {
 	}
 }
 
+func TestWatcherWaitForSyncReturnsAfterInitialCacheSync(t *testing.T) {
+	ingress := newTestIngress("sync-app", "default", "sync-app.example.com", true)
+	clientset := fake.NewSimpleClientset(ingress)
+	updater := &fakeStateUpdater{}
+	logger := slog.Default()
+
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		w.Run(ctx)
+		close(done)
+	}()
+
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelWait()
+	if !w.WaitForSync(waitCtx) {
+		t.Fatal("WaitForSync() = false, want true after initial cache sync")
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("watcher did not stop after cancellation")
+	}
+}
+
+func TestWatcherOnUpdateRemovesServiceWhenIngressHostBecomesInvalid(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	updater := &fakeStateUpdater{
+		current: map[string]state.Service{
+			"default/my-app": {
+				Name:      "my-app",
+				Namespace: "default",
+				URL:       "https://my-app.example.com",
+				Status:    state.StatusHealthy,
+			},
+		},
+	}
+	logger := slog.Default()
+
+	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
+	defer w.endpointSliceWatcher.StopAll()
+
+	invalid := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-app",
+			Namespace: "default",
+		},
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{{Host: ""}},
+		},
+	}
+
+	w.onUpdate(nil, invalid)
+
+	removed := updater.getRemoved()
+	if len(removed) != 1 || removed[0] != "default/my-app" {
+		t.Fatalf("removed = %v, want [default/my-app]", removed)
+	}
+}
+
 func TestDisplayName(t *testing.T) {
 	tests := []struct {
 		host string
@@ -909,10 +974,10 @@ func TestWatcherOnUpdateUnwatchesWhenBackendRemoved(t *testing.T) {
 	w := NewWatcherWithClientAndESWatcher(clientset, updater, logger, NewEndpointSliceWatcher(clientset, updater, logger))
 
 	updater.AddOrUpdate(state.Service{
-		Name:            "my-app",
-		Namespace:       "my-ns",
-		URL:             "https://my-app.example.com",
-		Status:          state.StatusUnknown,
+		Name:      "my-app",
+		Namespace: "my-ns",
+		URL:       "https://my-app.example.com",
+		Status:    state.StatusUnknown,
 	})
 
 	w.endpointSliceWatcher.Watch("my-app", "my-ns", "backend-svc")

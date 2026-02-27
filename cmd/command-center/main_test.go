@@ -193,11 +193,11 @@ func TestStoreEndpointReadinessReaderReturnsReadiness(t *testing.T) {
 	ready := 4
 	total := 5
 	store.AddOrUpdate(state.Service{
-		Name:            "svc-a",
-		Namespace:       "default",
-		Status:          state.StatusUnknown,
-		ReadyEndpoints:  &ready,
-		TotalEndpoints:  &total,
+		Name:           "svc-a",
+		Namespace:      "default",
+		Status:         state.StatusUnknown,
+		ReadyEndpoints: &ready,
+		TotalEndpoints: &total,
 	})
 
 	reader := storeEndpointReadinessReader{store: store}
@@ -213,9 +213,9 @@ func TestStoreEndpointReadinessReaderReturnsReadiness(t *testing.T) {
 func TestStoreEndpointReadinessReaderReturnsNilWhenUnavailable(t *testing.T) {
 	store := state.NewStore()
 	store.AddOrUpdate(state.Service{
-		Name:            "svc-a",
-		Namespace:       "default",
-		Status:          state.StatusUnknown,
+		Name:      "svc-a",
+		Namespace: "default",
+		Status:    state.StatusUnknown,
 	})
 
 	reader := storeEndpointReadinessReader{store: store}
@@ -563,6 +563,57 @@ func TestRunWithMissingKubeconfigReturnsError(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "nonexistent") {
 		t.Error("error message must not contain file path (NFR17)")
+	}
+}
+
+func TestRunWithMissingDefaultKubeconfigFallsBackToInCluster(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Force a clean home directory so the default ~/.kube/config does not exist.
+	t.Setenv("HOME", t.TempDir())
+
+	addr := getFreeAddr(t)
+	cfg, err := loadConfig([]string{"--listen-addr", addr})
+	if err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+	cfg.Dev = true
+	cfg.HistoryFile = filepath.Join(t.TempDir(), "history.jsonl")
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- run(ctx, cfg)
+	}()
+
+	// Server should still run after default kubeconfig fallback.
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case err := <-runErr:
+			t.Fatalf("run() exited before serving traffic: %v", err)
+		case <-deadline:
+			t.Fatal("timed out waiting for server to start")
+		default:
+			resp, err := http.Get("http://" + addr + "/")
+			if err == nil {
+				resp.Body.Close()
+				goto shutdown
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+shutdown:
+	cancel()
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Errorf("run() returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("run() did not shut down within 5 seconds after cancel")
 	}
 }
 

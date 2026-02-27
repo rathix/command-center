@@ -257,6 +257,25 @@ describe('ServiceRow', () => {
 			});
 			expect(screen.getByText('—')).toBeInTheDocument();
 		});
+
+		it('uses compositeStatus for visual state when raw status differs', () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({
+						status: 'healthy',
+						compositeStatus: 'unhealthy',
+						httpCode: 503,
+						responseTimeMs: 0
+					}),
+					odd: false
+				}
+			});
+			expect(screen.getByLabelText('unhealthy')).toBeInTheDocument();
+			const responseText = screen.getByText('503 · 0ms');
+			expect(responseText).toHaveClass('text-health-error');
+			const listItem = screen.getByRole('listitem');
+			expect(listItem.style.backgroundColor).toBe('rgba(243, 139, 168, 0.05)');
+		});
 	});
 
 	describe('row background tinting', () => {

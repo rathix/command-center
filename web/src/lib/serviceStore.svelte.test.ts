@@ -144,6 +144,14 @@ describe('serviceStore', () => {
 			expect(getSortedServices().map((s) => s.name)).toEqual(['svc-a', 'svc-b']);
 		});
 
+		it('sorts by compositeStatus when raw status differs', () => {
+			replaceAll([
+				makeService({ name: 'svc-a', status: 'healthy', compositeStatus: 'unhealthy' }),
+				makeService({ name: 'svc-b', status: 'unhealthy', compositeStatus: 'healthy' })
+			], 'v1.0.0');
+			expect(getSortedServices().map((s) => s.name)).toEqual(['svc-a', 'svc-b']);
+		});
+
 		it('sorts alphabetically within each status group', () => {
 			replaceAll([
 				makeService({ name: 'zebra', status: 'healthy' }),
@@ -189,10 +197,10 @@ describe('serviceStore', () => {
 			});
 		});
 
-		it('counts use status', () => {
+		it('counts use compositeStatus when raw status differs', () => {
 			replaceAll([
-				makeService({ name: 'svc-a', status: 'degraded' }),
-				makeService({ name: 'svc-b', status: 'healthy' })
+				makeService({ name: 'svc-a', status: 'healthy', compositeStatus: 'degraded' }),
+				makeService({ name: 'svc-b', status: 'unhealthy', compositeStatus: 'healthy' })
 			], 'v1.0.0');
 
 			expect(getCounts()).toEqual({
@@ -217,6 +225,13 @@ describe('serviceStore', () => {
 				makeService({ name: 'deg', status: 'degraded' })
 			], 'v1.0.0');
 			expect(getHasProblems()).toBe(true);
+		});
+
+		it('uses compositeStatus for problem detection when raw status differs', () => {
+			replaceAll([
+				makeService({ name: 'raw-unhealthy', status: 'unhealthy', compositeStatus: 'healthy' })
+			], 'v1.0.0');
+			expect(getHasProblems()).toBe(false);
 		});
 
 		it('is true when only healthy and unknown services exist', () => {

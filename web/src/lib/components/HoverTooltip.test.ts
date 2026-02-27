@@ -376,6 +376,37 @@ describe('HoverTooltip', () => {
 		const durationEl = screen.getByText(/degraded for/);
 		expect(durationEl).toHaveClass('text-health-degraded');
 	});
+
+	it('uses compositeStatus for degraded state display when raw status differs', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({ status: 'healthy', compositeStatus: 'degraded' }),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.getByText(/degraded for/)).toBeInTheDocument();
+		expect(screen.getByText(/Pods are ready but HTTP probe failed/)).toBeInTheDocument();
+	});
+
+	it('suppresses unhealthy error snippet when compositeStatus is healthy', () => {
+		render(HoverTooltip, {
+			props: {
+				service: makeService({
+					status: 'unhealthy',
+					compositeStatus: 'healthy',
+					errorSnippet: 'stale unhealthy message'
+				}),
+				visible: true,
+				position: 'below',
+				left: 0,
+				id: 'tooltip-test'
+			}
+		});
+		expect(screen.queryByText(/stale unhealthy message/)).not.toBeInTheDocument();
+	});
 });
 
 describe('HoverTooltip pod diagnostics', () => {

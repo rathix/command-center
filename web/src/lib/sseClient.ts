@@ -86,13 +86,13 @@ function isService(value: unknown): value is Service {
 		(value.icon === undefined || isNullableString(value.icon)) &&
 		isHealthStatus(value.status) &&
 		isHealthStatus(value.compositeStatus) &&
-		isNullableNumber(value.readyEndpoints) &&
-		isNullableNumber(value.totalEndpoints) &&
-		typeof value.authGuarded === 'boolean' &&
-		isNullableNumber(value.httpCode) &&
-		isNullableNumber(value.responseTimeMs) &&
-			isNullableString(value.lastChecked) &&
-			isNullableString(value.lastStateChange) &&
+			isNullableNumber(value.readyEndpoints) &&
+			isNullableNumber(value.totalEndpoints) &&
+			typeof value.authGuarded === 'boolean' &&
+			isNullableNumber(value.httpCode) &&
+			isNullableNumber(value.responseTimeMs) &&
+			isNullableISODateString(value.lastChecked) &&
+			isNullableISODateString(value.lastStateChange) &&
 			isNullableString(value.errorSnippet) &&
 			isNullablePodDiagnostic(value.podDiagnostic)
 	);

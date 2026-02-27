@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/rathix/command-center/internal/state"
@@ -42,7 +43,9 @@ type Watcher struct {
 	updater              StateUpdater
 	logger               *slog.Logger
 	k8sConnected         atomic.Bool
+	cacheSynced          atomic.Bool
 	syncedCh             chan struct{}
+	syncOnce             sync.Once
 	endpointSliceWatcher *EndpointSliceWatcher
 }
 
@@ -106,8 +109,6 @@ func NewWatcherWithClientAndESWatcher(clientset kubernetes.Interface, updater St
 
 // Run starts the informer factory and blocks until the context is cancelled.
 func (w *Watcher) Run(ctx context.Context) {
-	defer close(w.syncedCh)
-
 	w.logger.Info("Starting Kubernetes Ingress watcher")
 	w.factory.Start(ctx.Done())
 	syncStatus := w.factory.WaitForCacheSync(ctx.Done())
@@ -118,6 +119,10 @@ func (w *Watcher) Run(ctx context.Context) {
 			break
 		}
 	}
+	w.cacheSynced.Store(allSynced)
+	w.syncOnce.Do(func() {
+		close(w.syncedCh)
+	})
 
 	if allSynced {
 		w.markK8sConnected()
@@ -136,7 +141,7 @@ func (w *Watcher) Run(ctx context.Context) {
 func (w *Watcher) WaitForSync(ctx context.Context) bool {
 	select {
 	case <-w.syncedCh:
-		return true
+		return w.cacheSynced.Load()
 	case <-ctx.Done():
 		return false
 	}
@@ -197,6 +202,7 @@ func (w *Watcher) onUpdate(oldObj, newObj interface{}) {
 	if !ok {
 		// Ingress is no longer valid for discovery; stop any EndpointSlice watch.
 		w.endpointSliceWatcher.Unwatch(ingress.Name, ingress.Namespace)
+		w.updater.Remove(ingress.Namespace, ingress.Name)
 		w.logger.Warn("skipping Ingress with no valid host after update",
 			"namespace", ingress.Namespace,
 			"name", ingress.Name)
