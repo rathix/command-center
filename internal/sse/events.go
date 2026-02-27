@@ -9,14 +9,21 @@ import (
 	"github.com/rathix/command-center/internal/state"
 )
 
+// KeyboardConfig is included in the state event when custom keyboard bindings are configured.
+type KeyboardConfig struct {
+	Mod      string            `json:"mod"`
+	Bindings map[string]string `json:"bindings"`
+}
+
 // StateEventPayload wraps the full service list for the initial "state" event.
 type StateEventPayload struct {
-	AppVersion            string          `json:"appVersion"`
-	Services              []state.Service `json:"services"`
-	K8sConnected          bool            `json:"k8sConnected"`
-	K8sLastEvent          *time.Time      `json:"k8sLastEvent"`
-	HealthCheckIntervalMs int             `json:"healthCheckIntervalMs"`
-	ConfigErrors          []string        `json:"configErrors"`
+	AppVersion            string           `json:"appVersion"`
+	Services              []state.Service  `json:"services"`
+	K8sConnected          bool             `json:"k8sConnected"`
+	K8sLastEvent          *time.Time       `json:"k8sLastEvent"`
+	HealthCheckIntervalMs int              `json:"healthCheckIntervalMs"`
+	ConfigErrors          []string         `json:"configErrors"`
+	Keyboard              *KeyboardConfig  `json:"keyboard,omitempty"`
 }
 
 // K8sStatusPayload is the JSON payload for "k8sStatus" events.

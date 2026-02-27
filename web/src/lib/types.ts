@@ -66,6 +66,7 @@ export interface StateEventPayload {
 	k8sLastEvent?: string | null;
 	healthCheckIntervalMs?: number;
 	configErrors?: string[];
+	keyboard?: KeyboardConfig;
 }
 
 export interface K8sStatusPayload {
@@ -113,4 +114,35 @@ export interface OperationResult {
 export interface UpgradeInfoResult {
 	currentVersion: string;
 	targetVersion: string;
+}
+
+// Layout types for multi-panel workspace (Epic 11)
+export type PanelType = 'services' | 'terminal' | 'logs' | 'nodes' | 'gitops';
+
+export interface LeafNode {
+	type: 'leaf';
+	panelType: PanelType;
+	panelId: string;
+}
+
+export interface BranchNode {
+	type: 'branch';
+	direction: 'horizontal' | 'vertical';
+	ratio: number;
+	first: LayoutNode;
+	second: LayoutNode;
+}
+
+export type LayoutNode = LeafNode | BranchNode;
+
+// Keyboard shortcut types (Story 11.3)
+export interface KeyboardBinding {
+	action: string;
+	key: string;
+	mod: string;
+}
+
+export interface KeyboardConfig {
+	mod: string;
+	bindings: Record<string, string>;
 }

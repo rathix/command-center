@@ -9,10 +9,10 @@ type Config struct {
 	History       HistoryConfig          `yaml:"history"       json:"history"`
 	Notifications *NotificationsConfig   `yaml:"notifications" json:"notifications,omitempty"`
 	Talos         *TalosConfig           `yaml:"talos"         json:"talos,omitempty"`
+	Keyboard      *KeyboardConfig        `yaml:"keyboard"      json:"keyboard,omitempty"`
 }
 
 // TalosConfig configures the Talos gRPC API connection for node management.
-// When nil on Config, Talos features are completely disabled (opt-in per rule 15).
 type TalosConfig struct {
 	Endpoint     string `yaml:"endpoint"     json:"endpoint"`
 	PollInterval string `yaml:"pollInterval" json:"pollInterval"`
@@ -79,5 +79,11 @@ type NotificationRule struct {
 	SuppressionInterval string   `yaml:"suppressionInterval" json:"suppressionInterval"`
 	EscalateAfter       string   `yaml:"escalateAfter"       json:"escalateAfter"`
 	EscalationChannels  []string `yaml:"escalationChannels"  json:"escalationChannels"`
+}
+
+// KeyboardConfig defines custom keyboard shortcut bindings.
+type KeyboardConfig struct {
+	Mod      string            `yaml:"mod"      json:"mod"`
+	Bindings map[string]string `yaml:"bindings" json:"bindings"`
 }
 
