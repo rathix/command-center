@@ -495,6 +495,124 @@ services:
 	}
 }
 
+func TestLoad_GitOpsConfig_Valid(t *testing.T) {
+	yaml := `
+gitops:
+  provider: "github"
+  repository: "owner/repo"
+  branch: "main"
+  fluxNamespace: "flux-system"
+`
+	path := writeTempConfig(t, yaml)
+	cfg, errs := Load(path)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got %v", errs)
+	}
+	if cfg.GitOps == nil {
+		t.Fatal("expected gitops config to be set")
+	}
+	if cfg.GitOps.Provider != "github" {
+		t.Errorf("provider = %q, want %q", cfg.GitOps.Provider, "github")
+	}
+	if cfg.GitOps.Repository != "owner/repo" {
+		t.Errorf("repository = %q, want %q", cfg.GitOps.Repository, "owner/repo")
+	}
+	if cfg.GitOps.Branch != "main" {
+		t.Errorf("branch = %q, want %q", cfg.GitOps.Branch, "main")
+	}
+	if cfg.GitOps.FluxNamespace != "flux-system" {
+		t.Errorf("fluxNamespace = %q, want %q", cfg.GitOps.FluxNamespace, "flux-system")
+	}
+}
+
+func TestLoad_GitOpsConfig_MissingFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		wantErrs int
+	}{
+		{
+			"missing provider",
+			`
+gitops:
+  repository: "owner/repo"
+  branch: "main"
+  fluxNamespace: "flux-system"
+`,
+			1,
+		},
+		{
+			"missing repository",
+			`
+gitops:
+  provider: "github"
+  branch: "main"
+  fluxNamespace: "flux-system"
+`,
+			1,
+		},
+		{
+			"missing branch",
+			`
+gitops:
+  provider: "github"
+  repository: "owner/repo"
+  fluxNamespace: "flux-system"
+`,
+			1,
+		},
+		{
+			"missing fluxNamespace",
+			`
+gitops:
+  provider: "github"
+  repository: "owner/repo"
+  branch: "main"
+`,
+			1,
+		},
+		{
+			"all fields missing",
+			`
+gitops: {}
+`,
+			4,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeTempConfig(t, tt.yaml)
+			cfg, errs := Load(path)
+			if cfg == nil {
+				t.Fatal("expected non-nil config")
+			}
+			if cfg.GitOps != nil {
+				t.Error("expected gitops to be nil when validation fails")
+			}
+			if len(errs) != tt.wantErrs {
+				t.Errorf("expected %d errors, got %d: %v", tt.wantErrs, len(errs), errs)
+			}
+		})
+	}
+}
+
+func TestLoad_GitOpsConfig_AbsentSection(t *testing.T) {
+	yaml := `
+services:
+  - name: "test"
+    url: "https://test.local"
+    group: "infra"
+`
+	path := writeTempConfig(t, yaml)
+	cfg, errs := Load(path)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got %v", errs)
+	}
+	if cfg.GitOps != nil {
+		t.Error("expected gitops to be nil when section is absent")
+	}
+}
+
 func TestLoad_URLValidation(t *testing.T) {
 	tests := []struct {
 		name  string

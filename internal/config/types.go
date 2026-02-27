@@ -7,6 +7,15 @@ type Config struct {
 	Groups    map[string]GroupConfig   `yaml:"groups"    json:"groups"`
 	Health    HealthConfig             `yaml:"health"    json:"health"`
 	History   HistoryConfig            `yaml:"history"   json:"history"`
+	GitOps    *GitOpsConfig            `yaml:"gitops"    json:"gitops"`
+}
+
+// GitOpsConfig configures integration with a GitOps provider (e.g. Flux).
+type GitOpsConfig struct {
+	Provider      string `yaml:"provider"      json:"provider"`
+	Repository    string `yaml:"repository"    json:"repository"`
+	Branch        string `yaml:"branch"        json:"branch"`
+	FluxNamespace string `yaml:"fluxNamespace" json:"fluxNamespace"`
 }
 
 // CustomService defines a non-Kubernetes service to monitor.

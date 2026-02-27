@@ -45,6 +45,7 @@ type DiscoveredEventPayload struct {
 	ReadyEndpoints  *int                 `json:"readyEndpoints"`
 	TotalEndpoints  *int                 `json:"totalEndpoints"`
 	PodDiagnostic   *state.PodDiagnostic `json:"podDiagnostic"`
+	GitOpsStatus    *state.GitOpsStatus  `json:"gitopsStatus"`
 }
 
 // RemovedEventPayload contains only the identifier fields for a "removed" event.
@@ -73,6 +74,7 @@ func discoveredEventPayloadFromService(svc state.Service) DiscoveredEventPayload
 		ReadyEndpoints:  svc.ReadyEndpoints,
 		TotalEndpoints:  svc.TotalEndpoints,
 		PodDiagnostic:   svc.PodDiagnostic,
+		GitOpsStatus:    svc.GitOpsStatus,
 	}
 }
 

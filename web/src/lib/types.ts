@@ -24,6 +24,15 @@ export interface PodDiagnostic {
 	restartCount: number;
 }
 
+export type ReconciliationState = 'synced' | 'progressing' | 'failed' | 'suspended';
+
+export interface GitOpsStatus {
+	reconciliationState: ReconciliationState;
+	lastTransitionTime: string | null;
+	message: string;
+	sourceType: string;
+}
+
 export interface Service {
 	name: string;
 	icon?: string | null;
@@ -44,6 +53,7 @@ export interface Service {
 	healthUrl?: string | null;
 	readyEndpoints: number | null;
 	totalEndpoints: number | null;
+	gitopsStatus: GitOpsStatus | null;
 }
 
 export interface ServiceGroup {

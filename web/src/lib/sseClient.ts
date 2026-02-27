@@ -73,6 +73,17 @@ function isNullablePodDiagnostic(value: unknown): boolean {
 	return value === null || isPodDiagnostic(value);
 }
 
+function isNullableGitOpsStatus(value: unknown): boolean {
+	if (value === null || value === undefined) return true;
+	if (!isRecord(value)) return false;
+	return (
+		typeof value.reconciliationState === 'string' &&
+		isNullableString(value.lastTransitionTime) &&
+		typeof value.message === 'string' &&
+		typeof value.sourceType === 'string'
+	);
+}
+
 function isService(value: unknown): value is Service {
 	if (!isRecord(value)) return false;
 
@@ -94,7 +105,8 @@ function isService(value: unknown): value is Service {
 			isNullableISODateString(value.lastChecked) &&
 			isNullableISODateString(value.lastStateChange) &&
 			isNullableString(value.errorSnippet) &&
-			isNullablePodDiagnostic(value.podDiagnostic)
+			isNullablePodDiagnostic(value.podDiagnostic) &&
+			isNullableGitOpsStatus(value.gitopsStatus)
 	);
 }
 

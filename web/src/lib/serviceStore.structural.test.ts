@@ -31,7 +31,8 @@ describe('serviceStore structural integrity', () => {
 			lastChecked: '2026-02-20T10:00:00Z',
 			lastStateChange: '2026-02-20T09:00:00Z',
 			errorSnippet: null,
-			podDiagnostic: null
+			podDiagnostic: null,
+			gitopsStatus: null
 		}], 'v9.9.9', 60000);
 
 		store.addOrUpdate({
@@ -50,7 +51,8 @@ describe('serviceStore structural integrity', () => {
 			lastChecked: '2026-02-20T11:00:00Z',
 			lastStateChange: '2026-02-20T10:30:00Z',
 			errorSnippet: 'CRITICAL FAILURE',
-			podDiagnostic: null
+			podDiagnostic: null,
+			gitopsStatus: null
 		});
 
 		store.setConnectionStatus('disconnected');

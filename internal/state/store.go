@@ -21,6 +21,24 @@ const (
 	SourceConfig     = "config"
 )
 
+// ReconciliationState represents the Flux reconciliation state of a GitOps resource.
+type ReconciliationState string
+
+const (
+	ReconcilSynced      ReconciliationState = "synced"
+	ReconcilProgressing ReconciliationState = "progressing"
+	ReconcilFailed      ReconciliationState = "failed"
+	ReconcilSuspended   ReconciliationState = "suspended"
+)
+
+// GitOpsStatus holds the Flux reconciliation state for a service.
+type GitOpsStatus struct {
+	ReconciliationState ReconciliationState `json:"reconciliationState"`
+	LastTransitionTime  *time.Time          `json:"lastTransitionTime"`
+	Message             string              `json:"message"`
+	SourceType          string              `json:"sourceType"`
+}
+
 // PodDiagnostic contains pod-level diagnostic information for K8s services.
 // Nil for non-K8s services or when pod status is unavailable.
 type PodDiagnostic struct {
@@ -51,6 +69,7 @@ type Service struct {
         ExpectedStatusCodes []int        `json:"expectedStatusCodes,omitempty"`
         ReadyEndpoints      *int         `json:"readyEndpoints"`
         TotalEndpoints      *int         `json:"totalEndpoints"`
+        GitOpsStatus        *GitOpsStatus `json:"gitopsStatus"`
 }
 // EventType identifies the kind of state mutation.
 type EventType int
@@ -329,6 +348,14 @@ func (s Service) DeepCopy() Service {
 	if s.TotalEndpoints != nil {
 		val := *s.TotalEndpoints
 		cp.TotalEndpoints = &val
+	}
+	if s.GitOpsStatus != nil {
+		gs := *s.GitOpsStatus
+		if gs.LastTransitionTime != nil {
+			val := *gs.LastTransitionTime
+			gs.LastTransitionTime = &val
+		}
+		cp.GitOpsStatus = &gs
 	}
 	return cp
 }
