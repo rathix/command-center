@@ -2,11 +2,12 @@ package config
 
 // Config is the top-level configuration parsed from the YAML config file.
 type Config struct {
-	Services  []CustomService          `yaml:"services"  json:"services"`
-	Overrides []ServiceOverride        `yaml:"overrides" json:"overrides"`
-	Groups    map[string]GroupConfig   `yaml:"groups"    json:"groups"`
-	Health    HealthConfig             `yaml:"health"    json:"health"`
-	History   HistoryConfig            `yaml:"history"   json:"history"`
+	Services      []CustomService          `yaml:"services"      json:"services"`
+	Overrides     []ServiceOverride        `yaml:"overrides"     json:"overrides"`
+	Groups        map[string]GroupConfig   `yaml:"groups"        json:"groups"`
+	Health        HealthConfig             `yaml:"health"        json:"health"`
+	History       HistoryConfig            `yaml:"history"       json:"history"`
+	Notifications *NotificationsConfig     `yaml:"notifications" json:"notifications,omitempty"`
 }
 
 // CustomService defines a non-Kubernetes service to monitor.
@@ -45,5 +46,30 @@ type HealthConfig struct {
 // HistoryConfig controls health history retention.
 type HistoryConfig struct {
 	RetentionDays int `yaml:"retentionDays" json:"retentionDays"`
+}
+
+// NotificationsConfig configures the notification engine.
+type NotificationsConfig struct {
+	Adapters []AdapterConfig    `yaml:"adapters" json:"adapters"`
+	Rules    []NotificationRule `yaml:"rules"    json:"rules"`
+}
+
+// AdapterConfig defines a notification delivery adapter.
+type AdapterConfig struct {
+	Type     string `yaml:"type"     json:"type"`
+	Name     string `yaml:"name"     json:"name"`
+	URL      string `yaml:"url"      json:"url"`
+	UserKey  string `yaml:"userKey"  json:"userKey"`
+	AppToken string `yaml:"appToken" json:"appToken"`
+}
+
+// NotificationRule defines per-service routing for notifications.
+type NotificationRule struct {
+	Services            []string `yaml:"services"            json:"services"`
+	Transitions         []string `yaml:"transitions"         json:"transitions"`
+	Channels            []string `yaml:"channels"            json:"channels"`
+	SuppressionInterval string   `yaml:"suppressionInterval" json:"suppressionInterval"`
+	EscalateAfter       string   `yaml:"escalateAfter"       json:"escalateAfter"`
+	EscalationChannels  []string `yaml:"escalationChannels"  json:"escalationChannels"`
 }
 

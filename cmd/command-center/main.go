@@ -22,6 +22,7 @@ import (
 	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/k8s"
+	"github.com/rathix/command-center/internal/notify"
 	"github.com/rathix/command-center/internal/server"
 	"github.com/rathix/command-center/internal/session"
 	"github.com/rathix/command-center/internal/sse"
@@ -339,6 +340,25 @@ func run(ctx context.Context, cfg config) error {
 				slog.Warn("config watcher stopped with error", "error", err)
 			}
 		}()
+	}
+
+	// Initialize notification engine if configured
+	if lastAppCfg != nil && lastAppCfg.Notifications != nil {
+		adapters, err := notify.BuildAdapters(lastAppCfg.Notifications.Adapters)
+		if err != nil {
+			return fmt.Errorf("failed to build notification adapters: %w", err)
+		}
+		var engineOpts []notify.Option
+		engineOpts = append(engineOpts, notify.WithLogger(logger))
+		if len(lastAppCfg.Notifications.Rules) > 0 {
+			matcher := notify.NewRuleMatcher(lastAppCfg.Notifications.Rules)
+			engineOpts = append(engineOpts, notify.WithRuleMatcher(matcher))
+		}
+		engine := notify.NewEngine(store, adapters, engineOpts...)
+		go engine.Run(ctx)
+		slog.Info("Notification engine started", "adapters", len(adapters))
+	} else {
+		slog.Debug("notifications not configured")
 	}
 
 	// Create and start SSE broker for real-time event streaming
