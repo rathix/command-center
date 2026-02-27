@@ -22,6 +22,7 @@ import (
 	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/k8s"
+	"github.com/rathix/command-center/internal/logtail"
 	"github.com/rathix/command-center/internal/notify"
 	"github.com/rathix/command-center/internal/server"
 	"github.com/rathix/command-center/internal/session"
@@ -385,10 +386,27 @@ func run(ctx context.Context, cfg config) error {
 	pruner := history.NewPruner(cfg.HistoryFile, retentionDays, historyWriter, logger)
 	go pruner.Run(ctx)
 
+	// Wire log tail handler if K8s is available
+	var logHandler *logtail.Handler
+	if watcher != nil {
+		clientset, csErr := k8s.BuildClientset(cfg.Kubeconfig)
+		if csErr != nil {
+			slog.Warn("log tail disabled: failed to build clientset", "error", csErr)
+		} else {
+			logStreamer := logtail.NewK8sStreamer(clientset)
+			logHandler = logtail.NewHandler(logStreamer, logger)
+		}
+	}
+
 	mux := http.NewServeMux()
 
 	// Register SSE endpoint before the catch-all static handler
 	mux.Handle("GET /api/events", broker)
+
+	// Register log tail endpoint (WebSocket)
+	if logHandler != nil {
+		mux.Handle("GET /api/logs/{namespace}/{pod}", logHandler)
+	}
 
 	if cfg.Dev {
 		viteURL := "http://localhost:5173"
