@@ -48,6 +48,7 @@ type config struct {
 	TLSCert         string
 	TLSKey          string
 	ConfigFile      string
+	BasePath        string
 }
 
 func main() {
@@ -97,6 +98,7 @@ func loadConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.TLSKey, "tls-key", getEnv("TLS_KEY", ""), "custom server key path")
 	fs.StringVar(&cfg.ConfigFile, "config", getEnv("CONFIG_FILE", ""), "path to YAML config file for custom services")
 	fs.StringVar(&cfg.HistoryFile, "history-file", getEnv("HISTORY_FILE", ""), "path to history JSONL file")
+	fs.StringVar(&cfg.BasePath, "base-path", getEnv("CC_BASE_PATH", "/"), "base URL path for reverse proxy deployment (e.g., /command-center/)")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -386,7 +388,7 @@ func run(ctx context.Context, cfg config) error {
 		mux.Handle("/", spaHandler)
 	}
 
-	var handler http.Handler = mux
+	var handler http.Handler = server.NewBasePathHandler(cfg.BasePath, mux)
 	var tlsConfig *tls.Config
 
 	// Configure TLS/mTLS for non-dev mode

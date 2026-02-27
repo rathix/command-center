@@ -39,6 +39,10 @@ func (h *SPAHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if the file exists using fs.Stat (avoids opening file content)
 	filePath := urlPath[1:]
 	if _, err := fs.Stat(h.filesystem, filePath); err == nil {
+		// Set correct MIME type for web app manifest files
+		if path.Ext(urlPath) == ".webmanifest" {
+			w.Header().Set("Content-Type", "application/manifest+json")
+		}
 		h.fileServer.ServeHTTP(w, r)
 		return
 	}

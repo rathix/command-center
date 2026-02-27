@@ -47,12 +47,18 @@
 
   /* Spacing — base 8px via 4px unit */
   --spacing: 4px;
+
+  /* Touch targets (WCAG 2.5.8) */
+  --touch-target-min: 44px;
+  --service-row-min-height: 48px;
 }
 
 body {
   font-family: var(--font-mono);
   background-color: var(--color-base);
   color: var(--color-text);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

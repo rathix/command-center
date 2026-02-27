@@ -84,8 +84,8 @@ describe('GroupHeader', () => {
 	it('has required size, spacing, and focus ring classes', () => {
 		render(GroupHeader, { props: { group: makeGroup(), controlsId: 'list-1' } });
 		const header = screen.getByRole('button');
-		expect(header).toHaveClass('h-[36px]');
-		expect(header).toHaveClass('px-4');
+		expect(header).toHaveClass('min-h-[var(--touch-target-min)]');
+		expect(header).toHaveClass('px-3');
 		expect(header).toHaveClass('focus-visible:outline-2');
 		expect(header).toHaveClass('focus-visible:outline-offset-[-2px]');
 		expect(header).toHaveClass('focus-visible:outline-accent-lavender');

@@ -159,6 +159,29 @@ func TestDirectoryPathFallsBackToSPA(t *testing.T) {
 	}
 }
 
+func TestWebManifestContentType(t *testing.T) {
+	fsys := fstest.MapFS{
+		"index.html":         {Data: []byte("<html></html>")},
+		"manifest.webmanifest": {Data: []byte(`{"name":"test"}`)},
+	}
+	handler := &SPAHandler{
+		fileServer: http.FileServer(http.FS(fsys)),
+		filesystem: fsys,
+	}
+	req := httptest.NewRequest(http.MethodGet, "/manifest.webmanifest", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+	ct := rec.Header().Get("Content-Type")
+	if !strings.HasPrefix(ct, "application/manifest+json") {
+		t.Errorf("expected Content-Type application/manifest+json, got %q", ct)
+	}
+}
+
 func TestNewSPAHandlerSucceedsForValidPrefix(t *testing.T) {
 	fsys := fstest.MapFS{
 		"web/build/index.html": {Data: []byte("<html></html>")},

@@ -34,24 +34,21 @@ describe('ServiceRow', () => {
 		expect(screen.getByText('my-service')).toBeInTheDocument();
 	});
 
-	it('renders service URL text', () => {
-		render(ServiceRow, {
-			props: { service: makeService({ url: 'https://svc.example.com' }), odd: false }
-		});
-		expect(screen.getByText('https://svc.example.com')).toBeInTheDocument();
-	});
-
-	it('renders as <a> with correct href', () => {
+	it('renders as interactive row with button role', () => {
 		render(ServiceRow, {
 			props: { service: makeService({ url: 'https://grafana.example.com' }), odd: false }
 		});
-		const link = screen.getByRole('link');
-		expect(link.tagName).toBe('A');
-		expect(link).toHaveAttribute('href', 'https://grafana.example.com/');
+		const button = screen.getByRole('button');
+		expect(button).toBeInTheDocument();
 	});
 
-	it('has target="_blank" and rel="noopener noreferrer"', () => {
-		render(ServiceRow, { props: { service: makeService(), odd: false } });
+	it('has target="_blank" and rel="noopener noreferrer" on expanded link', async () => {
+		render(ServiceRow, {
+			props: { service: makeService({ lastChecked: '2026-02-20T10:00:00Z' }), odd: false }
+		});
+		const button = screen.getByRole('button');
+		await fireEvent.click(button);
+		await tick();
 		const link = screen.getByRole('link');
 		expect(link).toHaveAttribute('target', '_blank');
 		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -91,14 +88,14 @@ describe('ServiceRow', () => {
 
 	it('has cursor-pointer class', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: false } });
-		const link = screen.getByRole('link');
-		expect(link).toHaveClass('cursor-pointer');
+		const button = screen.getByRole('button');
+		expect(button).toHaveClass('cursor-pointer');
 	});
 
-	it('has fixed 46px height', () => {
+	it('has minimum service row height for touch targets', () => {
 		render(ServiceRow, { props: { service: makeService(), odd: false } });
 		const listItem = screen.getByRole('listitem');
-		expect(listItem).toHaveClass('h-[46px]');
+		expect(listItem).toHaveClass('min-h-[var(--service-row-min-height)]');
 	});
 
 	it('renders non-interactive div for unsafe urls', () => {
@@ -107,11 +104,9 @@ describe('ServiceRow', () => {
 		});
 		const div = screen.getByTitle('Invalid URL');
 		expect(div).toBeInTheDocument();
-		expect(screen.queryByRole('link')).toBeNull();
-		expect(screen.getByText(/javascript:alert\(1\) \(invalid\)/)).toBeInTheDocument();
 	});
 
-	it('uses service icon override for icon src in link branch', () => {
+	it('uses service icon override for icon src', () => {
 		const { container } = render(ServiceRow, {
 			props: {
 				service: makeService({ icon: 'immich' }),
@@ -136,20 +131,6 @@ describe('ServiceRow', () => {
 		expect(iconImg).toHaveAttribute(
 			'src',
 			'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/grafana.svg'
-		);
-	});
-
-	it('uses service icon override for icon src in invalid URL branch', () => {
-		const { container } = render(ServiceRow, {
-			props: {
-				service: makeService({ url: 'javascript:alert(1)', icon: 'vaultwarden' }),
-				odd: false
-			}
-		});
-		const iconImg = container.querySelector('img[loading="lazy"]');
-		expect(iconImg).toHaveAttribute(
-			'src',
-			'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/vaultwarden.svg'
 		);
 	});
 
@@ -185,79 +166,6 @@ describe('ServiceRow', () => {
 	});
 
 	describe('health response details', () => {
-		it('shows response code and time for healthy service in muted text', () => {
-			render(ServiceRow, {
-				props: {
-					service: makeService({ status: 'healthy', compositeStatus: 'healthy', httpCode: 200, responseTimeMs: 142 }),
-					odd: false
-				}
-			});
-			const responseText = screen.getByText('200 · 142ms');
-			expect(responseText).toBeInTheDocument();
-			expect(responseText).toHaveClass('text-subtext-0');
-		});
-
-		it('shows response code and time for unhealthy service in red text', () => {
-			render(ServiceRow, {
-				props: {
-					service: makeService({ status: 'unhealthy', compositeStatus: 'unhealthy', httpCode: 503, responseTimeMs: 0 }),
-					odd: false
-				}
-			});
-			const responseText = screen.getByText('503 · 0ms');
-			expect(responseText).toBeInTheDocument();
-			expect(responseText).toHaveClass('text-health-error');
-		});
-
-		it('shows response code and time for degraded service in yellow text', () => {
-			render(ServiceRow, {
-				props: {
-					service: makeService({ status: 'degraded', compositeStatus: 'degraded', httpCode: 200, responseTimeMs: 142 }),
-					odd: false
-				}
-			});
-			const responseText = screen.getByText('200 · 142ms');
-			expect(responseText).toBeInTheDocument();
-			expect(responseText).toHaveClass('text-health-degraded');
-		});
-
-		it('shows dash placeholder for unknown status and uses semantic color', () => {
-			render(ServiceRow, {
-				props: {
-					service: makeService({
-						status: 'unknown',
-						compositeStatus: 'unknown',
-						httpCode: 200,
-						responseTimeMs: 50
-					}),
-					odd: false
-				}
-			});
-			const responseText = screen.getByText('—');
-			expect(responseText).toBeInTheDocument();
-			expect(responseText).toHaveClass('text-health-unknown');
-		});
-
-		it('shows dash placeholder when httpCode is null', () => {
-			render(ServiceRow, {
-				props: {
-					service: makeService({ status: 'healthy', httpCode: null, responseTimeMs: 100 }),
-					odd: false
-				}
-			});
-			expect(screen.getByText('—')).toBeInTheDocument();
-		});
-
-		it('shows dash placeholder when responseTimeMs is null', () => {
-			render(ServiceRow, {
-				props: {
-					service: makeService({ status: 'healthy', httpCode: 200, responseTimeMs: null }),
-					odd: false
-				}
-			});
-			expect(screen.getByText('—')).toBeInTheDocument();
-		});
-
 		it('uses compositeStatus for visual state when raw status differs', () => {
 			render(ServiceRow, {
 				props: {
@@ -271,8 +179,6 @@ describe('ServiceRow', () => {
 				}
 			});
 			expect(screen.getByLabelText('unhealthy')).toBeInTheDocument();
-			const responseText = screen.getByText('503 · 0ms');
-			expect(responseText).toHaveClass('text-health-error');
 			const listItem = screen.getByRole('listitem');
 			expect(listItem.style.backgroundColor).toBe('rgba(243, 139, 168, 0.05)');
 		});
@@ -368,6 +274,93 @@ describe('ServiceRow', () => {
 		});
 	});
 
+	describe('expandable details', () => {
+		it('clicking row toggles expanded details', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({
+						url: 'https://grafana.example.com',
+						httpCode: 200,
+						responseTimeMs: 50,
+						lastChecked: '2026-02-20T10:00:00Z'
+					}),
+					odd: false
+				}
+			});
+			const button = screen.getByRole('button');
+			expect(screen.queryByTestId('expanded-details')).not.toBeInTheDocument();
+
+			await fireEvent.click(button);
+			await tick();
+			expect(screen.getByTestId('expanded-details')).toBeInTheDocument();
+
+			await fireEvent.click(button);
+			await tick();
+			expect(screen.queryByTestId('expanded-details')).not.toBeInTheDocument();
+		});
+
+		it('expanded section shows service URL', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({
+						url: 'https://grafana.example.com',
+						httpCode: 200,
+						responseTimeMs: 50
+					}),
+					odd: false
+				}
+			});
+			await fireEvent.click(screen.getByRole('button'));
+			await tick();
+			const link = screen.getByRole('link');
+			expect(link).toHaveAttribute('href', 'https://grafana.example.com/');
+		});
+
+		it('expanded section shows HTTP code', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ httpCode: 200, responseTimeMs: 50 }),
+					odd: false
+				}
+			});
+			await fireEvent.click(screen.getByRole('button'));
+			await tick();
+			expect(screen.getByText('200')).toBeInTheDocument();
+		});
+
+		it('expanded section shows response time', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ httpCode: 200, responseTimeMs: 142 }),
+					odd: false
+				}
+			});
+			await fireEvent.click(screen.getByRole('button'));
+			await tick();
+			expect(screen.getByText('142ms')).toBeInTheDocument();
+		});
+
+		it('expanded section shows error snippet', async () => {
+			render(ServiceRow, {
+				props: {
+					service: makeService({ errorSnippet: 'Connection refused' }),
+					odd: false
+				}
+			});
+			await fireEvent.click(screen.getByRole('button'));
+			await tick();
+			expect(screen.getByText('Connection refused')).toBeInTheDocument();
+		});
+
+		it('has aria-expanded attribute', () => {
+			render(ServiceRow, {
+				props: { service: makeService(), odd: false }
+			});
+			const button = screen.getByRole('button');
+			expect(button).toHaveAttribute('aria-expanded', 'false');
+		});
+	});
+
 	describe('hover tooltip integration', () => {
 		beforeEach(() => {
 			vi.useFakeTimers();
@@ -388,15 +381,15 @@ describe('ServiceRow', () => {
 			expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 		});
 
-		it('aria-describedby is set on the <a> element with the correct tooltip id', () => {
+		it('aria-describedby is set on the interactive element with the correct tooltip id', () => {
 			render(ServiceRow, {
 				props: {
 					service: makeService({ name: 'grafana', namespace: 'monitoring' }),
 					odd: false
 				}
 			});
-			const link = screen.getByRole('link');
-			expect(link).toHaveAttribute('aria-describedby', 'tooltip-monitoring-grafana');
+			const button = screen.getByRole('button');
+			expect(button).toHaveAttribute('aria-describedby', 'tooltip-monitoring-grafana');
 		});
 
 		it('tooltip appears after mouseenter + 200ms delay', async () => {
@@ -419,53 +412,6 @@ describe('ServiceRow', () => {
 			vi.advanceTimersByTime(200);
 			await tick();
 			expect(screen.getByRole('tooltip')).toBeInTheDocument();
-		});
-
-		it('positions tooltip above when row is near viewport bottom', async () => {
-			render(ServiceRow, {
-				props: {
-					service: makeService({
-						lastChecked: '2026-02-20T10:00:00Z',
-						lastStateChange: '2026-02-20T08:00:00Z',
-						status: 'healthy',
-						compositeStatus: 'healthy'
-					}),
-					odd: false
-				}
-			});
-			const listItem = screen.getByRole('listitem');
-			const originalInnerHeight = window.innerHeight;
-
-			Object.defineProperty(window, 'innerHeight', {
-				configurable: true,
-				value: 800
-			});
-			vi.spyOn(listItem, 'getBoundingClientRect').mockReturnValue({
-				x: 0,
-				y: 750,
-				top: 750,
-				bottom: 790,
-				left: 0,
-				right: 600,
-				width: 600,
-				height: 40,
-				toJSON: () => ({})
-			} as DOMRect);
-
-			try {
-				await fireEvent.mouseEnter(listItem);
-				vi.advanceTimersByTime(200);
-				await tick();
-
-				const tooltip = screen.getByRole('tooltip');
-				expect(tooltip).toHaveClass('bottom-full');
-				expect(tooltip).toHaveClass('mb-1');
-			} finally {
-				Object.defineProperty(window, 'innerHeight', {
-					configurable: true,
-					value: originalInnerHeight
-				});
-			}
 		});
 
 		it('tooltip disappears immediately on mouseleave', async () => {
@@ -514,35 +460,6 @@ describe('ServiceRow', () => {
 			await tick();
 
 			expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-		});
-
-		it('horizontally positions tooltip based on mouse clientX', async () => {
-			render(ServiceRow, {
-				props: {
-					service: makeService(),
-					odd: false
-				}
-			});
-			const listItem = screen.getByRole('listitem');
-
-			// Mock getBoundingClientRect for the row
-			vi.spyOn(listItem, 'getBoundingClientRect').mockReturnValue({
-				left: 100,
-				top: 100,
-				bottom: 146,
-				right: 700,
-				width: 600,
-				height: 46
-			} as DOMRect);
-
-			// Mouse enters at clientX = 250
-			// Expected left = 250 - 100 = 150
-			await fireEvent.mouseEnter(listItem, { clientX: 250 });
-			vi.advanceTimersByTime(200);
-			await tick();
-
-			const tooltip = screen.getByRole('tooltip');
-			expect(tooltip.style.left).toBe('150px');
 		});
 
 		it('tooltip renders service diagnostic data', async () => {

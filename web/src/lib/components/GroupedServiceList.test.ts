@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, within } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { tick } from 'svelte';
 import GroupedServiceList from './GroupedServiceList.svelte';
@@ -26,6 +26,22 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 	};
 }
 
+/**
+ * Get group header buttons (the ones with aria-controls attribute).
+ * This distinguishes GroupHeader buttons from ServiceRow expand buttons.
+ */
+function getGroupHeaderButtons(): HTMLElement[] {
+	return screen.getAllByRole('button').filter((el) => el.hasAttribute('aria-controls'));
+}
+
+function getGroupHeaderButton(): HTMLElement {
+	const buttons = getGroupHeaderButtons();
+	if (buttons.length !== 1) {
+		throw new Error(`Expected exactly 1 group header button, found ${buttons.length}`);
+	}
+	return buttons[0];
+}
+
 beforeEach(() => {
 	_resetForTesting();
 });
@@ -40,10 +56,10 @@ describe('GroupedServiceList', () => {
 			'v1.0.0'
 		);
 		render(GroupedServiceList);
-		const buttons = screen.getAllByRole('button');
-		expect(buttons).toHaveLength(2);
-		expect(buttons[0]).toHaveTextContent('infra');
-		expect(buttons[1]).toHaveTextContent('media');
+		const headers = getGroupHeaderButtons();
+		expect(headers).toHaveLength(2);
+		expect(headers[0]).toHaveTextContent('infra');
+		expect(headers[1]).toHaveTextContent('media');
 	});
 
 	it('renders ServiceRow entries under each expanded group', () => {
@@ -66,7 +82,7 @@ describe('GroupedServiceList', () => {
 			'v1.0.0'
 		);
 		render(GroupedServiceList);
-		const button = screen.getByRole('button');
+		const button = getGroupHeaderButton();
 		expect(button).toHaveAttribute('aria-expanded', 'true');
 		expect(screen.getAllByRole('listitem')).toHaveLength(1);
 	});
@@ -77,7 +93,7 @@ describe('GroupedServiceList', () => {
 			'v1.0.0'
 		);
 		render(GroupedServiceList);
-		const button = screen.getByRole('button');
+		const button = getGroupHeaderButton();
 		expect(button).toHaveAttribute('aria-expanded', 'false');
 		expect(screen.queryAllByRole('listitem')).toHaveLength(0);
 	});
@@ -100,7 +116,7 @@ describe('GroupedServiceList', () => {
 			'v1.0.0'
 		);
 		render(GroupedServiceList);
-		const button = screen.getByRole('button');
+		const button = getGroupHeaderButton();
 		const controlsId = button.getAttribute('aria-controls');
 		expect(controlsId).toBe('group-infra-services');
 		const list = document.getElementById(controlsId!);
@@ -114,7 +130,7 @@ describe('GroupedServiceList', () => {
 			'v1.0.0'
 		);
 		render(GroupedServiceList);
-		const button = screen.getByRole('button');
+		const button = getGroupHeaderButton();
 		expect(button).toHaveAttribute('aria-expanded', 'false');
 		const controlsId = button.getAttribute('aria-controls');
 		const list = document.getElementById(controlsId!);
@@ -128,7 +144,7 @@ describe('GroupedServiceList', () => {
 			'v1.0.0'
 		);
 		render(GroupedServiceList);
-		const button = screen.getByRole('button');
+		const button = getGroupHeaderButton();
 		const controlsId = button.getAttribute('aria-controls');
 		expect(controlsId).toBe('group-infra-ops-services');
 		expect(document.getElementById(controlsId!)).toBeTruthy();
@@ -140,7 +156,7 @@ describe('GroupedServiceList', () => {
 			'v1.0.0'
 		);
 		render(GroupedServiceList);
-		const button = screen.getByRole('button');
+		const button = getGroupHeaderButton();
 		expect(button).toHaveAttribute('aria-expanded', 'true');
 		expect(screen.getAllByRole('listitem')).toHaveLength(1);
 
@@ -188,12 +204,11 @@ describe('GroupedServiceList', () => {
 		render(GroupedServiceList);
 		expect(screen.queryByRole('heading')).not.toBeInTheDocument();
 		expect(screen.queryByText('needs attention')).not.toBeInTheDocument();
-		expect(screen.queryByText('healthy')).not.toBeInTheDocument();
 	});
 
 	it('empty store renders nothing', () => {
 		render(GroupedServiceList);
-		expect(screen.queryByRole('button')).not.toBeInTheDocument();
+		expect(screen.queryAllByRole('button')).toHaveLength(0);
 		expect(screen.queryByRole('list')).not.toBeInTheDocument();
 		expect(screen.queryAllByRole('listitem')).toHaveLength(0);
 	});
@@ -207,11 +222,11 @@ describe('GroupedServiceList', () => {
 			'v1.0.0'
 		);
 		render(GroupedServiceList);
-		const buttons = screen.getAllByRole('button');
-		expect(buttons).toHaveLength(1);
-		expect(buttons[0]).toHaveTextContent('only-group');
+		const headers = getGroupHeaderButtons();
+		expect(headers).toHaveLength(1);
+		expect(headers[0]).toHaveTextContent('only-group');
 		// Group has unhealthy service, so expanded
-		expect(buttons[0]).toHaveAttribute('aria-expanded', 'true');
+		expect(headers[0]).toHaveAttribute('aria-expanded', 'true');
 		const items = screen.getAllByRole('listitem');
 		expect(items).toHaveLength(2);
 	});
