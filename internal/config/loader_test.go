@@ -534,6 +534,88 @@ services:
 	}
 }
 
+func TestLoad_TerminalConfigValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantErrs  int
+		errSubstr string
+	}{
+		{
+			name: "valid enabled terminal config",
+			yaml: `
+terminal:
+  enabled: true
+  allowedCommands: [kubectl, helm]
+  idleTimeout: "15m"
+  maxSessions: 4
+`,
+			wantErrs: 0,
+		},
+		{
+			name: "disabled terminal needs no commands",
+			yaml: `
+terminal:
+  enabled: false
+`,
+			wantErrs: 0,
+		},
+		{
+			name: "enabled but no commands",
+			yaml: `
+terminal:
+  enabled: true
+`,
+			wantErrs:  1,
+			errSubstr: "allowedCommands",
+		},
+		{
+			name: "invalid idle timeout",
+			yaml: `
+terminal:
+  enabled: true
+  allowedCommands: [kubectl]
+  idleTimeout: "bad"
+`,
+			wantErrs:  1,
+			errSubstr: "idleTimeout",
+		},
+		{
+			name: "negative max sessions",
+			yaml: `
+terminal:
+  enabled: true
+  allowedCommands: [kubectl]
+  maxSessions: -1
+`,
+			wantErrs:  1,
+			errSubstr: "maxSessions",
+		},
+		{
+			name:     "omitted terminal section is fine",
+			yaml:     `{}`,
+			wantErrs: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeTempConfig(t, tt.yaml)
+			cfg, errs := Load(path)
+			if cfg == nil {
+				t.Fatal("expected non-nil config")
+			}
+			if len(errs) != tt.wantErrs {
+				t.Fatalf("expected %d errors, got %d: %v", tt.wantErrs, len(errs), errs)
+			}
+			if tt.errSubstr != "" && len(errs) > 0 {
+				if !strings.Contains(errs[0].Error(), tt.errSubstr) {
+					t.Errorf("expected error containing %q, got: %v", tt.errSubstr, errs[0])
+				}
+			}
+		})
+	}
+}
+
 func TestLoad_URLValidation(t *testing.T) {
 	tests := []struct {
 		name  string

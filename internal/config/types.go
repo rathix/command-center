@@ -10,12 +10,21 @@ type Config struct {
 	Notifications *NotificationsConfig   `yaml:"notifications" json:"notifications,omitempty"`
 	Talos         *TalosConfig           `yaml:"talos"         json:"talos,omitempty"`
 	Keyboard      *KeyboardConfig        `yaml:"keyboard"      json:"keyboard,omitempty"`
+	Terminal      TerminalConfig         `yaml:"terminal"      json:"terminal"`
 }
 
 // TalosConfig configures the Talos gRPC API connection for node management.
 type TalosConfig struct {
 	Endpoint     string `yaml:"endpoint"     json:"endpoint"`
 	PollInterval string `yaml:"pollInterval" json:"pollInterval"`
+}
+
+// TerminalConfig controls in-browser terminal settings.
+type TerminalConfig struct {
+	Enabled         bool     `yaml:"enabled"         json:"enabled"`
+	AllowedCommands []string `yaml:"allowedCommands" json:"allowedCommands"`
+	IdleTimeout     string   `yaml:"idleTimeout"     json:"idleTimeout"`
+	MaxSessions     int      `yaml:"maxSessions"     json:"maxSessions"`
 }
 
 // CustomService defines a non-Kubernetes service to monitor.

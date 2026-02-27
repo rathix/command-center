@@ -6,9 +6,21 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+func parseTerminalDuration(s string) (time.Duration, error) {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("duration must be positive, got %q", s)
+	}
+	return d, nil
+}
 
 // Load reads and parses a YAML configuration file at path.
 // If path does not exist or is empty, it returns an empty Config with no errors.
@@ -105,6 +117,19 @@ func Load(path string) (*Config, []error) {
 		validOverrides = append(validOverrides, ovr)
 	}
 	cfg.Overrides = validOverrides
+
+	// Validate terminal config
+	if cfg.Terminal.Enabled && len(cfg.Terminal.AllowedCommands) == 0 {
+		validationErrors = append(validationErrors, fmt.Errorf("terminal.allowedCommands: required when terminal is enabled"))
+	}
+	if cfg.Terminal.IdleTimeout != "" {
+		if _, err := parseTerminalDuration(cfg.Terminal.IdleTimeout); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("terminal.idleTimeout: %w", err))
+		}
+	}
+	if cfg.Terminal.MaxSessions < 0 {
+		validationErrors = append(validationErrors, fmt.Errorf("terminal.maxSessions: must be non-negative, got %d", cfg.Terminal.MaxSessions))
+	}
 
 	return &cfg, validationErrors
 }

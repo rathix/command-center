@@ -29,6 +29,8 @@ import (
 	"github.com/rathix/command-center/internal/sse"
 	"github.com/rathix/command-center/internal/state"
 	"github.com/rathix/command-center/internal/talos"
+	"github.com/rathix/command-center/internal/terminal"
+	appwebsocket "github.com/rathix/command-center/internal/websocket"
 )
 
 const defaultAddr = ":8443"
@@ -419,6 +421,9 @@ func run(ctx context.Context, cfg config) error {
 		}
 	}
 
+	// Create WebSocket connection registry for graceful shutdown
+	wsRegistry := appwebsocket.NewRegistry(logger)
+
 	mux := http.NewServeMux()
 
 	// Register SSE endpoint before the catch-all static handler
@@ -429,12 +434,37 @@ func run(ctx context.Context, cfg config) error {
 		mux.Handle("GET /api/logs/{namespace}/{pod}", logHandler)
 	}
 
-	// Register Talos node endpoints (always registered; handler returns configured=false when poller is nil)
+	// Register Talos node endpoints
 	mux.Handle("GET /api/nodes", talos.NewHandler(talosPoller))
 	mux.Handle("GET /api/nodes/{name}/metrics", talos.NewMetricsHistoryHandler(talosPoller))
 	mux.Handle("POST /api/talos/{node}/reboot", talos.NewOperationsHandler(talosPoller, logger))
 	mux.Handle("POST /api/talos/{node}/upgrade", talos.NewUpgradeHandler(talosPoller, logger))
 	mux.Handle("GET /api/talos/{node}/upgrade-info", talos.NewUpgradeInfoHandler(talosPoller, logger))
+
+	// Register terminal handler if enabled
+	var termManager *terminal.Manager
+	if lastAppCfg != nil && lastAppCfg.Terminal.Enabled {
+		termOpts := []terminal.ManagerOption{
+			terminal.WithLogger(logger),
+			terminal.WithAllowedCommands(lastAppCfg.Terminal.AllowedCommands),
+		}
+		if lastAppCfg.Terminal.MaxSessions > 0 {
+			termOpts = append(termOpts, terminal.WithMaxSessions(lastAppCfg.Terminal.MaxSessions))
+		}
+		if lastAppCfg.Terminal.IdleTimeout != "" {
+			if d, err := time.ParseDuration(lastAppCfg.Terminal.IdleTimeout); err == nil {
+				termOpts = append(termOpts, terminal.WithIdleTimeout(d))
+			}
+		}
+		termManager = terminal.NewManager(wsRegistry, termOpts...)
+		go termManager.RunIdleScanner(ctx)
+		termHandler := terminal.NewHandler(termManager, wsRegistry, true, logger)
+		mux.Handle("GET /api/terminal", termHandler)
+		slog.Info("Terminal feature enabled",
+			"allowedCommands", lastAppCfg.Terminal.AllowedCommands,
+			"maxSessions", lastAppCfg.Terminal.MaxSessions,
+		)
+	}
 
 	if cfg.Dev {
 		viteURL := "http://localhost:5173"
@@ -547,6 +577,12 @@ func run(ctx context.Context, cfg config) error {
 		watcherCancel()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		// Terminate all terminal sessions
+		if termManager != nil {
+			termManager.Shutdown(shutdownCtx)
+		}
+		// Close all WebSocket connections before draining HTTP
+		wsRegistry.CloseAll(shutdownCtx)
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("server forced to shutdown: %w", err)
 		}
