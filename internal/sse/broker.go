@@ -35,6 +35,7 @@ type Broker struct {
 	healthCheckInterval time.Duration
 	clients             map[chan sseEvent]struct{}
 	keepaliveInterval   time.Duration
+	keyboardConfig      *KeyboardConfig
 	mu                  sync.Mutex
 }
 
@@ -215,6 +216,13 @@ func writeAndFlush(w http.ResponseWriter, flusher http.Flusher, payload []byte) 
 	return nil
 }
 
+// SetKeyboardConfig updates the keyboard config included in state events.
+func (b *Broker) SetKeyboardConfig(cfg *KeyboardConfig) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.keyboardConfig = cfg
+}
+
 func (b *Broker) buildStateEvent() ([]byte, error) {
 	services := b.source.All()
 	var k8sLastEvent *time.Time
@@ -228,5 +236,6 @@ func (b *Broker) buildStateEvent() ([]byte, error) {
 		K8sLastEvent:          k8sLastEvent,
 		HealthCheckIntervalMs: int(b.healthCheckInterval.Milliseconds()),
 		ConfigErrors:          b.source.ConfigErrors(),
+		Keyboard:              b.keyboardConfig,
 	})
 }

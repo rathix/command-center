@@ -7,7 +7,8 @@ import {
 	setConfigErrors,
 	getK8sConnected
 } from './serviceStore.svelte';
-import type { HealthStatus, Service, K8sStatusPayload, ServiceSource } from './types';
+import { loadCustomBindings } from './keyboardStore.svelte';
+import type { HealthStatus, Service, K8sStatusPayload, ServiceSource, KeyboardConfig } from './types';
 
 let eventSource: EventSource | null = null;
 type StatePayload = {
@@ -17,6 +18,7 @@ type StatePayload = {
 	k8sLastEvent?: string | null;
 	healthCheckIntervalMs?: number;
 	configErrors?: string[];
+	keyboard?: KeyboardConfig;
 };
 
 function closeActiveConnection(): void {
@@ -98,6 +100,13 @@ function isService(value: unknown): value is Service {
 	);
 }
 
+function isKeyboardConfig(value: unknown): value is KeyboardConfig {
+	if (!isRecord(value)) return false;
+	if (typeof value.mod !== 'string') return false;
+	if (!isRecord(value.bindings)) return false;
+	return Object.values(value.bindings).every((v) => typeof v === 'string');
+}
+
 function isStatePayload(value: unknown): value is StatePayload {
 	if (!isRecord(value) || !Array.isArray(value.services)) return false;
 	if (value.appVersion !== undefined && typeof value.appVersion !== 'string') return false;
@@ -117,6 +126,7 @@ function isStatePayload(value: unknown): value is StatePayload {
 			!value.configErrors.every((e: unknown) => typeof e === 'string'))
 	)
 		return false;
+	if (value.keyboard !== undefined && !isKeyboardConfig(value.keyboard)) return false;
 	return value.services.every((service) => isService(service));
 }
 
@@ -163,6 +173,9 @@ export function connect(): void {
 			setK8sStatus(getK8sConnected(), payload.k8sLastEvent ?? null);
 		}
 		setConfigErrors(payload.configErrors ?? []);
+		if (payload.keyboard) {
+			loadCustomBindings(payload.keyboard);
+		}
 	});
 
 	source.addEventListener('discovered', (e: MessageEvent) => {

@@ -7,6 +7,7 @@ type Config struct {
 	Groups    map[string]GroupConfig   `yaml:"groups"    json:"groups"`
 	Health    HealthConfig             `yaml:"health"    json:"health"`
 	History   HistoryConfig            `yaml:"history"   json:"history"`
+	Keyboard  *KeyboardConfig          `yaml:"keyboard"  json:"keyboard,omitempty"`
 }
 
 // CustomService defines a non-Kubernetes service to monitor.
@@ -45,5 +46,11 @@ type HealthConfig struct {
 // HistoryConfig controls health history retention.
 type HistoryConfig struct {
 	RetentionDays int `yaml:"retentionDays" json:"retentionDays"`
+}
+
+// KeyboardConfig defines custom keyboard shortcut bindings.
+type KeyboardConfig struct {
+	Mod      string            `yaml:"mod"      json:"mod"`
+	Bindings map[string]string `yaml:"bindings" json:"bindings"`
 }
 

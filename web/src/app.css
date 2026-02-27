@@ -42,6 +42,12 @@
   --color-accent-mauve: #cba6f7;
   --color-accent-peach: #fab387;
 
+  /* Panel System */
+  --color-panel-active: var(--color-accent-lavender);
+  --color-panel-border: var(--color-overlay-0);
+  --color-gutter: var(--color-surface-0);
+  --color-gutter-hover: var(--color-surface-1);
+
   /* Typography */
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
 
