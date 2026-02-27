@@ -28,6 +28,9 @@ func Load(path string) (*Config, []error) {
 		return &Config{}, nil
 	}
 
+	// Expand ${ENV_VAR} references before parsing YAML
+	data = []byte(os.Expand(string(data), os.Getenv))
+
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, []error{fmt.Errorf("failed to parse config YAML: %w", err)}
