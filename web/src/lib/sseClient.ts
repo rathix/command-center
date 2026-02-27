@@ -8,9 +8,13 @@ import {
 	getK8sConnected
 } from './serviceStore.svelte';
 import { loadCustomBindings } from './keyboardStore.svelte';
+import { saveLastKnownState } from './offlineCache';
+import { setLastSyncTime } from './connectivityStore.svelte';
+import { resolveApiUrl } from './basePath';
 import type { HealthStatus, Service, K8sStatusPayload, ServiceSource, KeyboardConfig } from './types';
 
 let eventSource: EventSource | null = null;
+let onlineReconnectHandler: (() => void) | null = null;
 type StatePayload = {
 	services: Service[];
 	appVersion?: string;
@@ -24,6 +28,10 @@ type StatePayload = {
 function closeActiveConnection(): void {
 	eventSource?.close();
 	eventSource = null;
+	if (onlineReconnectHandler && typeof window !== 'undefined') {
+		window.removeEventListener('online', onlineReconnectHandler);
+		onlineReconnectHandler = null;
+	}
 }
 
 function parseJson(data: string): unknown | null {
@@ -156,7 +164,8 @@ export function connect(): void {
 	closeActiveConnection();
 
 	setConnectionStatus('connecting');
-	const source = new EventSource('/api/events');
+	const sseUrl = resolveApiUrl('api/events');
+	const source = new EventSource(sseUrl);
 	eventSource = source;
 
 	source.onopen = () => {
@@ -185,9 +194,15 @@ export function connect(): void {
 			setK8sStatus(getK8sConnected(), payload.k8sLastEvent ?? null);
 		}
 		setConfigErrors(payload.configErrors ?? []);
+<<<<<<< HEAD
 		if (payload.keyboard) {
 			loadCustomBindings(payload.keyboard);
 		}
+
+		// Persist state for offline access
+		const now = new Date().toISOString();
+		setLastSyncTime(now);
+		saveLastKnownState(payload.services);
 	});
 
 	source.addEventListener('discovered', (e: MessageEvent) => {
@@ -213,6 +228,16 @@ export function connect(): void {
 		if (!isK8sStatusPayload(payload)) return;
 		setK8sStatus(payload.k8sConnected, payload.k8sLastEvent);
 	});
+
+	// Reconnect immediately when connectivity returns
+	if (typeof window !== 'undefined') {
+		onlineReconnectHandler = () => {
+			if (eventSource && eventSource.readyState !== EventSource.OPEN) {
+				connect();
+			}
+		};
+		window.addEventListener('online', onlineReconnectHandler);
+	}
 }
 
 export function disconnect(): void {

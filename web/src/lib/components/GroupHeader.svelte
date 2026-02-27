@@ -35,7 +35,7 @@
 </script>
 
 <div
-	class="flex h-[36px] cursor-pointer items-center gap-2 bg-mantle px-4
+	class="flex min-h-[var(--touch-target-min)] cursor-pointer flex-wrap items-center gap-2 bg-mantle px-3 sm:h-[36px] sm:min-h-0 sm:flex-nowrap sm:px-4
 		focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-lavender"
 	role="button"
 	tabindex="0"
@@ -43,6 +43,7 @@
 	aria-controls={controlsId}
 	onclick={handleClick}
 	onkeydown={handleKeydown}
+	style="touch-action: manipulation;"
 >
 	<span class="w-3 text-xs text-subtext-0" aria-hidden="true">{chevron}</span>
 	<span class="text-sm font-medium text-text">{displayName}</span>

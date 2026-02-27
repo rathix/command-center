@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import type { Service, HealthStatus } from '$lib/types';
+	import { formatRelativeTime } from '$lib/formatRelativeTime';
 	import TuiDot from './tui/TuiDot.svelte';
 	import HoverTooltip from './HoverTooltip.svelte';
 	import ServiceIcon from './ServiceIcon.svelte';
 
 	let { service, odd }: { service: Service; odd: boolean } = $props();
+
+	let expanded = $state(false);
 
 	function sanitizeServiceUrl(url: string): string | null {
 		try {
@@ -111,6 +114,23 @@
 		clearHoverTimer();
 	}
 
+	function toggleExpand(e: MouseEvent | KeyboardEvent) {
+		// Don't toggle when clicking the external link — only toggle on row click
+		if (e.target instanceof HTMLAnchorElement) return;
+		expanded = !expanded;
+	}
+
+	function handleRowClick(e: MouseEvent) {
+		toggleExpand(e);
+	}
+
+	function handleRowKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			toggleExpand(e);
+		}
+	}
+
 	onDestroy(() => {
 		clearHoverTimer();
 	});
@@ -118,26 +138,28 @@
 
 <li
 	bind:this={rowElement}
-	class="relative h-[46px] transition-colors duration-300 hover:bg-surface-1 {odd ? 'bg-surface-0' : ''}"
+	class="relative min-h-[var(--service-row-min-height)] transition-colors duration-300 hover:bg-surface-1 active:scale-[0.99] active:transition-transform active:duration-75 sm:h-auto {odd ? 'bg-surface-0' : ''}"
 	style:background-color={tintColor}
 	onmouseenter={handleMouseEnter}
 	onmousemove={handleMouseMove}
 	onmouseleave={handleMouseLeave}
 >
 	{#if safeHref}
-		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-		<a
-			href={safeHref}
-			target="_blank"
-			rel="noopener noreferrer"
-			aria-describedby={tooltipId}
-			class="flex h-full cursor-pointer items-center gap-3 px-4
+		<div
+			class="flex min-h-[var(--touch-target-min)] cursor-pointer items-center gap-2 px-3 sm:gap-3 sm:px-4
 				focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-lavender"
+			style="touch-action: manipulation;"
+			role="button"
+			tabindex="0"
+			aria-describedby={tooltipId}
+			aria-expanded={expanded}
+			onclick={handleRowClick}
+			onkeydown={handleRowKeydown}
 		>
 				<TuiDot status={displayStatus} />
 			<ServiceIcon name={iconName} />
-			<span class="text-sm font-medium text-text">{service.displayName}</span>
-			<span class="text-xs text-subtext-1">{service.url}</span>
+			<span class="truncate text-xs font-medium text-text sm:text-sm">{service.displayName}</span>
+			<span class="hidden text-xs text-subtext-1 sm:inline">{service.url}</span>
 			{#if service.source === 'kubernetes'}
 				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⎈</span>
 			{:else if service.source === 'config'}
@@ -146,18 +168,24 @@
 			{#if service.authGuarded}
 				<span class="text-subtext-0 text-[11px]" aria-hidden="true">🛡</span>
 			{/if}
-			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
-		</a>
+			<span class="ml-auto hidden text-[11px] sm:inline {responseTextColor}">{responseDisplay}</span>
+		</div>
 	{:else}
 		<div
 			aria-describedby={tooltipId}
-			class="flex h-full items-center gap-3 px-4 opacity-70"
+			class="flex min-h-[var(--touch-target-min)] cursor-pointer items-center gap-2 px-3 opacity-70 sm:gap-3 sm:px-4"
 			title="Invalid URL"
+			style="touch-action: manipulation;"
+			role="button"
+			tabindex="0"
+			aria-expanded={expanded}
+			onclick={handleRowClick}
+			onkeydown={handleRowKeydown}
 		>
 				<TuiDot status={displayStatus} />
 			<ServiceIcon name={iconName} />
-			<span class="text-sm font-medium text-text">{service.displayName}</span>
-			<span class="text-xs text-subtext-1">{service.url} (invalid)</span>
+			<span class="truncate text-xs font-medium text-text sm:text-sm">{service.displayName}</span>
+			<span class="hidden text-xs text-subtext-1 sm:inline">{service.url} (invalid)</span>
 			{#if service.source === 'kubernetes'}
 				<span class="text-subtext-0 text-[11px]" aria-hidden="true">⎈</span>
 			{:else if service.source === 'config'}
@@ -166,7 +194,67 @@
 			{#if service.authGuarded}
 				<span class="text-subtext-0 text-[11px]" aria-hidden="true">🛡</span>
 			{/if}
-			<span class="ml-auto text-[11px] {responseTextColor}">{responseDisplay}</span>
+			<span class="ml-auto hidden text-[11px] sm:inline {responseTextColor}">{responseDisplay}</span>
+		</div>
+	{/if}
+
+	{#if expanded}
+		<div
+			class="border-t border-surface-1 bg-surface-0 px-4 py-3 text-xs"
+			data-testid="expanded-details"
+		>
+			<div class="grid gap-1">
+				<div class="flex gap-2">
+					<span class="text-subtext-0">URL:</span>
+					{#if safeHref}
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+						<a href={safeHref} target="_blank" rel="noopener noreferrer" class="text-accent-blue underline break-all">{service.url}</a>
+					{:else}
+						<span class="text-text break-all">{service.url}</span>
+					{/if}
+				</div>
+				{#if service.httpCode !== null}
+					<div class="flex gap-2">
+						<span class="text-subtext-0">HTTP Code:</span>
+						<span class="text-text">{service.httpCode}</span>
+					</div>
+				{/if}
+				{#if service.responseTimeMs !== null}
+					<div class="flex gap-2">
+						<span class="text-subtext-0">Response Time:</span>
+						<span class="text-text">{service.responseTimeMs}ms</span>
+					</div>
+				{/if}
+				{#if service.lastChecked}
+					<div class="flex gap-2">
+						<span class="text-subtext-0">Last Checked:</span>
+						<span class="text-text">{formatRelativeTime(service.lastChecked)}</span>
+					</div>
+				{/if}
+				{#if service.lastStateChange}
+					<div class="flex gap-2">
+						<span class="text-subtext-0">State Changed:</span>
+						<span class="text-text">{formatRelativeTime(service.lastStateChange)}</span>
+					</div>
+				{/if}
+				{#if service.errorSnippet}
+					<div class="flex gap-2">
+						<span class="text-subtext-0">Error:</span>
+						<span class="text-health-error break-all">{service.errorSnippet}</span>
+					</div>
+				{/if}
+				{#if service.podDiagnostic}
+					<div class="flex gap-2">
+						<span class="text-subtext-0">Pod:</span>
+						<span class="text-text">
+							{#if service.podDiagnostic.reason}
+								{service.podDiagnostic.reason} ·
+							{/if}
+							{service.podDiagnostic.restartCount} restarts
+						</span>
+					</div>
+				{/if}
+			</div>
 		</div>
 	{/if}
 	<HoverTooltip {service} visible={showTooltip} position={tooltipPosition} left={mouseX} id={tooltipId} />
