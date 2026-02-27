@@ -93,6 +93,7 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 		lastStateChange: null,
 		errorSnippet: null,
 		podDiagnostic: null,
+		gitopsStatus: null,
 		...overrides
 	};
 }

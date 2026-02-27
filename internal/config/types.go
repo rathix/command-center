@@ -11,6 +11,7 @@ type Config struct {
 	Talos         *TalosConfig           `yaml:"talos"         json:"talos,omitempty"`
 	Keyboard      *KeyboardConfig        `yaml:"keyboard"      json:"keyboard,omitempty"`
 	Terminal      TerminalConfig         `yaml:"terminal"      json:"terminal"`
+	GitOps        *GitOpsConfig          `yaml:"gitops"        json:"gitops,omitempty"`
 }
 
 // TalosConfig configures the Talos gRPC API connection for node management.
@@ -25,6 +26,14 @@ type TerminalConfig struct {
 	AllowedCommands []string `yaml:"allowedCommands" json:"allowedCommands"`
 	IdleTimeout     string   `yaml:"idleTimeout"     json:"idleTimeout"`
 	MaxSessions     int      `yaml:"maxSessions"     json:"maxSessions"`
+}
+
+// GitOpsConfig configures integration with a GitOps provider (e.g. Flux).
+type GitOpsConfig struct {
+	Provider      string `yaml:"provider"      json:"provider"`
+	Repository    string `yaml:"repository"    json:"repository"`
+	Branch        string `yaml:"branch"        json:"branch"`
+	FluxNamespace string `yaml:"fluxNamespace" json:"fluxNamespace"`
 }
 
 // CustomService defines a non-Kubernetes service to monitor.

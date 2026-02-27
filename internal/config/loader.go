@@ -131,5 +131,29 @@ func Load(path string) (*Config, []error) {
 		validationErrors = append(validationErrors, fmt.Errorf("terminal.maxSessions: must be non-negative, got %d", cfg.Terminal.MaxSessions))
 	}
 
+	// Validate gitops section: all fields required when section is present
+	if cfg.GitOps != nil {
+		gitopsValid := true
+		if strings.TrimSpace(cfg.GitOps.Provider) == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("gitops.provider: required field missing"))
+			gitopsValid = false
+		}
+		if strings.TrimSpace(cfg.GitOps.Repository) == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("gitops.repository: required field missing"))
+			gitopsValid = false
+		}
+		if strings.TrimSpace(cfg.GitOps.Branch) == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("gitops.branch: required field missing"))
+			gitopsValid = false
+		}
+		if strings.TrimSpace(cfg.GitOps.FluxNamespace) == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("gitops.fluxNamespace: required field missing"))
+			gitopsValid = false
+		}
+		if !gitopsValid {
+			cfg.GitOps = nil
+		}
+	}
+
 	return &cfg, validationErrors
 }

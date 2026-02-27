@@ -19,6 +19,7 @@ import (
 	commandcenter "github.com/rathix/command-center"
 	"github.com/rathix/command-center/internal/certs"
 	appconfig "github.com/rathix/command-center/internal/config"
+	"github.com/rathix/command-center/internal/gitops"
 	"github.com/rathix/command-center/internal/health"
 	"github.com/rathix/command-center/internal/history"
 	"github.com/rathix/command-center/internal/k8s"
@@ -31,6 +32,9 @@ import (
 	"github.com/rathix/command-center/internal/talos"
 	"github.com/rathix/command-center/internal/terminal"
 	appwebsocket "github.com/rathix/command-center/internal/websocket"
+
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const defaultAddr = ":8443"
@@ -258,6 +262,22 @@ func run(ctx context.Context, cfg config) error {
 		go watcher.Run(watcherCtx)
 	}
 
+	// Start Flux GitOps watcher if gitops config is present
+	if lastAppCfg != nil && lastAppCfg.GitOps != nil {
+		restCfg, err := clientcmd.BuildConfigFromFlags("", cfg.Kubeconfig)
+		if err != nil {
+			slog.Warn("Flux watcher disabled: failed to build kubeconfig for dynamic client", "error", err)
+		} else {
+			dynClient, err := dynamic.NewForConfig(restCfg)
+			if err != nil {
+				slog.Warn("Flux watcher disabled: failed to create dynamic client", "error", err)
+			} else {
+				fluxWatcher := gitops.NewFluxWatcher(dynClient, store, lastAppCfg.GitOps.FluxNamespace, logger)
+				go fluxWatcher.Run(watcherCtx)
+			}
+		}
+	}
+
 	// Register config services and apply overrides after K8s watcher starts
 	if lastAppCfg != nil {
 		appconfig.RegisterServices(store, lastAppCfg)
@@ -464,6 +484,28 @@ func run(ctx context.Context, cfg config) error {
 			"allowedCommands", lastAppCfg.Terminal.AllowedCommands,
 			"maxSessions", lastAppCfg.Terminal.MaxSessions,
 		)
+	}
+
+	// Register GitOps REST endpoints
+	var gitopsCfg *appconfig.GitOpsConfig
+	var ghClient *gitops.GitHubClient
+	if lastAppCfg != nil && lastAppCfg.GitOps != nil {
+		gitopsCfg = lastAppCfg.GitOps
+		ghToken := os.Getenv("GITHUB_TOKEN")
+		if ghToken != "" {
+			ghClient = gitops.NewGitHubClient(ghToken, logger)
+			slog.Info("GitHub API client initialized")
+		} else {
+			slog.Warn("GITHUB_TOKEN not set, commit listing and rollback will be unavailable")
+		}
+	}
+	mux.HandleFunc("GET /api/gitops/status", gitops.StatusHandler(gitopsCfg, logger))
+	if ghClient != nil {
+		mux.HandleFunc("GET /api/gitops/commits", gitops.CommitsHandler(gitopsCfg, ghClient, logger))
+		mux.HandleFunc("POST /api/gitops/rollback", gitops.RollbackHandler(gitopsCfg, ghClient, logger))
+	} else {
+		mux.HandleFunc("GET /api/gitops/commits", gitops.CommitsHandler(gitopsCfg, nil, logger))
+		mux.HandleFunc("POST /api/gitops/rollback", gitops.RollbackHandler(gitopsCfg, nil, logger))
 	}
 
 	if cfg.Dev {
