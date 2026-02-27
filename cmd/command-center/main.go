@@ -26,6 +26,7 @@ import (
 	"github.com/rathix/command-center/internal/session"
 	"github.com/rathix/command-center/internal/sse"
 	"github.com/rathix/command-center/internal/state"
+	"github.com/rathix/command-center/internal/talos"
 )
 
 const defaultAddr = ":8443"
@@ -365,10 +366,37 @@ func run(ctx context.Context, cfg config) error {
 	pruner := history.NewPruner(cfg.HistoryFile, retentionDays, historyWriter, logger)
 	go pruner.Run(ctx)
 
+	// Initialize Talos node management (opt-in: only when config has talos section)
+	var talosPoller *talos.Poller
+	if lastAppCfg != nil && lastAppCfg.Talos != nil {
+		talosCfg := lastAppCfg.Talos
+		pollInterval, err := time.ParseDuration(talosCfg.PollInterval)
+		if err != nil {
+			slog.Warn("invalid talos poll interval, using 30s default", "error", err)
+			pollInterval = 30 * time.Second
+		}
+
+		grpcClient, err := talos.NewGRPCClient(talosCfg.Endpoint)
+		if err != nil {
+			slog.Error("failed to create Talos gRPC client", "error", err)
+		} else {
+			talosPoller = talos.NewPoller(grpcClient, pollInterval, logger)
+			go talosPoller.Run(watcherCtx)
+			slog.Info("Talos node management enabled", "endpoint", talosCfg.Endpoint, "interval", pollInterval)
+		}
+	}
+
 	mux := http.NewServeMux()
 
 	// Register SSE endpoint before the catch-all static handler
 	mux.Handle("GET /api/events", broker)
+
+	// Register Talos node endpoints (always registered; handler returns configured=false when poller is nil)
+	mux.Handle("GET /api/nodes", talos.NewHandler(talosPoller))
+	mux.Handle("GET /api/nodes/{name}/metrics", talos.NewMetricsHistoryHandler(talosPoller))
+	mux.Handle("POST /api/talos/{node}/reboot", talos.NewOperationsHandler(talosPoller, logger))
+	mux.Handle("POST /api/talos/{node}/upgrade", talos.NewUpgradeHandler(talosPoller, logger))
+	mux.Handle("GET /api/talos/{node}/upgrade-info", talos.NewUpgradeInfoHandler(talosPoller, logger))
 
 	if cfg.Dev {
 		viteURL := "http://localhost:5173"

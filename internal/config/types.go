@@ -7,6 +7,14 @@ type Config struct {
 	Groups    map[string]GroupConfig   `yaml:"groups"    json:"groups"`
 	Health    HealthConfig             `yaml:"health"    json:"health"`
 	History   HistoryConfig            `yaml:"history"   json:"history"`
+	Talos     *TalosConfig             `yaml:"talos"     json:"talos,omitempty"`
+}
+
+// TalosConfig configures the Talos gRPC API connection for node management.
+// When nil on Config, Talos features are completely disabled (opt-in per rule 15).
+type TalosConfig struct {
+	Endpoint     string `yaml:"endpoint"     json:"endpoint"`
+	PollInterval string `yaml:"pollInterval" json:"pollInterval"`
 }
 
 // CustomService defines a non-Kubernetes service to monitor.
