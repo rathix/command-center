@@ -7,6 +7,15 @@ type Config struct {
 	Groups    map[string]GroupConfig   `yaml:"groups"    json:"groups"`
 	Health    HealthConfig             `yaml:"health"    json:"health"`
 	History   HistoryConfig            `yaml:"history"   json:"history"`
+	Terminal  TerminalConfig           `yaml:"terminal"  json:"terminal"`
+}
+
+// TerminalConfig controls in-browser terminal settings.
+type TerminalConfig struct {
+	Enabled         bool     `yaml:"enabled"         json:"enabled"`
+	AllowedCommands []string `yaml:"allowedCommands" json:"allowedCommands"`
+	IdleTimeout     string   `yaml:"idleTimeout"     json:"idleTimeout"`
+	MaxSessions     int      `yaml:"maxSessions"     json:"maxSessions"`
 }
 
 // CustomService defines a non-Kubernetes service to monitor.
