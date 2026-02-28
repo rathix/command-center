@@ -30,7 +30,6 @@
 	const LOOKBACK_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 	let configured = $state<boolean | null>(null);
-	let provider = $state('');
 	let repository = $state('');
 	let commits = $state<CommitData[]>([]);
 	let error = $state('');
@@ -115,7 +114,6 @@
 			if (json.ok && json.data) {
 				const data = json.data as GitOpsStatusApiResponse;
 				configured = data.configured;
-				provider = data.provider ?? '';
 				repository = data.repository ?? '';
 			}
 		} catch {
@@ -242,7 +240,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each gitopsServices as { service, gitops }}
+							{#each gitopsServices as { service, gitops } (service.name)}
 								<tr class="border-b border-surface-0/50">
 									<td class="py-1 pr-3 text-text">{service.displayName || service.name}</td>
 									<td class="py-1 pr-3">
@@ -268,7 +266,7 @@
 		{#if correlations.length > 0}
 			<div class="rounded border border-health-warning/30 bg-health-warning/10 p-2">
 				<h4 class="text-sm font-semibold text-health-warning mb-1">Health-Deployment Correlations</h4>
-				{#each correlations as corr}
+				{#each correlations as corr (corr.serviceName)}
 					<p class="text-xs text-subtext-1">
 						<span class="font-medium text-text">{corr.serviceName}</span>:
 						health changed at {formatTime(corr.healthChangeTime)},
@@ -287,7 +285,7 @@
 				<p class="text-sm text-subtext-0">No recent commits</p>
 			{:else}
 				<div class="flex flex-col gap-1" data-testid="commit-list">
-					{#each commits as commit}
+					{#each commits as commit (commit.sha)}
 						<div
 							class="flex items-center justify-between rounded p-1.5 text-sm {isCorrelatedCommit(commit.timestamp) ? 'border border-health-warning/30 bg-health-warning/10' : 'bg-surface-0/50'}"
 							data-testid="commit-row"

@@ -81,7 +81,7 @@
 			onclick={(e) => e.stopPropagation()}
 			data-testid="preset-dropdown"
 		>
-			{#each [...presets.entries()] as [name]}
+			{#each [...presets.entries()] as [name] (name)}
 				<div
 					class="flex items-center justify-between px-3 py-2 hover:bg-surface-1"
 				>

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import fs from 'node:fs';
+import path from 'node:path';
 import ServiceRow from './ServiceRow.svelte';
 import type { Service } from '$lib/types';
 import * as breakpointStore from '$lib/breakpointStore.svelte';
@@ -66,8 +68,6 @@ describe('ResponsiveLayout: ServiceRow responsive behavior', () => {
 
 describe('ResponsiveLayout: viewport meta tag', () => {
 	it('app.html contains viewport meta tag without user-scalable=no', () => {
-		const fs = require('node:fs');
-		const path = require('node:path');
 		const htmlPath = path.resolve(__dirname, '../../app.html');
 		const content = fs.readFileSync(htmlPath, 'utf-8');
 		expect(content).toContain('name="viewport"');

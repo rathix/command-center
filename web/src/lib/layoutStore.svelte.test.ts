@@ -18,7 +18,7 @@ const localStorageMock = (() => {
 		get length() {
 			return Object.keys(storage).length;
 		},
-		key: vi.fn((_: number) => null)
+		key: vi.fn(() => null)
 	};
 })();
 
@@ -362,7 +362,7 @@ describe('layoutStore', () => {
 
 			// Split horizontally: [first | second]
 			store.splitPanel(firstId, 'horizontal');
-			let branch = store.getRootNode();
+			const branch = store.getRootNode();
 			if (branch.type !== 'branch') throw new Error('expected branch');
 			const secondId =
 				branch.second.type === 'leaf' ? branch.second.panelId : '';

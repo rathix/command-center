@@ -217,7 +217,7 @@
 				onchange={onNamespaceChange}
 			>
 				<option value="">--</option>
-				{#each namespaces as ns}
+				{#each namespaces as ns (ns)}
 					<option value={ns}>{ns}</option>
 				{/each}
 			</select>
@@ -232,7 +232,7 @@
 				disabled={!selectedNamespace}
 			>
 				<option value="">--</option>
-				{#each pods as p}
+				{#each pods as p (p)}
 					<option value={p}>{p}</option>
 				{/each}
 			</select>

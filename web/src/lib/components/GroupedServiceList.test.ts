@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { tick } from 'svelte';
 import GroupedServiceList from './GroupedServiceList.svelte';

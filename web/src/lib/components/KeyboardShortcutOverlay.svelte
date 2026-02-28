@@ -44,7 +44,7 @@
 				</button>
 			</div>
 			<div class="space-y-2">
-				{#each bindingsList as binding}
+				{#each bindingsList as binding (binding.keyCombo)}
 					<div class="flex items-center justify-between gap-6">
 						<kbd
 							class="rounded bg-surface-1 px-2 py-0.5 text-sm text-text"

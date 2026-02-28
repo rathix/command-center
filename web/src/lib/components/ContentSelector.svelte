@@ -21,7 +21,7 @@
 
 <div class="flex h-full items-center justify-center bg-base p-6" data-testid="content-selector">
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-		{#each options as option}
+		{#each options as option (option.type)}
 			{@const available = AVAILABLE_PANEL_TYPES.has(option.type)}
 			<button
 				class="flex flex-col items-center gap-2 rounded border px-6 py-4 text-sm transition-colors

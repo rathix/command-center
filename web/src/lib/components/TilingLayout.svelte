@@ -69,7 +69,6 @@
 		>
 			<TilingLayout node={node.first} />
 		</div>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="shrink-0 bg-[var(--color-gutter)] transition-colors hover:bg-[var(--color-gutter-hover)] {node.direction ===
 			'horizontal'

@@ -41,8 +41,6 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_interactive_supports_focus -->
 <div
 	class="fixed inset-0 z-50 flex items-center justify-center bg-crust/80"
 	onclick={handleBackdropClick}
@@ -56,7 +54,7 @@
 
 		{#if Object.keys(details).length > 0}
 			<div class="mb-4 rounded bg-surface-0 p-3">
-				{#each Object.entries(details) as [key, value]}
+				{#each Object.entries(details) as [key, value] (key)}
 					<div class="flex justify-between py-1 text-sm">
 						<span class="text-subtext-1">{key}</span>
 						<span class="font-medium text-text">{value}</span>
