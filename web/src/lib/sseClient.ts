@@ -194,7 +194,6 @@ export function connect(): void {
 			setK8sStatus(getK8sConnected(), payload.k8sLastEvent ?? null);
 		}
 		setConfigErrors(payload.configErrors ?? []);
-<<<<<<< HEAD
 		if (payload.keyboard) {
 			loadCustomBindings(payload.keyboard);
 		}
