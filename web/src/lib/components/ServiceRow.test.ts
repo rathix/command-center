@@ -22,8 +22,9 @@ function makeService(overrides: Partial<Service> = {}): Service {
 		lastStateChange: null,
 		errorSnippet: null,
 		podDiagnostic: null,
+		gitopsStatus: null,
 		...overrides
-	};
+	} as Service;
 }
 
 describe('ServiceRow', () => {

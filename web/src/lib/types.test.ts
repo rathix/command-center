@@ -85,7 +85,8 @@ describe('types', () => {
 			lastChecked: '2026-02-20T00:00:00Z',
 			lastStateChange: '2026-02-20T00:00:00Z',
 			errorSnippet: null,
-			podDiagnostic: null
+			podDiagnostic: null,
+			gitopsStatus: null
 		};
 
 		expect(service).toHaveProperty('name');

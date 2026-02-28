@@ -20,8 +20,9 @@ function makeService(overrides: Partial<Service> = {}): Service {
 		lastStateChange: '2026-02-20T09:00:00Z',
 		errorSnippet: null,
 		podDiagnostic: null,
+		gitopsStatus: null,
 		...overrides
-	};
+	} as Service;
 }
 
 // Mock Cache API

@@ -28,8 +28,9 @@ function makeService(overrides: Partial<Service> & { name: string }): Service {
 		lastStateChange: nowIso,
 		errorSnippet: null,
 		podDiagnostic: null,
+		gitopsStatus: null,
 		...overrides
-	};
+	} as Service;
 }
 
 beforeEach(() => {

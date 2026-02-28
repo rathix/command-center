@@ -25,9 +25,11 @@
 	}
 </script>
 
-<ConfirmationModal {open} {title} {loading} onconfirm={handleConfirm} oncancel={handleCancel}>
+{#if open}
+<ConfirmationModal {title} disabled={loading} onConfirm={handleConfirm} onCancel={handleCancel}>
 	<p>{bodyText}</p>
 </ConfirmationModal>
+{/if}
 
 {#if confirmed}
 	<span data-testid="confirmed-flag">confirmed</span>

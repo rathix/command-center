@@ -1,13 +1,16 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	interface Props {
 		title: string;
-		message: string;
+		message?: string;
 		details?: Record<string, string>;
 		confirmLabel?: string;
 		confirmVariant?: 'danger' | 'warning';
 		disabled?: boolean;
 		onConfirm: () => void;
 		onCancel: () => void;
+		children?: Snippet;
 	}
 
 	const {
@@ -18,7 +21,8 @@
 		confirmVariant = 'danger',
 		disabled = false,
 		onConfirm,
-		onCancel
+		onCancel,
+		children
 	}: Props = $props();
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -47,10 +51,14 @@
 	role="dialog"
 	aria-modal="true"
 	aria-labelledby="modal-title"
+	tabindex="-1"
 >
 	<div class="w-full max-w-md rounded-lg bg-base p-6 shadow-lg" role="document">
 		<h2 id="modal-title" class="mb-2 text-lg font-semibold text-text">{title}</h2>
-		<p class="mb-4 text-sm text-subtext-0">{message}</p>
+		{#if message}
+			<p class="mb-4 text-sm text-subtext-0">{message}</p>
+		{/if}
+		{@render children?.()}
 
 		{#if Object.keys(details).length > 0}
 			<div class="mb-4 rounded bg-surface-0 p-3">

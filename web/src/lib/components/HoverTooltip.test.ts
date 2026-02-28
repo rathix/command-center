@@ -22,8 +22,9 @@ function makeService(overrides: Partial<Service> = {}): Service {
 		lastStateChange: '2026-02-20T08:00:00Z',
 		errorSnippet: null,
 		podDiagnostic: null,
+		gitopsStatus: null,
 		...overrides
-	};
+	} as Service;
 }
 
 describe('HoverTooltip', () => {

@@ -15,7 +15,7 @@
 	let { command = 'kubectl', wsUrl = '/api/terminal', sessionId = '', onClose }: Props = $props();
 
 	let containerRef: HTMLDivElement | undefined = $state(undefined);
-	let connectionState: WSClientState = $state('disconnected');
+	let connectionState = $state<WSClientState>('disconnected');
 	let terminatedReason: string | null = $state(null);
 	let errorMessage: string | null = $state(null);
 
